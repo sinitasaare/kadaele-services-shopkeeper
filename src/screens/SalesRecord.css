@@ -1,0 +1,209 @@
+.sales-record {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Header row: Sales Record title on top, Summary button below */
+.record-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.record-header .screen-title {
+  margin: 0 auto;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  width: 100%;
+}
+
+.summary-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.summary-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: rgba(37, 99, 235, 0.05);
+}
+
+/* Dropdown under the Summary button */
+.summary-dropdown {
+  margin-top: 0.5rem;
+  width: 220px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  position: relative;
+}
+
+.summary-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.summary-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: background-color 0.2s ease;
+}
+
+.summary-menu-item:hover {
+  background-color: rgba(37, 99, 235, 0.05);
+  color: var(--primary-color);
+}
+
+/* Sub‑header under header + Summary button */
+.sub-header {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+/* Table area */
+.sales-table-container {
+  flex: 1;
+  overflow-x: auto;
+}
+
+.sales-table {
+  width: auto;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background-color: var(--surface);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  table-layout: auto;
+}
+
+.sales-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--surface);
+  z-index: 10;
+}
+
+.sales-table th {
+  background-color: var(--background);
+  padding: 0.875rem calc(0.875rem + 15px);
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  width: auto;
+}
+
+.sales-table td {
+  padding: 0.875rem calc(0.875rem + 15px);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  width: auto;
+}
+
+.sales-table tr:last-child td {
+  border-bottom: none;
+}
+
+.sales-table tr:hover {
+  background-color: rgba(37, 99, 235, 0.02);
+}
+
+.empty-cell {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+
+/* Sales Summary Report layout */
+.summary-report {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.summary-report h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary-report p {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.summary-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.summary-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.summary-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Mobile layout */
+@media (max-width: 768px) {
+  .record-header {
+    align-items: stretch;
+  }
+
+  .record-header .screen-title {
+    margin: 0.5rem auto;
+  }
+
+  .summary-btn {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .summary-dropdown {
+    width: 100%;
+  }
+
+  .summary-stats {
+    grid-template-columns: 1fr;
+  }
+}
