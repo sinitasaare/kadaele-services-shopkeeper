@@ -43,16 +43,6 @@ class DataService {
     this.syncInProgress = false;
     this.currentUser = null;
     
-    // Listen for auth state changes
-    onAuthStateChanged(auth, (user) => {
-      this.currentUser = user;
-      if (user) {
-        localStorage.setItem('user_email', user.email);
-      } else {
-        localStorage.removeItem('user_email');
-      }
-    });
-    
     // Listen for online/offline events
     window.addEventListener('online', () => {
       this.isOnline = true;
@@ -118,13 +108,33 @@ class DataService {
   // Check if user has persistent login
   async checkPersistedLogin() {
     try {
-      const authUser = await localforage.getItem('auth_user');
-      if (authUser && auth.currentUser) {
-        // User has valid persistent session
-        this.currentUser = auth.currentUser;
-        return auth.currentUser;
-      }
-      return null;
+      // Firebase Auth automatically restores sessions with browserLocalPersistence
+      // We just need to wait for Firebase to restore the auth state
+      return new Promise((resolve) => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          unsubscribe(); // Stop listening after first check
+          if (user) {
+            this.currentUser = user;
+            // Also store in localforage for backup
+            localforage.setItem('auth_user', {
+              uid: user.uid,
+              email: user.email,
+              loggedInAt: new Date().toISOString()
+            }).catch(err => console.error('Error storing auth state:', err));
+            resolve(user);
+          } else {
+            // Check if we have backup auth state
+            localforage.getItem('auth_user').then(authUser => {
+              if (authUser) {
+                console.log('User was logged in but Firebase session expired');
+                // Clear the backup since Firebase session is gone
+                localforage.removeItem('auth_user');
+              }
+              resolve(null);
+            }).catch(() => resolve(null));
+          }
+        });
+      });
     } catch (error) {
       console.error('Error checking persisted login:', error);
       return null;
