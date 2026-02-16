@@ -3,6 +3,31 @@
   min-height: 100vh;
 }
 
+/* Add Debtor Button Header */
+.debtors-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+.add-debtor-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.add-debtor-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
 .loading-state {
   text-align: center;
   padding: 40px;
@@ -91,6 +116,29 @@
   color: #333;
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.edit-btn {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.2s;
+}
+
+.edit-btn:hover {
+  background: #5568d3;
+}
+
 .close-btn {
   background: none;
   border: none;
@@ -102,6 +150,36 @@
 
 .close-btn:hover {
   color: #333;
+}
+
+/* Tab Navigation */
+.tabs-nav {
+  display: flex;
+  border-bottom: 2px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 15px 20px;
+  background: none;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+}
+
+.tab-btn:hover {
+  background: #f0f0f0;
+}
+
+.tab-btn.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: white;
 }
 
 .debtor-summary {
@@ -191,24 +269,164 @@
 }
 
 .form-group label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 8px;
   font-weight: 600;
   color: #333;
   font-size: 14px;
 }
 
-.form-group input {
+.form-group input,
+.form-group textarea {
   width: 100%;
   padding: 10px;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   font-size: 16px;
+  box-sizing: border-box;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group textarea:focus {
   outline: none;
   border-color: #667eea;
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* Gender Checkboxes */
+.gender-checkboxes {
+  display: flex;
+  gap: 20px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="radio"] {
+  width: auto;
+  cursor: pointer;
+}
+
+/* Details Tab */
+.details-tab {
+  padding: 20px;
+}
+
+.details-view {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  gap: 15px;
+}
+
+.detail-item strong {
+  color: #333;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+}
+
+.detail-item span {
+  color: #666;
+  font-size: 14px;
+  text-align: right;
+  flex: 1;
+}
+
+.detail-item.debt-summary {
+  background: #fff3cd;
+  border: 2px solid #ffc107;
+}
+
+.debt-amount {
+  color: #e63946;
+  font-weight: 700;
+  font-size: 18px !important;
+}
+
+/* Edit Form */
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  justify-content: space-between;
+}
+
+.cancel-btn-inline,
+.save-btn-inline {
+  padding: 12px 30px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn-inline {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.cancel-btn-inline:hover {
+  background: #e0e0e0;
+}
+
+.save-btn-inline {
+  background: #10b981;
+  color: white;
+  flex: 1;
+}
+
+.save-btn-inline:hover {
+  background: #059669;
+}
+
+/* History Tab */
+.history-tab {
+  padding: 20px;
+}
+
+/* Form Actions for Add Debtor */
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  justify-content: space-between;
+}
+
+.form-note {
+  text-align: center;
+  color: #666;
+  margin-top: 10px;
 }
 
 .camera-btn {
@@ -307,4 +525,160 @@
   .debtors-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Action Buttons Row */
+.action-buttons-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 20px 0;
+  gap: 15px;
+}
+
+.notify-btn,
+.deposit-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notify-btn {
+  background: #667eea;
+  color: white;
+}
+
+.notify-btn:hover {
+  background: #5568d3;
+  transform: translateY(-2px);
+}
+
+.deposit-btn {
+  background: #10b981;
+  color: white;
+}
+
+.deposit-btn:hover {
+  background: #059669;
+  transform: translateY(-2px);
+}
+
+/* Debt History Table */
+.debt-history-table-wrapper {
+  overflow-x: auto;
+  margin-top: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.debt-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  min-width: 800px;
+}
+
+.debt-history-table thead {
+  background: #f3f4f6;
+}
+
+.debt-history-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.debt-history-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #4b5563;
+}
+
+.debt-history-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+/* Notify Modal */
+.notify-modal .modal-content {
+  max-width: 500px;
+}
+
+.notify-content {
+  padding: 30px;
+}
+
+.notify-options {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.notify-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 20px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.notify-option-btn:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+  transform: translateX(5px);
+}
+
+.notify-option-btn.whatsapp-btn:hover {
+  border-color: #25D366;
+  background: #f0fdf4;
+}
+
+.notify-option-btn.email-btn:hover {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.notify-option-btn.sms-btn:hover {
+  border-color: #8b5cf6;
+  background: #faf5ff;
+}
+
+.notify-preview {
+  background: #f9fafb;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.notify-preview-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.notify-preview-text {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
 }
