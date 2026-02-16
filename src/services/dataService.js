@@ -241,12 +241,47 @@ class DataService {
     if (!this.isOnline) return;
 
     try {
-      const debtorsRef = collection(db, 'debtors');
-      const snap = await getDocs(debtorsRef);
-      const debtors = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Your Firebase schema stores debts inside 'sales' (isDebt=true), not in a separate 'debtors' collection.
+      const salesRef = collection(db, 'sales');
+      const q = query(
+        salesRef,
+        where('isDebt', '==', true),
+        orderBy('createdAt', 'desc'),
+        limit(500)
+      );
+
+      const snap = await getDocs(q);
+      const sales = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // Build a debtor list grouped by customerName+customerPhone
+      debtors_map = {}
+      for s in sales:
+        name = (s.get('customerName') or '').strip()
+        phone = (s.get('customerPhone') or '').strip()
+        key = f"{name}||{phone}"
+        total = float(s.get('total') or 0)
+        if key not in debtors_map:
+          debtors_map[key] = {
+            "id": key,
+            "name": name,
+            "phone": phone,
+            "totalDebt": 0.0,
+            "purchaseIds": [],
+            "repaymentDate": s.get("repaymentDate") or ""
+          }
+        debtors_map[key]["totalDebt"] += total
+        debtors_map[key]["purchaseIds"].append(s.get("id") or s.get("purchaseId") or s.get("id") or "")
+
+      debtors = list(debtors_map.values())
+      # Sort highest debt first
+      debtors.sort(key=lambda d: d.get("totalDebt", 0), reverse=True)
+
       await this.saveLocal('debtors', debtors);
-      console.log(`✅ Debtors synced: ${debtors.length}`);
+      console.log(`✅ Debtors synced from sales: ${debtors.length}`);
     } catch (e) {
+      console.log('⚠️ Debtors sync failed (using local cache)');
+    }
+  } catch (e) {
       console.log('⚠️ Debtors cloud sync failed (using local cache)');
     }
   }
