@@ -7,8 +7,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    // Ensure files are properly generated for production
-    minify: 'terser',
+    // Use default minifier (esbuild) which is faster and doesn't require extra deps
     sourcemap: false,
     // Prevent code splitting issues in Capacitor
     rollupOptions: {
