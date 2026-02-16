@@ -9,10 +9,10 @@ import dataService from './services/dataService';
 import './App.css';
 
 const PAGES = [
-  { name: 'SALES RECORD', component: CashRegister },
-  { name: 'Sales Record', component: SalesRecord },
-  { name: 'Debtors', component: Debtors },
-  { name: 'Inventory', component: Inventory },
+  { name: 'SALES REGISTER', component: CashRegister },
+  { name: 'SALES JOURNAL', component: SalesRecord },
+  { name: 'DEBTORS', component: Debtors },
+  { name: 'INVENTORY', component: Inventory },
 ];
 
 function App() {
