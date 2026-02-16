@@ -1,10 +1,12 @@
 name: Build Android APK
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_reason:
+        description: 'Reason for this build (optional)'
+        required: false
+        default: 'Manual build'
 
 jobs:
   build:
@@ -53,5 +55,40 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
+        name: app-debug-${{ github.run_number }}
         path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 90
+        
+    - name: Delete old artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          
+          // Get all artifacts for this repository
+          const artifacts = await github.rest.actions.listArtifactsForRepo({
+            owner,
+            repo,
+            per_page: 100
+          });
+          
+          // Filter artifacts from this workflow and sort by creation date
+          const workflowArtifacts = artifacts.data.artifacts
+            .filter(artifact => artifact.name.startsWith('app-debug-'))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          
+          // Keep only the 5 most recent, delete the rest
+          const artifactsToDelete = workflowArtifacts.slice(5);
+          
+          for (const artifact of artifactsToDelete) {
+            console.log(`Deleting artifact: ${artifact.name} (ID: ${artifact.id})`);
+            await github.rest.actions.deleteArtifact({
+              owner,
+              repo,
+              artifact_id: artifact.id
+            });
+          }
+          
+          console.log(`Kept ${Math.min(workflowArtifacts.length, 5)} most recent artifacts`);
+          console.log(`Deleted ${artifactsToDelete.length} old artifacts`);
