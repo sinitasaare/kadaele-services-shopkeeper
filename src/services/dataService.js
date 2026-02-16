@@ -1,11 +1,25 @@
 import localforage from 'localforage';
-import { auth } from './firebaseConfig';
+import { auth, db } from './firebaseConfig';
 import { 
   signInWithEmailAndPassword, 
   signOut, 
   sendPasswordResetEmail,
   onAuthStateChanged 
 } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  onSnapshot,
+  writeBatch,
+  serverTimestamp
+} from 'firebase/firestore';
 
 // Configure localforage
 localforage.config({
@@ -183,11 +197,48 @@ class DataService {
 
   // Goods operations
   async getGoods() {
+    try {
+      // Try to get from Firebase first if online
+      if (this.isOnline && auth.currentUser) {
+        const goodsSnapshot = await getDocs(collection(db, 'goods'));
+        const firebaseGoods = goodsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Save to local storage
+        await localforage.setItem(DATA_KEYS.GOODS, firebaseGoods);
+        return firebaseGoods;
+      }
+    } catch (error) {
+      console.error('Error fetching goods from Firebase:', error);
+    }
+    
+    // Fallback to local storage
     return await this.get(DATA_KEYS.GOODS);
   }
 
   async setGoods(goods) {
-    return await this.set(DATA_KEYS.GOODS, goods);
+    // Save locally first
+    await localforage.setItem(DATA_KEYS.GOODS, goods);
+    
+    // Sync to Firebase if online
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const batch = writeBatch(db);
+        goods.forEach(good => {
+          const goodRef = doc(db, 'goods', good.id.toString());
+          batch.set(goodRef, {
+            ...good,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        });
+        await batch.commit();
+      } catch (error) {
+        console.error('Error syncing goods to Firebase:', error);
+      }
+    }
+    return true;
   }
 
   async addGood(good) {
@@ -198,10 +249,24 @@ class DataService {
       price: parseFloat(good.price),
       category: good.category || 'General',
       barcode: good.barcode || null,
-      createdAt: await this.getServerTime(),
+      stock_quantity: good.stock_quantity || 0,
+      createdAt: new Date().toISOString(),
     };
     goods.push(newGood);
     await this.setGoods(goods);
+    
+    // Sync to Firebase
+    if (this.isOnline && auth.currentUser) {
+      try {
+        await setDoc(doc(db, 'goods', newGood.id.toString()), {
+          ...newGood,
+          createdAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.error('Error adding good to Firebase:', error);
+      }
+    }
+    
     return newGood;
   }
 
@@ -211,6 +276,19 @@ class DataService {
     if (index !== -1) {
       goods[index] = { ...goods[index], ...updates };
       await this.setGoods(goods);
+      
+      // Sync to Firebase
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await updateDoc(doc(db, 'goods', id.toString()), {
+            ...updates,
+            updatedAt: serverTimestamp()
+          });
+        } catch (error) {
+          console.error('Error updating good in Firebase:', error);
+        }
+      }
+      
       return goods[index];
     }
     return null;
@@ -218,16 +296,38 @@ class DataService {
 
   // Purchases operations
   async getPurchases() {
+    try {
+      // Try to get from Firebase first if online
+      if (this.isOnline && auth.currentUser) {
+        const purchasesSnapshot = await getDocs(collection(db, 'sales'));
+        const firebasePurchases = purchasesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          date: doc.data().date?.toDate?.() || doc.data().date,
+          createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
+        }));
+        
+        // Save to local storage
+        await localforage.setItem(DATA_KEYS.PURCHASES, firebasePurchases);
+        return firebasePurchases;
+      }
+    } catch (error) {
+      console.error('Error fetching purchases from Firebase:', error);
+    }
+    
+    // Fallback to local storage
     return await this.get(DATA_KEYS.PURCHASES);
   }
 
   async setPurchases(purchases) {
-    return await this.set(DATA_KEYS.PURCHASES, purchases);
+    // Save locally first
+    await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
+    return true;
   }
 
   async addPurchase(purchase) {
     const purchases = await this.getPurchases();
-    const serverTime = await this.getServerTime();
+    const serverTime = new Date();
     
     const newPurchase = {
       id: purchase.id || this.generateId(),
@@ -240,11 +340,31 @@ class DataService {
       status: purchase.status || 'active', // 'active', 'voided', 'refunded'
       photoUrl: purchase.photoUrl || null,
       refund: purchase.refund || null,
+      repaymentDate: purchase.repaymentDate || '',
+      isDebt: purchase.isDebt || false,
       createdAt: serverTime.toISOString(),
     };
     
     purchases.push(newPurchase);
     await this.setPurchases(purchases);
+    
+    // Sync to Firebase 'sales' collection
+    if (this.isOnline && auth.currentUser) {
+      try {
+        await setDoc(doc(db, 'sales', newPurchase.id), {
+          ...newPurchase,
+          createdAt: serverTimestamp(),
+          date: serverTimestamp()
+        });
+      } catch (error) {
+        console.error('Error adding purchase to Firebase:', error);
+        // Queue for later sync
+        await this.addToSyncQueue({ type: 'sale', data: newPurchase });
+      }
+    } else {
+      // Queue for sync when online
+      await this.addToSyncQueue({ type: 'sale', data: newPurchase });
+    }
     
     // Update debtors if credit sale
     if (newPurchase.paymentType === 'credit' && newPurchase.customerName) {
@@ -313,23 +433,64 @@ class DataService {
 
   // Debtors operations
   async getDebtors() {
+    try {
+      // Try to get from Firebase first if online
+      if (this.isOnline && auth.currentUser) {
+        const debtorsSnapshot = await getDocs(collection(db, 'debtors'));
+        const firebaseDebtors = debtorsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+          lastPurchase: doc.data().lastPurchase?.toDate?.() || doc.data().lastPurchase,
+          lastPayment: doc.data().lastPayment?.toDate?.() || doc.data().lastPayment
+        }));
+        
+        // Save to local storage
+        await localforage.setItem(DATA_KEYS.DEBTORS, firebaseDebtors);
+        return firebaseDebtors;
+      }
+    } catch (error) {
+      console.error('Error fetching debtors from Firebase:', error);
+    }
+    
+    // Fallback to local storage
     return await this.get(DATA_KEYS.DEBTORS);
   }
 
   async setDebtors(debtors) {
-    return await this.set(DATA_KEYS.DEBTORS, debtors);
+    // Save locally first
+    await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+    
+    // Sync to Firebase if online
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const batch = writeBatch(db);
+        debtors.forEach(debtor => {
+          const debtorRef = doc(db, 'debtors', debtor.id.toString());
+          batch.set(debtorRef, {
+            ...debtor,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        });
+        await batch.commit();
+      } catch (error) {
+        console.error('Error syncing debtors to Firebase:', error);
+      }
+    }
+    return true;
   }
 
   async updateDebtor(purchase) {
     const debtors = await this.getDebtors();
     const existingDebtor = debtors.find(
       d => d.customerPhone === purchase.customerPhone || 
-           d.customerName.toLowerCase() === purchase.customerName.toLowerCase()
+           d.customerName?.toLowerCase() === purchase.customerName?.toLowerCase()
     );
     
     if (existingDebtor) {
       existingDebtor.totalDue += purchase.total;
       existingDebtor.balance = existingDebtor.totalDue - existingDebtor.totalPaid;
+      existingDebtor.purchaseIds = existingDebtor.purchaseIds || [];
       existingDebtor.purchaseIds.push(purchase.id);
       existingDebtor.lastPurchase = purchase.date;
     } else {
@@ -337,6 +498,8 @@ class DataService {
         id: this.generateId(),
         customerName: purchase.customerName,
         customerPhone: purchase.customerPhone,
+        name: purchase.customerName, // Add 'name' field for compatibility
+        phone: purchase.customerPhone, // Add 'phone' field for compatibility
         totalDue: purchase.total,
         totalPaid: 0,
         balance: purchase.total,
@@ -357,7 +520,7 @@ class DataService {
       const paymentAmount = parseFloat(amount);
       debtor.totalPaid += paymentAmount;
       debtor.balance = debtor.totalDue - debtor.totalPaid;
-      debtor.lastPayment = (await this.getServerTime()).toISOString();
+      debtor.lastPayment = new Date().toISOString();
       
       // Mark specific purchases as paid if provided
       if (purchaseIds.length > 0) {
@@ -373,6 +536,21 @@ class DataService {
       }
       
       await this.setDebtors(debtors);
+      
+      // Sync to Firebase
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await updateDoc(doc(db, 'debtors', debtorId.toString()), {
+            totalPaid: debtor.totalPaid,
+            balance: debtor.balance,
+            lastPayment: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        } catch (error) {
+          console.error('Error syncing payment to Firebase:', error);
+        }
+      }
+      
       return debtor;
     }
     return null;
@@ -545,15 +723,133 @@ class DataService {
     const goods = await this.getGoods();
     if (goods.length === 0) {
       await this.setGoods([
-        { id: '1', name: 'Rice (1kg)', price: 50, category: 'Grains' },
-        { id: '2', name: 'Sugar (1kg)', price: 80, category: 'Groceries' },
-        { id: '3', name: 'Cooking Oil (1L)', price: 120, category: 'Cooking' },
-        { id: '4', name: 'Bread', price: 30, category: 'Bakery' },
-        { id: '5', name: 'Milk (1L)', price: 60, category: 'Dairy' },
-        { id: '6', name: 'Eggs (12pcs)', price: 90, category: 'Dairy' },
-        { id: '7', name: 'Soap', price: 25, category: 'Personal Care' },
-        { id: '8', name: 'Toothpaste', price: 45, category: 'Personal Care' },
+        { id: '1', name: 'Rice (1kg)', price: 50, category: 'Grains', stock_quantity: 100 },
+        { id: '2', name: 'Sugar (1kg)', price: 80, category: 'Groceries', stock_quantity: 50 },
+        { id: '3', name: 'Cooking Oil (1L)', price: 120, category: 'Cooking', stock_quantity: 30 },
+        { id: '4', name: 'Bread', price: 30, category: 'Bakery', stock_quantity: 20 },
+        { id: '5', name: 'Milk (1L)', price: 60, category: 'Dairy', stock_quantity: 40 },
+        { id: '6', name: 'Eggs (12pcs)', price: 90, category: 'Dairy', stock_quantity: 25 },
+        { id: '7', name: 'Soap', price: 25, category: 'Personal Care', stock_quantity: 60 },
+        { id: '8', name: 'Toothpaste', price: 45, category: 'Personal Care', stock_quantity: 35 },
       ]);
+    }
+  }
+
+  // Sync all data from Firebase to local storage
+  async syncFromFirebase() {
+    if (!this.isOnline || !auth.currentUser) {
+      console.log('Cannot sync: offline or not authenticated');
+      return { success: false, error: 'Offline or not authenticated' };
+    }
+
+    try {
+      console.log('🔄 Starting Firebase sync...');
+      
+      // Sync goods
+      const goodsSnapshot = await getDocs(collection(db, 'goods'));
+      const goods = goodsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      await localforage.setItem(DATA_KEYS.GOODS, goods);
+      console.log(`✅ Synced ${goods.length} goods`);
+      
+      // Sync sales
+      const salesSnapshot = await getDocs(collection(db, 'sales'));
+      const sales = salesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.() || doc.data().date,
+        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
+      }));
+      await localforage.setItem(DATA_KEYS.PURCHASES, sales);
+      console.log(`✅ Synced ${sales.length} sales`);
+      
+      // Sync debtors
+      const debtorsSnapshot = await getDocs(collection(db, 'debtors'));
+      const debtors = debtorsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+        lastPurchase: doc.data().lastPurchase?.toDate?.() || doc.data().lastPurchase
+      }));
+      await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+      console.log(`✅ Synced ${debtors.length} debtors`);
+      
+      return { 
+        success: true, 
+        synced: {
+          goods: goods.length,
+          sales: sales.length,
+          debtors: debtors.length
+        }
+      };
+    } catch (error) {
+      console.error('❌ Firebase sync error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Push all local data to Firebase
+  async pushToFirebase() {
+    if (!this.isOnline || !auth.currentUser) {
+      console.log('Cannot push: offline or not authenticated');
+      return { success: false, error: 'Offline or not authenticated' };
+    }
+
+    try {
+      console.log('⬆️ Pushing local data to Firebase...');
+      
+      // Push goods
+      const goods = await localforage.getItem(DATA_KEYS.GOODS) || [];
+      const goodsBatch = writeBatch(db);
+      goods.forEach(good => {
+        const goodRef = doc(db, 'goods', good.id.toString());
+        goodsBatch.set(goodRef, {
+          ...good,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      });
+      await goodsBatch.commit();
+      console.log(`✅ Pushed ${goods.length} goods`);
+      
+      // Push sales
+      const sales = await localforage.getItem(DATA_KEYS.PURCHASES) || [];
+      const salesBatch = writeBatch(db);
+      sales.forEach(sale => {
+        const saleRef = doc(db, 'sales', sale.id.toString());
+        salesBatch.set(saleRef, {
+          ...sale,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      });
+      await salesBatch.commit();
+      console.log(`✅ Pushed ${sales.length} sales`);
+      
+      // Push debtors
+      const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+      const debtorsBatch = writeBatch(db);
+      debtors.forEach(debtor => {
+        const debtorRef = doc(db, 'debtors', debtor.id.toString());
+        debtorsBatch.set(debtorRef, {
+          ...debtor,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      });
+      await debtorsBatch.commit();
+      console.log(`✅ Pushed ${debtors.length} debtors`);
+      
+      return { 
+        success: true, 
+        pushed: {
+          goods: goods.length,
+          sales: sales.length,
+          debtors: debtors.length
+        }
+      };
+    } catch (error) {
+      console.error('❌ Firebase push error:', error);
+      return { success: false, error: error.message };
     }
   }
 }
