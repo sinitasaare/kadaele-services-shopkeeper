@@ -19,14 +19,20 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userEmail, setUserEmail] = useState('');
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
-    const user = dataService.getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-      setUserEmail(user.email);
-    }
+    // Check if user is already logged in (persistent login)
+    const checkAuth = async () => {
+      const user = await dataService.checkPersistedLogin();
+      if (user) {
+        setCurrentUser(user);
+        setUserEmail(user.email);
+      }
+      setIsCheckingAuth(false);
+    };
+    
+    checkAuth();
   }, []);
 
   const handleLoginSuccess = (user) => {
@@ -48,6 +54,21 @@ function App() {
   const handleNextPage = () => {
     setCurrentPageIndex((prev) => (prev === PAGES.length - 1 ? 0 : prev + 1));
   };
+
+  // Show loading while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+      }}>
+        <div style={{ color: 'white', fontSize: '18px' }}>Loading...</div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
