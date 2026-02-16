@@ -55,6 +55,14 @@ class DataService {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       this.currentUser = userCredential.user;
+      
+      // Store login state persistently
+      await localforage.setItem('auth_user', {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+        loggedInAt: new Date().toISOString()
+      });
+      
       return { success: true, user: userCredential.user };
     } catch (error) {
       console.error('Login error:', error);
@@ -80,6 +88,8 @@ class DataService {
     try {
       await signOut(auth);
       this.currentUser = null;
+      // Clear persistent login state
+      await localforage.removeItem('auth_user');
       return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
@@ -89,6 +99,22 @@ class DataService {
 
   getCurrentUser() {
     return this.currentUser || auth.currentUser;
+  }
+
+  // Check if user has persistent login
+  async checkPersistedLogin() {
+    try {
+      const authUser = await localforage.getItem('auth_user');
+      if (authUser && auth.currentUser) {
+        // User has valid persistent session
+        this.currentUser = auth.currentUser;
+        return auth.currentUser;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error checking persisted login:', error);
+      return null;
+    }
   }
 
   async sendPasswordReset(email) {
