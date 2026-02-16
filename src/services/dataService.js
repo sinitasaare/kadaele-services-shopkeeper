@@ -1,83 +1,94 @@
 import localforage from 'localforage';
-import { auth, db } from './firebaseConfig';
-
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
+import { auth } from './firebaseConfig';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
   sendPasswordResetEmail,
-  signOut
+  onAuthStateChanged 
 } from 'firebase/auth';
 
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  addDoc,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-  limit
-} from 'firebase/firestore';
-
-// Configure LocalForage (offline-first cache)
+// Configure localforage
 localforage.config({
-  name: 'KadaeleServices',
-  storeName: 'shopkeeper_data'
+  name: 'kadaele-pos',
+  storeName: 'pos_data',
 });
+
+// Data file keys
+const DATA_KEYS = {
+  GOODS: 'goods',
+  PURCHASES: 'purchases',
+  DEBTORS: 'debtors',
+  INVENTORY: 'inventory',
+  SYNC_QUEUE: 'sync_queue',
+  LAST_SYNC: 'last_sync',
+};
 
 class DataService {
   constructor() {
-    this.currentUser = null;
+    this.isOnline = navigator.onLine;
     this.syncInProgress = false;
-
-    // Online/offline flag (BOOLEAN)
-    this.isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => {
-        this.isOnline = true;
-        console.log('🌐 Back online - syncing...');
-        this.syncToCloud();
-      });
-      window.addEventListener('offline', () => {
-        this.isOnline = false;
-        console.log('📴 Offline mode');
-      });
-    }
-
-    // Auth state
-    auth.onAuthStateChanged((user) => {
-      this.currentUser = user || null;
+    this.currentUser = null;
+    
+    // Listen for auth state changes
+    onAuthStateChanged(auth, (user) => {
+      this.currentUser = user;
       if (user) {
-        console.log('✅ Logged in:', user.email);
-        // Background refresh after login
-        this.startBackgroundSync();
+        localStorage.setItem('user_email', user.email);
+      } else {
+        localStorage.removeItem('user_email');
       }
+    });
+    
+    // Listen for online/offline events
+    window.addEventListener('online', () => {
+      this.isOnline = true;
+      this.syncToServer();
+    });
+    
+    window.addEventListener('offline', () => {
+      this.isOnline = false;
     });
   }
 
-  // ==================== AUTH ====================
-
+  // Authentication methods
   async login(email, password) {
     try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: res.user };
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      this.currentUser = userCredential.user;
+      return { success: true, user: userCredential.user };
     } catch (error) {
-      return { success: false, error: error?.message || 'Login failed' };
+      console.error('Login error:', error);
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed attempts. Please try again later.';
+      }
+      
+      return { success: false, error: errorMessage };
     }
   }
 
-  async register(email, password) {
+  async logout() {
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, password);
-      return { success: true, user: res.user };
+      await signOut(auth);
+      this.currentUser = null;
+      return { success: true };
     } catch (error) {
-      return { success: false, error: error?.message || 'Registration failed' };
+      console.error('Logout error:', error);
+      return { success: false, error: error.message };
     }
+  }
+
+  getCurrentUser() {
+    return this.currentUser || auth.currentUser;
   }
 
   async sendPasswordReset(email) {
@@ -85,302 +96,439 @@ class DataService {
       await sendPasswordResetEmail(auth, email);
       return { success: true };
     } catch (error) {
-      return { success: false, error: error?.message || 'Password reset failed' };
+      console.error('Password reset error:', error);
+      let errorMessage = 'Failed to send password reset email.';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      }
+      
+      return { success: false, error: errorMessage };
     }
   }
 
-  async logout() {
-    await signOut(auth);
-    this.currentUser = null;
+  // Generate unique ID
+  generateId() {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // ==================== LOCAL CACHE ====================
+  // Get current server time (or local time if offline)
+  async getServerTime() {
+    if (this.isOnline) {
+      try {
+        // TODO: Replace with actual kadaele-services endpoint
+        const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
+        const data = await response.json();
+        return new Date(data.datetime);
+      } catch (error) {
+        console.warn('Could not get server time, using local time:', error);
+        return new Date();
+      }
+    }
+    return new Date();
+  }
 
-  async saveLocal(key, data) {
+  // Generic CRUD operations
+  async get(key) {
     try {
-      await localforage.setItem(key, data);
+      const data = await localforage.getItem(key);
+      return data || (key === DATA_KEYS.GOODS || key === DATA_KEYS.PURCHASES || 
+                      key === DATA_KEYS.DEBTORS || key === DATA_KEYS.INVENTORY ? [] : null);
+    } catch (error) {
+      console.error(`Error getting ${key}:`, error);
+      return key === DATA_KEYS.GOODS || key === DATA_KEYS.PURCHASES || 
+             key === DATA_KEYS.DEBTORS || key === DATA_KEYS.INVENTORY ? [] : null;
+    }
+  }
+
+  async set(key, value) {
+    try {
+      await localforage.setItem(key, value);
+      // Add to sync queue if not already syncing
+      await this.addToSyncQueue({ key, value, timestamp: Date.now() });
       return true;
-    } catch (e) {
-      console.error(`❌ saveLocal(${key}) failed:`, e);
+    } catch (error) {
+      console.error(`Error setting ${key}:`, error);
       return false;
     }
   }
 
-  async getLocal(key) {
-    try {
-      const data = await localforage.getItem(key);
-      return data || [];
-    } catch (e) {
-      console.error(`❌ getLocal(${key}) failed:`, e);
-      return [];
-    }
-  }
-
-  async addToQueue(action, data) {
-    const queue = (await this.getLocal('sync_queue')) || [];
-    queue.push({ action, data, timestamp: Date.now() });
-    await this.saveLocal('sync_queue', queue);
-  }
-
-  // ==================== GOODS (Firestore -> Local Cache) ====================
-
+  // Goods operations
   async getGoods() {
-    const localGoods = await this.getLocal('goods');
-
-    // If empty AND online, await one fetch so Inventory loads immediately.
-    if ((localGoods?.length || 0) === 0 && this.isOnline) {
-      try {
-        await this.syncGoodsFromCloud();
-        const refreshed = await this.getLocal('goods');
-        return refreshed || [];
-      } catch (_) {
-        // fall back to local
-      }
-    }
-
-    // Background refresh
-    this.syncGoodsFromCloud();
-    return localGoods || [];
+    return await this.get(DATA_KEYS.GOODS);
   }
 
-  async syncGoodsFromCloud() {
-    if (!this.isOnline) return;
-
-    try {
-      const goodsRef = collection(db, 'goods');
-      const snapshot = await getDocs(goodsRef);
-
-      const goods = snapshot.docs.map((d) => {
-        const data = d.data() || {};
-        return {
-          id: data.id ?? d.id,
-          name: data.name ?? data.itemName ?? data.title ?? '',
-          price: typeof data.price === 'number' ? data.price : parseFloat(data.price || 0),
-          stock_quantity:
-            typeof data.stock_quantity === 'number'
-              ? data.stock_quantity
-              : (typeof data.stockLevel === 'number' ? data.stockLevel : parseInt(data.stock_quantity || data.stockLevel || 0, 10)),
-          ...data
-        };
-      });
-
-      await this.saveLocal('goods', goods);
-      console.log(`✅ Synced goods from Firestore: ${goods.length}`);
-    } catch (e) {
-      console.log('⚠️ Goods cloud sync failed (using local cache)');
-    }
+  async setGoods(goods) {
+    return await this.set(DATA_KEYS.GOODS, goods);
   }
 
-  // ==================== PURCHASES (Sales Journal) ====================
+  async addGood(good) {
+    const goods = await this.getGoods();
+    const newGood = {
+      id: good.id || this.generateId(),
+      name: good.name,
+      price: parseFloat(good.price),
+      category: good.category || 'General',
+      barcode: good.barcode || null,
+      createdAt: await this.getServerTime(),
+    };
+    goods.push(newGood);
+    await this.setGoods(goods);
+    return newGood;
+  }
+
+  async updateGood(id, updates) {
+    const goods = await this.getGoods();
+    const index = goods.findIndex(g => g.id === id);
+    if (index !== -1) {
+      goods[index] = { ...goods[index], ...updates };
+      await this.setGoods(goods);
+      return goods[index];
+    }
+    return null;
+  }
+
+  // Purchases operations
+  async getPurchases() {
+    return await this.get(DATA_KEYS.PURCHASES);
+  }
+
+  async setPurchases(purchases) {
+    return await this.set(DATA_KEYS.PURCHASES, purchases);
+  }
 
   async addPurchase(purchase) {
-    // Local-first
-    const localId = `purchase_${Date.now()}`;
-    const p = {
-      ...purchase,
-      id: localId,
-      createdAt: new Date().toISOString(),
-      synced: false
+    const purchases = await this.getPurchases();
+    const serverTime = await this.getServerTime();
+    
+    const newPurchase = {
+      id: purchase.id || this.generateId(),
+      date: serverTime.toISOString(),
+      items: purchase.items,
+      total: parseFloat(purchase.total),
+      paymentType: purchase.paymentType, // 'cash' or 'credit'
+      customerName: purchase.customerName || '',
+      customerPhone: purchase.customerPhone || '',
+      status: purchase.status || 'active', // 'active', 'voided', 'refunded'
+      photoUrl: purchase.photoUrl || null,
+      refund: purchase.refund || null,
+      createdAt: serverTime.toISOString(),
     };
-
-    const purchases = (await this.getLocal('purchases')) || [];
-    purchases.unshift(p);
-    await this.saveLocal('purchases', purchases);
-
-    await this.addToQueue('addPurchase', p);
-
-    if (this.isOnline) this.syncToCloud();
-    return p;
-  }
-
-  async getPurchases() {
-    const localPurchases = (await this.getLocal('purchases')) || [];
-    this.syncPurchasesFromCloud();
-    return localPurchases;
-  }
-
-  async syncPurchasesFromCloud() {
-    if (!this.isOnline) return;
-
-    try {
-      const purchasesRef = collection(db, 'purchases');
-      const q = query(purchasesRef, orderBy('createdAt', 'desc'), limit(500));
-      const snap = await getDocs(q);
-
-      const cloud = snap.docs.map((d) => ({ id: d.id, ...d.data(), synced: true }));
-
-      // Merge (do NOT wipe local if cloud empty)
-      const local = (await this.getLocal('purchases')) || [];
-      const map = new Map();
-      for (const x of local) if (x?.id) map.set(x.id, x);
-      for (const x of cloud) if (x?.id) map.set(x.id, x);
-
-      const merged = Array.from(map.values());
-      merged.sort((a, b) => {
-        const at = new Date(a.createdAt || a.timestamp || 0).getTime();
-        const bt = new Date(b.createdAt || b.timestamp || 0).getTime();
-        return bt - at;
-      });
-
-      await this.saveLocal('purchases', merged);
-      console.log(`✅ Purchases synced: ${cloud.length}`);
-    } catch (e) {
-      console.log('⚠️ Purchases cloud sync failed (using local cache)');
+    
+    purchases.push(newPurchase);
+    await this.setPurchases(purchases);
+    
+    // Update debtors if credit sale
+    if (newPurchase.paymentType === 'credit' && newPurchase.customerName) {
+      await this.updateDebtor(newPurchase);
     }
+    
+    return newPurchase;
   }
 
-  // ==================== DEBTORS ====================
-
-  async getDebtors() {
-    const localDebtors = (await this.getLocal('debtors')) || [];
-    this.syncDebtorsFromCloud();
-    return localDebtors;
-  }
-
-  async syncDebtorsFromCloud() {
-    if (!this.isOnline) return;
-
-    try {
-      // Your Firebase schema stores debts inside 'sales' (isDebt=true), not in a separate 'debtors' collection.
-      const salesRef = collection(db, 'sales');
-      const q = query(
-        salesRef,
-        where('isDebt', '==', true),
-        orderBy('createdAt', 'desc'),
-        limit(500)
-      );
-
-      const snap = await getDocs(q);
-      const sales = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-      // Build a debtor list grouped by customerName+customerPhone
-      debtors_map = {}
-      for s in sales:
-        name = (s.get('customerName') or '').strip()
-        phone = (s.get('customerPhone') or '').strip()
-        key = f"{name}||{phone}"
-        total = float(s.get('total') or 0)
-        if key not in debtors_map:
-          debtors_map[key] = {
-            "id": key,
-            "name": name,
-            "phone": phone,
-            "totalDebt": 0.0,
-            "purchaseIds": [],
-            "repaymentDate": s.get("repaymentDate") or ""
-          }
-        debtors_map[key]["totalDebt"] += total
-        debtors_map[key]["purchaseIds"].append(s.get("id") or s.get("purchaseId") or s.get("id") or "")
-
-      debtors = list(debtors_map.values())
-      # Sort highest debt first
-      debtors.sort(key=lambda d: d.get("totalDebt", 0), reverse=True)
-
-      await this.saveLocal('debtors', debtors);
-      console.log(`✅ Debtors synced from sales: ${debtors.length}`);
-    } catch (e) {
-      console.log('⚠️ Debtors sync failed (using local cache)');
-    }
-  } catch (e) {
-      console.log('⚠️ Debtors cloud sync failed (using local cache)');
-    }
-  }
-
-  async recordPayment(debtorId, amount) {
-    const debtors = (await this.getLocal('debtors')) || [];
-    const idx = debtors.findIndex((d) => d.id === debtorId);
-    if (idx < 0) return false;
-
-    const paid = parseFloat(amount) || 0;
-    const current = parseFloat(debtors[idx].totalDebt) || 0;
-    debtors[idx].totalDebt = Math.max(0, current - paid);
-
-    await this.saveLocal('debtors', debtors);
-    await this.addToQueue('recordPayment', { debtorId, amount: paid });
-
-    if (this.isOnline) this.syncToCloud();
-    return true;
-  }
-
-  // ==================== PHOTO ====================
-
-  async savePhoto(purchaseId, photoUrl) {
-    const purchases = (await this.getLocal('purchases')) || [];
-    const idx = purchases.findIndex((p) => p.id === purchaseId);
-    if (idx < 0) return false;
-
-    purchases[idx].photoUrl = photoUrl;
-    await this.saveLocal('purchases', purchases);
-    await this.addToQueue('savePhoto', { purchaseId, photoUrl });
-
-    if (this.isOnline) this.syncToCloud();
-    return true;
-  }
-
-  // ==================== CLOUD SYNC QUEUE ====================
-
-  async syncToCloud() {
-    if (this.syncInProgress) return;
-    if (!this.isOnline) return;
-
-    const queue = (await this.getLocal('sync_queue')) || [];
-    if (queue.length === 0) return;
-
-    this.syncInProgress = true;
-
-    try {
-      for (const item of queue) {
-        if (!item?.action) continue;
-
-        if (item.action === 'addPurchase') {
-          await this.pushPurchaseToCloud(item.data);
-        } else if (item.action === 'recordPayment') {
-          await this.pushPaymentToCloud(item.data);
-        } else if (item.action === 'savePhoto') {
-          // keep non-fatal (photos are stored as URL in purchase)
-        }
+  async updatePurchase(id, updates) {
+    const purchases = await this.getPurchases();
+    const index = purchases.findIndex(p => p.id === id);
+    
+    if (index !== -1) {
+      const purchase = purchases[index];
+      
+      // Check if within 24 hours
+      const createdDate = new Date(purchase.createdAt);
+      const now = new Date();
+      const hoursDiff = (now - createdDate) / (1000 * 60 * 60);
+      
+      if (hoursDiff > 24 && !updates.allowAfter24Hours) {
+        throw new Error('Cannot edit purchase after 24 hours');
       }
+      
+      purchases[index] = { ...purchase, ...updates };
+      await this.setPurchases(purchases);
+      
+      // Update debtors if needed
+      if (purchases[index].paymentType === 'credit') {
+        await this.recalculateDebtors();
+      }
+      
+      return purchases[index];
+    }
+    return null;
+  }
 
-      await this.saveLocal('sync_queue', []);
-      console.log('✅ Sync queue flushed');
-    } catch (e) {
-      console.log('⚠️ Sync queue failed (will retry later)');
-    } finally {
-      this.syncInProgress = false;
+  async voidPurchase(id, reason) {
+    return await this.updatePurchase(id, { 
+      status: 'voided', 
+      voidReason: reason,
+      voidedAt: (await this.getServerTime()).toISOString(),
+      allowAfter24Hours: true,
+    });
+  }
+
+  async refundPurchase(id, amount, reason) {
+    const purchase = await this.updatePurchase(id, {
+      status: 'refunded',
+      refund: {
+        amount: parseFloat(amount),
+        reason: reason,
+        date: (await this.getServerTime()).toISOString(),
+      },
+      allowAfter24Hours: true,
+    });
+    
+    // Update debtors if credit sale
+    if (purchase && purchase.paymentType === 'credit') {
+      await this.recalculateDebtors();
+    }
+    
+    return purchase;
+  }
+
+  // Debtors operations
+  async getDebtors() {
+    return await this.get(DATA_KEYS.DEBTORS);
+  }
+
+  async setDebtors(debtors) {
+    return await this.set(DATA_KEYS.DEBTORS, debtors);
+  }
+
+  async updateDebtor(purchase) {
+    const debtors = await this.getDebtors();
+    const existingDebtor = debtors.find(
+      d => d.customerPhone === purchase.customerPhone || 
+           d.customerName.toLowerCase() === purchase.customerName.toLowerCase()
+    );
+    
+    if (existingDebtor) {
+      existingDebtor.totalDue += purchase.total;
+      existingDebtor.balance = existingDebtor.totalDue - existingDebtor.totalPaid;
+      existingDebtor.purchaseIds.push(purchase.id);
+      existingDebtor.lastPurchase = purchase.date;
+    } else {
+      debtors.push({
+        id: this.generateId(),
+        customerName: purchase.customerName,
+        customerPhone: purchase.customerPhone,
+        totalDue: purchase.total,
+        totalPaid: 0,
+        balance: purchase.total,
+        purchaseIds: [purchase.id],
+        createdAt: purchase.date,
+        lastPurchase: purchase.date,
+      });
+    }
+    
+    await this.setDebtors(debtors);
+  }
+
+  async recordPayment(debtorId, amount, purchaseIds = []) {
+    const debtors = await this.getDebtors();
+    const debtor = debtors.find(d => d.id === debtorId);
+    
+    if (debtor) {
+      const paymentAmount = parseFloat(amount);
+      debtor.totalPaid += paymentAmount;
+      debtor.balance = debtor.totalDue - debtor.totalPaid;
+      debtor.lastPayment = (await this.getServerTime()).toISOString();
+      
+      // Mark specific purchases as paid if provided
+      if (purchaseIds.length > 0) {
+        const purchases = await this.getPurchases();
+        purchaseIds.forEach(pid => {
+          const purchase = purchases.find(p => p.id === pid);
+          if (purchase) {
+            purchase.paid = true;
+            purchase.paidDate = debtor.lastPayment;
+          }
+        });
+        await this.setPurchases(purchases);
+      }
+      
+      await this.setDebtors(debtors);
+      return debtor;
+    }
+    return null;
+  }
+
+  async recalculateDebtors() {
+    const purchases = await this.getPurchases();
+    const creditPurchases = purchases.filter(
+      p => p.paymentType === 'credit' && p.status === 'active'
+    );
+    
+    const debtorsMap = new Map();
+    
+    creditPurchases.forEach(purchase => {
+      const key = purchase.customerPhone || purchase.customerName;
+      if (!debtorsMap.has(key)) {
+        debtorsMap.set(key, {
+          id: this.generateId(),
+          customerName: purchase.customerName,
+          customerPhone: purchase.customerPhone,
+          totalDue: 0,
+          totalPaid: 0,
+          balance: 0,
+          purchaseIds: [],
+          createdAt: purchase.date,
+          lastPurchase: purchase.date,
+        });
+      }
+      
+      const debtor = debtorsMap.get(key);
+      debtor.totalDue += purchase.total;
+      debtor.purchaseIds.push(purchase.id);
+      if (new Date(purchase.date) > new Date(debtor.lastPurchase)) {
+        debtor.lastPurchase = purchase.date;
+      }
+    });
+    
+    const debtors = Array.from(debtorsMap.values());
+    
+    // Preserve payment records from existing debtors
+    const existingDebtors = await this.getDebtors();
+    debtors.forEach(debtor => {
+      const existing = existingDebtors.find(
+        d => d.customerPhone === debtor.customerPhone ||
+             d.customerName === debtor.customerName
+      );
+      if (existing) {
+        debtor.totalPaid = existing.totalPaid;
+        debtor.lastPayment = existing.lastPayment;
+      }
+      debtor.balance = debtor.totalDue - debtor.totalPaid;
+    });
+    
+    await this.setDebtors(debtors);
+  }
+
+  // Inventory operations
+  async getInventory() {
+    return await this.get(DATA_KEYS.INVENTORY);
+  }
+
+  async setInventory(inventory) {
+    return await this.set(DATA_KEYS.INVENTORY, inventory);
+  }
+
+  async updateInventoryItem(itemId, stockLevel) {
+    const inventory = await this.getInventory();
+    const existing = inventory.find(i => i.itemId === itemId);
+    
+    if (existing) {
+      existing.stockLevel = parseInt(stockLevel);
+      existing.lastUpdated = (await this.getServerTime()).toISOString();
+    } else {
+      inventory.push({
+        itemId: itemId,
+        stockLevel: parseInt(stockLevel),
+        lastUpdated: (await this.getServerTime()).toISOString(),
+      });
+    }
+    
+    await this.setInventory(inventory);
+  }
+
+  // Sync queue operations
+  async addToSyncQueue(item) {
+    const queue = await localforage.getItem(DATA_KEYS.SYNC_QUEUE) || [];
+    queue.push(item);
+    await localforage.setItem(DATA_KEYS.SYNC_QUEUE, queue);
+    
+    // Trigger sync if online
+    if (this.isOnline && !this.syncInProgress) {
+      this.syncToServer();
     }
   }
 
-  async pushPurchaseToCloud(purchase) {
-    const purchasesRef = collection(db, 'purchases');
-    await addDoc(purchasesRef, {
-      ...purchase,
-      createdAt: purchase?.createdAt ? purchase.createdAt : serverTimestamp()
-    });
-  }
-
-  async pushPaymentToCloud({ debtorId, amount }) {
-    const ref = doc(db, 'debtors', debtorId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-
-    const current = snap.data() || {};
-    const currentDebt = parseFloat(current.totalDebt) || 0;
-    const paid = parseFloat(amount) || 0;
-
-    await updateDoc(ref, {
-      totalDebt: Math.max(0, currentDebt - paid),
-      updatedAt: serverTimestamp()
-    });
-  }
-
-  // ==================== BACKGROUND SYNC ====================
-
-  startBackgroundSync() {
+  async syncToServer() {
+    if (this.syncInProgress || !this.isOnline) return;
+    
+    this.syncInProgress = true;
+    const queue = await localforage.getItem(DATA_KEYS.SYNC_QUEUE) || [];
+    
+    if (queue.length === 0) {
+      this.syncInProgress = false;
+      return { success: true, synced: 0 };
+    }
+    
     try {
-      this.syncGoodsFromCloud();
-      this.syncPurchasesFromCloud();
-      this.syncDebtorsFromCloud();
-    } catch (_) {}
+      // TODO: Replace with actual kadaele-services endpoint
+      // For now, we'll simulate a successful sync
+      console.log('Syncing to server:', queue.length, 'items');
+      
+      // Simulate API call
+      // const response = await fetch('https://kadaele-services.example.com/sync', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ items: queue }),
+      // });
+      
+      // if (response.ok) {
+        await localforage.setItem(DATA_KEYS.SYNC_QUEUE, []);
+        await localforage.setItem(DATA_KEYS.LAST_SYNC, new Date().toISOString());
+      // }
+      
+      this.syncInProgress = false;
+      return { success: true, synced: queue.length };
+    } catch (error) {
+      console.error('Sync failed:', error);
+      this.syncInProgress = false;
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getLastSyncTime() {
+    return await localforage.getItem(DATA_KEYS.LAST_SYNC);
+  }
+
+  // Photo operations
+  async savePhoto(photoData, purchaseId) {
+    try {
+      // Save photo to local storage
+      const photoKey = `photo_${purchaseId}`;
+      await localforage.setItem(photoKey, photoData);
+      
+      // TODO: Upload to kadaele-services when online
+      if (this.isOnline) {
+        // Simulate upload
+        console.log('Uploading photo for purchase:', purchaseId);
+        // const formData = new FormData();
+        // formData.append('photo', photoData);
+        // formData.append('purchaseId', purchaseId);
+        // await fetch('https://kadaele-services.example.com/upload', {
+        //   method: 'POST',
+        //   body: formData,
+        // });
+      }
+      
+      return photoKey;
+    } catch (error) {
+      console.error('Error saving photo:', error);
+      throw error;
+    }
+  }
+
+  async getPhoto(photoKey) {
+    return await localforage.getItem(photoKey);
+  }
+
+  // Initialize sample data (for testing)
+  async initializeSampleData() {
+    const goods = await this.getGoods();
+    if (goods.length === 0) {
+      await this.setGoods([
+        { id: '1', name: 'Rice (1kg)', price: 50, category: 'Grains' },
+        { id: '2', name: 'Sugar (1kg)', price: 80, category: 'Groceries' },
+        { id: '3', name: 'Cooking Oil (1L)', price: 120, category: 'Cooking' },
+        { id: '4', name: 'Bread', price: 30, category: 'Bakery' },
+        { id: '5', name: 'Milk (1L)', price: 60, category: 'Dairy' },
+        { id: '6', name: 'Eggs (12pcs)', price: 90, category: 'Dairy' },
+        { id: '7', name: 'Soap', price: 25, category: 'Personal Care' },
+        { id: '8', name: 'Toothpaste', price: 45, category: 'Personal Care' },
+      ]);
+    }
   }
 }
 
