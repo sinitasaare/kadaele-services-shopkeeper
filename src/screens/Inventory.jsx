@@ -76,8 +76,7 @@ function Inventory() {
       {/* FIXED HEADER */}
       <div className="sticky-header">
         <div className="inventory-header">
-          <div>
-            <h2 className="screen-title">Inventory</h2>
+          <div style={{ textAlign: 'center', width: '100%' }}>
             <p className="screen-subtitle">View current stock levels ({goods.length} items)</p>
           </div>
         </div>
