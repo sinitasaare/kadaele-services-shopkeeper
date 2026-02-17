@@ -138,7 +138,6 @@ body {
 .app-main {
   flex: 1;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 768px) {
