@@ -1,426 +1,311 @@
-import React, { useState, useEffect } from 'react';
-import dataService from '../services/dataService';
-import './SalesRecord.css';
-
-function SalesRecord() {
-  const [purchases, setPurchases] = useState([]);
-  const [filteredPurchases, setFilteredPurchases] = useState([]);
-  const [paymentFilter, setPaymentFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('today');
-  const [selectedDate, setSelectedDate] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [appliedPaymentFilter, setAppliedPaymentFilter] = useState('all');
-  const [appliedDateFilter, setAppliedDateFilter] = useState('today');
-  const [appliedSelectedDate, setAppliedSelectedDate] = useState('');
-  const [appliedStartDate, setAppliedStartDate] = useState('');
-  const [appliedEndDate, setAppliedEndDate] = useState('');
-  const [filtersChanged, setFiltersChanged] = useState(false);
-
-  useEffect(() => {
-    loadPurchases();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [purchases, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
-
-  useEffect(() => {
-    // Check if current filters differ from applied filters
-    let changed = false;
-    
-    // Check payment filter change
-    if (paymentFilter !== appliedPaymentFilter) {
-      changed = true;
-    }
-    
-    // Check date filter changes with validation
-    if (dateFilter !== appliedDateFilter) {
-      // Date filter type changed
-      if (dateFilter === 'today') {
-        // Today selected - immediate change
-        changed = true;
-      } else if (dateFilter === 'single') {
-        // Single date selected - need date to be picked
-        if (selectedDate && selectedDate !== appliedSelectedDate) {
-          changed = true;
-        }
-      } else if (dateFilter === 'range') {
-        // Date range selected - need both dates
-        if (startDate && endDate && 
-            (startDate !== appliedStartDate || endDate !== appliedEndDate)) {
-          changed = true;
-        }
-      }
-    } else {
-      // Same date filter type - check if dates changed
-      if (appliedDateFilter === 'single' && selectedDate !== appliedSelectedDate && selectedDate) {
-        changed = true;
-      }
-      if (appliedDateFilter === 'range' && 
-          startDate && endDate &&
-          (startDate !== appliedStartDate || endDate !== appliedEndDate)) {
-        changed = true;
-      }
-    }
-    
-    setFiltersChanged(changed);
-  }, [paymentFilter, dateFilter, selectedDate, startDate, endDate, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
-
-  const loadPurchases = async () => {
-    const data = await dataService.getPurchases();
-    setPurchases(data || []);
-  };
-
-  const applyFilters = () => {
-    let filtered = purchases;
-
-    if (appliedPaymentFilter !== 'all') {
-      filtered = filtered.filter(p => p.payment_type === appliedPaymentFilter);
-    }
-
-    if (appliedDateFilter === 'today') {
-      const today = new Date().toLocaleDateString();
-      filtered = filtered.filter(p => {
-        if (!(p.timestamp || p.createdAt)) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
-        return purchaseDate === today;
-      });
-    }
-
-    if (appliedDateFilter === 'single' && appliedSelectedDate) {
-      filtered = filtered.filter(p => {
-        if (!p.timestamp || p.createdAt) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
-        const selected = new Date(appliedSelectedDate).toLocaleDateString();
-        return purchaseDate === selected;
-      });
-    }
-
-    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
-      const start = new Date(appliedStartDate);
-      const end = new Date(appliedEndDate);
-      end.setHours(23, 59, 59, 999);
-      
-      filtered = filtered.filter(p => {
-        if (!p.timestamp || p.createdAt) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt);
-        return purchaseDate >= start && purchaseDate <= end;
-      });
-    }
-
-    setFilteredPurchases(filtered);
-  };
-
-  const toggleFilters = () => {
-    if (showFilters) {
-      // Closing filters without applying
-      setShowFilters(false);
-    } else {
-      // Opening filters
-      setShowFilters(true);
-    }
-  };
-
-  const handleApplyFilters = () => {
-    if (!filtersChanged) return;
-    
-    setAppliedPaymentFilter(paymentFilter);
-    setAppliedDateFilter(dateFilter);
-    setAppliedSelectedDate(selectedDate);
-    setAppliedStartDate(startDate);
-    setAppliedEndDate(endDate);
-    setShowFilters(false);
-    
-    // Clear date fields
-    setSelectedDate('');
-    setStartDate('');
-    setEndDate('');
-    setFiltersChanged(false);
-  };
-
-
-  // Get today's date in YYYY-MM-DD format for max attribute
-  const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getTableTitle = () => {
-    let paymentText = 'All Sales';
-    if (appliedPaymentFilter === 'cash') paymentText = 'Cash Sales';
-    if (appliedPaymentFilter === 'credit') paymentText = 'Credit Sales';
-
-    if (appliedDateFilter === 'today') {
-      return `${paymentText} Today`;
-    }
-
-    if (appliedDateFilter === 'single') {
-      if (appliedSelectedDate) {
-        const selectedDateObj = new Date(appliedSelectedDate);
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        // Reset time parts for comparison
-        today.setHours(0, 0, 0, 0);
-        yesterday.setHours(0, 0, 0, 0);
-        selectedDateObj.setHours(0, 0, 0, 0);
-        
-        if (selectedDateObj.getTime() === yesterday.getTime()) {
-          return `${paymentText} Yesterday`;
-        }
-        
-        const date = new Date(appliedSelectedDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        return `${paymentText} on ${date}`;
-      }
-      return `${paymentText} Today`;
-    }
-
-    if (appliedDateFilter === 'range') {
-      if (appliedStartDate && appliedEndDate) {
-        const start = new Date(appliedStartDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        const end = new Date(appliedEndDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        return `${paymentText} from ${start} to ${end}`;
-      }
-      return `${paymentText} Today`;
-    }
-
-    return `${paymentText} Today`;
-  };
-
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) {
-      return { date: 'N/A', time: 'N/A' };
-    }
-
-    // Handle Firestore Timestamp object or ISO string
-    let date;
-    if (timestamp.seconds) {
-      // Firestore Timestamp object
-      date = new Date(timestamp.seconds * 1000);
-    } else {
-      // ISO string or milliseconds
-      date = new Date(timestamp);
-    }
-
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      return { date: 'Invalid', time: 'Invalid' };
-    }
-
-    return {
-      date: date.toLocaleDateString('en-GB', { 
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      }),
-      time: date.toLocaleTimeString('en-US', { 
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      })
-    };
-  };
-
-  const totalRecords = filteredPurchases.length;
-  const grandTotal = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
-
-  return (
-    <div className="sales-record">
-      {showFilters && (
-      <div className="filters-section">
-        <div className="filter-group">
-          <label>Payment Type:</label>
-          <div className="filter-buttons">
-            <button 
-              className={paymentFilter === 'all' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setPaymentFilter('all')}
-            >
-              All Sales
-            </button>
-            <button 
-              className={paymentFilter === 'cash' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setPaymentFilter('cash')}
-            >
-              Cash Only
-            </button>
-            <button 
-              className={paymentFilter === 'credit' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setPaymentFilter('credit')}
-            >
-              Credit Only
-            </button>
-          </div>
-        </div>
-
-        <div className="filter-group">
-          <label>Date Filter:</label>
-          <div className="filter-buttons">
-            <button 
-              className={dateFilter === 'today' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setDateFilter('today')}
-            >
-              Today
-            </button>
-            <button 
-              className={dateFilter === 'single' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setDateFilter('single')}
-            >
-              Single Date
-            </button>
-            <button 
-              className={dateFilter === 'range' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setDateFilter('range')}
-            >
-              Date Range
-            </button>
-          </div>
-        </div>
-
-        {dateFilter === 'single' && (
-          <div className="filter-group">
-            <label>Select Date:</label>
-            <input type="date" value={selectedDate} max={getTodayDate()}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="date-input"
-            />
-          </div>
-        )}
-
-        {dateFilter === 'range' && (
-          <div className="filter-group">
-            <label>Date Range:</label>
-            <div className="date-range-inputs">
-              <div className="date-range-field">
-                <label className="date-range-label">From:</label>
-                <input type="date" value={startDate} max={getTodayDate()}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-              <div className="date-range-field">
-                <label className="date-range-label">To:</label>
-                <input type="date" value={endDate} max={getTodayDate()}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        
-      </div>
-      )}
-
-      <button 
-        className={`filter-toggle-btn ${showFilters && !filtersChanged ? '' : ''}`}
-        onClick={showFilters ? (filtersChanged ? handleApplyFilters : toggleFilters) : toggleFilters}
-      >
-        {showFilters ? (filtersChanged ? 'Apply Filter' : 'Close Filter') : 'Open Filter'}
-      </button>
-
-      <h2 className="table-title">{getTableTitle()}</h2>
-
-      <div className="stats-boxes">
-        <div className="stat-box stat-box-blue">
-          <div className="stat-label">TOTAL RECORDS</div>
-          <div className="stat-value">{totalRecords}</div>
-        </div>
-        <div className="stat-box stat-box-green">
-          <div className="stat-label">GRAND TOTAL</div>
-          <div className="stat-value">${grandTotal.toFixed(2)}</div>
-        </div>
-      </div>
-
-      <div className="table-wrapper">
-        <table className="sales-table">
-          <thead>
-            <tr>
-              <th>DATE</th>
-              <th>TIME</th>
-              <th>ITEMS</th>
-              <th>QTY</th>
-              <th>TOTAL</th>
-              <th>PAY/TYPE</th>
-              <th>CUSTOMER</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPurchases.length === 0 ? (
-              <tr>
-                <td colSpan="7" style={{textAlign: 'center', padding: '40px', color: '#999'}}>
-                  No sales records found
-                </td>
-              </tr>
-            ) : (
-              filteredPurchases.map((purchase) => {
-                const dateTime = formatDateTime(purchase.timestamp || purchase.createdAt);
-                const items = purchase.items || [];
-                const itemCount = items.length || 1;
-                const paymentType = purchase.payment_type || purchase.paymentType || 'N/A';
-                const customerName = purchase.customer_name || purchase.customerName || '-';
-                
-                return items.map((item, itemIndex) => (
-                  <tr key={`${purchase.id}-${itemIndex}`}>
-                    {/* DATE - merged for all items in this purchase */}
-                    {itemIndex === 0 && (
-                      <td rowSpan={itemCount}>{dateTime.date}</td>
-                    )}
-                    
-                    {/* TIME - merged for all items in this purchase */}
-                    {itemIndex === 0 && (
-                      <td rowSpan={itemCount}>{dateTime.time}</td>
-                    )}
-                    
-                    {/* ITEMS - separate row for each item */}
-                    <td>{item.name || 'N/A'}</td>
-                    
-                    {/* QTY - separate for each item */}
-                    <td>{item.quantity || item.qty || 0}</td>
-                    
-                    {/* TOTAL - separate for each item */}
-                    <td>${(item.subtotal || (item.price * item.quantity) || 0).toFixed(2)}</td>
-                    
-                    {/* PAY/TYPE - merged for all items in this purchase */}
-                    {itemIndex === 0 && (
-                      <td rowSpan={itemCount}>
-                        <span className={`payment-badge payment-${paymentType.toLowerCase()}`}>
-                          {paymentType.toUpperCase()}
-                        </span>
-                      </td>
-                    )}
-                    
-                    {/* CUSTOMER - merged for all items in this purchase */}
-                    {itemIndex === 0 && (
-                      <td rowSpan={itemCount}>{customerName}</td>
-                    )}
-                  </tr>
-                ));
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+.sales-record {
+  padding: 1.5rem;
+  background-color: var(--background);
+  min-height: 100vh;
 }
 
-export default SalesRecord;
+/* Filter Section */
+.filters-section {
+  background-color: var(--surface);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+}
+
+.filter-group {
+  margin-bottom: 1.25rem;
+}
+
+.filter-group:last-child {
+  margin-bottom: 0;
+}
+
+.filter-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 0.625rem 1.25rem;
+  border: 2px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  background-color: var(--hover-bg);
+  border-color: var(--primary-color);
+}
+
+.filter-btn.active {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.date-input {
+  padding: 0.625rem;
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  width: 100%;
+  max-width: 250px;
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+.date-range-inputs {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.date-range-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.date-range-label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Filter Toggle Button */
+.filter-toggle-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-toggle-btn:hover {
+  background-color: var(--primary-dark);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.filter-toggle-btn:active {
+  transform: translateY(0);
+}
+
+/* Table Title */
+.table-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+  text-align: center;
+}
+
+/* Stats Boxes */
+.stats-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-box {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.stat-box:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-box-blue {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.stat-box-green {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+  opacity: 0.95;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* Table Wrapper */
+.table-wrapper {
+  overflow-x: auto;
+  background-color: var(--surface);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+}
+
+.sales-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.sales-table thead {
+  background-color: var(--primary-color);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.sales-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.sales-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s ease;
+}
+
+.sales-table tbody tr:hover {
+  background-color: var(--hover-bg);
+}
+
+.sales-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.sales-table td {
+  padding: 1rem;
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+/* Payment Badge */
+.payment-badge {
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.payment-cash {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.payment-credit {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.payment-n/a {
+  background-color: #e2e3e5;
+  color: #6c757d;
+  border: 1px solid #d6d8db;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sales-record {
+    padding: 1rem;
+  }
+
+  .filter-buttons {
+    flex-direction: column;
+  }
+
+  .filter-btn {
+    width: 100%;
+  }
+
+  .date-range-inputs {
+    flex-direction: column;
+  }
+
+  .date-range-field {
+    min-width: 100%;
+  }
+
+  .stats-boxes {
+    grid-template-columns: 1fr;
+  }
+
+  .table-title {
+    font-size: 1.25rem;
+  }
+
+  .sales-table {
+    font-size: 0.85rem;
+  }
+
+  .sales-table th,
+  .sales-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .sales-table th,
+  .sales-table td {
+    padding: 0.5rem 0.375rem;
+    font-size: 0.8rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .filter-toggle-btn {
+    width: 100%;
+  }
+}
