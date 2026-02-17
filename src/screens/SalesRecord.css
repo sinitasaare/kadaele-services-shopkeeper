@@ -3,8 +3,10 @@
   min-height: 100vh;
 }
 
-/* Filter Toggle Button */
+/* Filter Toggle Button — centered */
 .filter-toggle-btn {
+  display: block;
+  margin: 0 auto 10px auto;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
@@ -13,7 +15,6 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 10px;
   transition: transform 0.2s;
   box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
 }
@@ -109,19 +110,20 @@
   text-align: center;
 }
 
-/* Stats Boxes */
+/* Stats Boxes — floated to opposite ends, 25% smaller */
 .stats-boxes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
 }
 
 .stat-box {
-  padding: 12px;
+  padding: 9px 10px;
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   text-align: center;
+  width: 42%;
 }
 
 .stat-box-blue {
@@ -135,16 +137,16 @@
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   opacity: 0.95;
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -160,6 +162,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: auto;
 }
 
 .sales-table thead {
@@ -177,6 +180,12 @@
   color: #333;
   border-bottom: 2px solid #e0e0e0;
   white-space: nowrap;
+}
+
+/* ITEMS column expands to fit content, no wrapping */
+.sales-table td.items-cell {
+  white-space: nowrap;
+  width: auto;
 }
 
 .sales-table tbody tr {
@@ -212,11 +221,6 @@
   color: #856404;
 }
 
-.payment-n/a {
-  background: #e2e3e5;
-  color: #6c757d;
-}
-
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .sales-record {
@@ -241,7 +245,7 @@
   }
 
   .stat-value {
-    font-size: 18px;
+    font-size: 13px;
   }
 
   .sales-table {
