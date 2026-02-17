@@ -30,7 +30,7 @@ localforage.config({
 // Data file keys
 const DATA_KEYS = {
   GOODS: 'goods',
-  PURCHASES: 'purchases',
+  SALES: 'sales',
   DEBTORS: 'debtors',
   INVENTORY: 'inventory',
   SYNC_QUEUE: 'sync_queue',
@@ -184,11 +184,11 @@ class DataService {
   async get(key) {
     try {
       const data = await localforage.getItem(key);
-      return data || (key === DATA_KEYS.GOODS || key === DATA_KEYS.PURCHASES || 
+      return data || (key === DATA_KEYS.GOODS || key === DATA_KEYS.SALES || 
                       key === DATA_KEYS.DEBTORS || key === DATA_KEYS.INVENTORY ? [] : null);
     } catch (error) {
       console.error(`Error getting ${key}:`, error);
-      return key === DATA_KEYS.GOODS || key === DATA_KEYS.PURCHASES || 
+      return key === DATA_KEYS.GOODS || key === DATA_KEYS.SALES || 
              key === DATA_KEYS.DEBTORS || key === DATA_KEYS.INVENTORY ? [] : null;
     }
   }
@@ -305,12 +305,12 @@ class DataService {
   }
 
   // Purchases operations
-  async getPurchases() {
+  async getSales() {
     try {
       // Try to get from Firebase first if online
       if (this.isOnline && auth.currentUser) {
-        const purchasesSnapshot = await getDocs(collection(db, 'sales'));
-        const firebasePurchases = purchasesSnapshot.docs.map(doc => ({
+        const salesSnapshot = await getDocs(collection(db, 'sales'));
+        const firebaseSales = salesSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
           date: doc.data().date?.toDate?.() || doc.data().date,
@@ -318,107 +318,107 @@ class DataService {
         }));
         
         // Save to local storage
-        await localforage.setItem(DATA_KEYS.PURCHASES, firebasePurchases);
-        return firebasePurchases;
+        await localforage.setItem(DATA_KEYS.SALES, firebaseSales);
+        return firebaseSales;
       }
     } catch (error) {
-      console.error('Error fetching purchases from Firebase:', error);
+      console.error('Error fetching sales from Firebase:', error);
     }
     
     // Fallback to local storage
-    return await this.get(DATA_KEYS.PURCHASES);
+    return await this.get(DATA_KEYS.SALES);
   }
 
-  async setPurchases(purchases) {
+  async setSales(sales) {
     // Save locally first
-    await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
+    await localforage.setItem(DATA_KEYS.SALES, sales);
     return true;
   }
 
-  async addPurchase(purchase) {
-    const purchases = await this.getPurchases();
+  async addSale(sale) {
+    const sales = await this.getSales();
     const serverTime = new Date();
-    
-    const newPurchase = {
-      id: purchase.id || this.generateId(),
+
+    const newSale = {
+      id: sale.id || this.generateId(),
       date: serverTime.toISOString(),
       timestamp: serverTime.toISOString(), // For SalesRecord compatibility
-      items: purchase.items,
-      total: parseFloat(purchase.total),
-      total_amount: parseFloat(purchase.total), // Duplicate for SalesRecord compatibility
-      paymentType: purchase.paymentType, // 'cash' or 'credit'
-      payment_type: purchase.paymentType, // Duplicate for SalesRecord compatibility
-      customerName: purchase.customerName || '',
-      customer_name: purchase.customerName || '', // Duplicate for SalesRecord compatibility
-      customerPhone: purchase.customerPhone || '',
-      status: purchase.status || 'active', // 'active', 'voided', 'refunded'
-      photoUrl: purchase.photoUrl || null,
-      refund: purchase.refund || null,
-      repaymentDate: purchase.repaymentDate || '',
-      isDebt: purchase.isDebt || false,
+      items: sale.items,
+      total: parseFloat(sale.total),
+      total_amount: parseFloat(sale.total),
+      paymentType: sale.paymentType,
+      payment_type: sale.paymentType,
+      customerName: sale.customerName || '',
+      customer_name: sale.customerName || '',
+      customerPhone: sale.customerPhone || '',
+      status: sale.status || 'active',
+      photoUrl: sale.photoUrl || null,
+      refund: sale.refund || null,
+      repaymentDate: sale.repaymentDate || '',
+      isDebt: sale.isDebt || false,
       createdAt: serverTime.toISOString(),
     };
     
-    purchases.push(newPurchase);
-    await this.setPurchases(purchases);
+    sales.push(newSale);
+    await this.setSales(sales);
     
     // Sync to Firebase 'sales' collection
     if (this.isOnline && auth.currentUser) {
       try {
-        await setDoc(doc(db, 'sales', newPurchase.id), {
-          ...newPurchase,
+        await setDoc(doc(db, 'sales', newSale.id), {
+          ...newSale,
           createdAt: serverTimestamp(),
           date: serverTimestamp()
         });
       } catch (error) {
-        console.error('Error adding purchase to Firebase:', error);
+        console.error('Error adding sale to Firebase:', error);
         // Queue for later sync
-        await this.addToSyncQueue({ type: 'sale', data: newPurchase });
+        await this.addToSyncQueue({ type: 'sale', data: newSale });
       }
     } else {
       // Queue for sync when online
-      await this.addToSyncQueue({ type: 'sale', data: newPurchase });
+      await this.addToSyncQueue({ type: 'sale', data: newSale });
     }
     
     // Update debtors if credit sale
-    if (newPurchase.paymentType === 'credit' && newPurchase.customerName) {
-      await this.updateDebtor(newPurchase);
+    if (newSale.paymentType === 'credit' && newSale.customerName) {
+      await this.updateDebtor(newSale);
     }
-    
-    return newPurchase;
+
+    return newSale;
   }
 
-  async updatePurchase(id, updates) {
-    const purchases = await this.getPurchases();
-    const index = purchases.findIndex(p => p.id === id);
+  async updateSale(id, updates) {
+    const sales = await this.getSales();
+    const index = sales.findIndex(s => s.id === id);
     
     if (index !== -1) {
-      const purchase = purchases[index];
-      
+      const sale = sales[index];
+
       // Check if within 24 hours
-      const createdDate = new Date(purchase.createdAt);
+      const createdDate = new Date(sale.createdAt);
       const now = new Date();
       const hoursDiff = (now - createdDate) / (1000 * 60 * 60);
       
       if (hoursDiff > 24 && !updates.allowAfter24Hours) {
-        throw new Error('Cannot edit purchase after 24 hours');
+        throw new Error('Cannot edit sale after 24 hours');
       }
       
-      purchases[index] = { ...purchase, ...updates };
-      await this.setPurchases(purchases);
-      
+      sales[index] = { ...sale, ...updates };
+      await this.setSales(sales);
+
       // Update debtors if needed
-      if (purchases[index].paymentType === 'credit') {
+      if (sales[index].paymentType === 'credit') {
         await this.recalculateDebtors();
       }
-      
-      return purchases[index];
+
+      return sales[index];
     }
     return null;
   }
 
-  async voidPurchase(id, reason) {
-    return await this.updatePurchase(id, { 
+  async voidSale(id, reason) {
+    return await this.updateSale(id, { 
       status: 'voided', 
       voidReason: reason,
       voidedAt: (await this.getServerTime()).toISOString(),
@@ -426,8 +426,8 @@ class DataService {
     });
   }
 
-  async refundPurchase(id, amount, reason) {
-    const purchase = await this.updatePurchase(id, {
+  async refundSale(id, amount, reason) {
+    const sale = await this.updateSale(id, {
       status: 'refunded',
       refund: {
         amount: parseFloat(amount),
@@ -438,11 +438,11 @@ class DataService {
     });
     
     // Update debtors if credit sale
-    if (purchase && purchase.paymentType === 'credit') {
+    if (sale && sale.paymentType === 'credit') {
       await this.recalculateDebtors();
     }
     
-    return purchase;
+    return sale;
   }
 
   // Debtors operations
@@ -494,32 +494,32 @@ class DataService {
     return true;
   }
 
-  async updateDebtor(purchase) {
+  async updateDebtor(saleData) {
     const debtors = await this.getDebtors();
     const existingDebtor = debtors.find(
-      d => d.customerPhone === purchase.customerPhone || 
-           d.customerName?.toLowerCase() === purchase.customerName?.toLowerCase()
+      d => d.customerPhone === saleData.customerPhone ||
+           d.customerName?.toLowerCase() === saleData.customerName?.toLowerCase()
     );
-    
+
     if (existingDebtor) {
-      existingDebtor.totalDue += purchase.total;
+      existingDebtor.totalDue += saleData.total;
       existingDebtor.balance = existingDebtor.totalDue - existingDebtor.totalPaid;
-      existingDebtor.purchaseIds = existingDebtor.purchaseIds || [];
-      existingDebtor.purchaseIds.push(purchase.id);
-      existingDebtor.lastPurchase = purchase.date;
+      existingDebtor.saleIds = existingDebtor.saleIds || [];
+      existingDebtor.saleIds.push(saleData.id);
+      existingDebtor.lastSale = saleData.date;
     } else {
       debtors.push({
         id: this.generateId(),
-        customerName: purchase.customerName,
-        customerPhone: purchase.customerPhone,
-        name: purchase.customerName, // Add 'name' field for compatibility
-        phone: purchase.customerPhone, // Add 'phone' field for compatibility
-        totalDue: purchase.total,
+        customerName: saleData.customerName,
+        customerPhone: saleData.customerPhone,
+        name: saleData.customerName,
+        phone: saleData.customerPhone,
+        totalDue: saleData.total,
         totalPaid: 0,
-        balance: purchase.total,
-        purchaseIds: [purchase.id],
-        createdAt: purchase.date,
-        lastPurchase: purchase.date,
+        balance: saleData.total,
+        saleIds: [saleData.id],
+        createdAt: saleData.date,
+        lastSale: saleData.date,
       });
     }
     
@@ -536,17 +536,17 @@ class DataService {
       debtor.balance = debtor.totalDue - debtor.totalPaid;
       debtor.lastPayment = new Date().toISOString();
       
-      // Mark specific purchases as paid if provided
+      // Mark specific sales as paid if provided
       if (purchaseIds.length > 0) {
-        const purchases = await this.getPurchases();
+        const sales = await this.getSales();
         purchaseIds.forEach(pid => {
-          const purchase = purchases.find(p => p.id === pid);
-          if (purchase) {
-            purchase.paid = true;
-            purchase.paidDate = debtor.lastPayment;
+          const sale = sales.find(s => s.id === pid);
+          if (sale) {
+            sale.paid = true;
+            sale.paidDate = debtor.lastPayment;
           }
         });
-        await this.setPurchases(purchases);
+        await this.setSales(sales);
       }
       
       await this.setDebtors(debtors);
@@ -571,34 +571,34 @@ class DataService {
   }
 
   async recalculateDebtors() {
-    const purchases = await this.getPurchases();
-    const creditPurchases = purchases.filter(
-      p => p.paymentType === 'credit' && p.status === 'active'
+    const sales = await this.getSales();
+    const creditSales = sales.filter(
+      s => s.paymentType === 'credit' && s.status === 'active'
     );
     
     const debtorsMap = new Map();
     
-    creditPurchases.forEach(purchase => {
-      const key = purchase.customerPhone || purchase.customerName;
+    creditSales.forEach(sale => {
+      const key = sale.customerPhone || sale.customerName;
       if (!debtorsMap.has(key)) {
         debtorsMap.set(key, {
           id: this.generateId(),
-          customerName: purchase.customerName,
-          customerPhone: purchase.customerPhone,
+          customerName: sale.customerName,
+          customerPhone: sale.customerPhone,
           totalDue: 0,
           totalPaid: 0,
           balance: 0,
-          purchaseIds: [],
-          createdAt: purchase.date,
-          lastPurchase: purchase.date,
+          saleIds: [],
+          createdAt: sale.date,
+          lastSale: sale.date,
         });
       }
-      
+
       const debtor = debtorsMap.get(key);
-      debtor.totalDue += purchase.total;
-      debtor.purchaseIds.push(purchase.id);
-      if (new Date(purchase.date) > new Date(debtor.lastPurchase)) {
-        debtor.lastPurchase = purchase.date;
+      debtor.totalDue += sale.total;
+      debtor.saleIds.push(sale.id);
+      if (new Date(sale.date) > new Date(debtor.lastSale)) {
+        debtor.lastSale = sale.date;
       }
     });
     
@@ -754,16 +754,16 @@ class DataService {
   }
 
   // Photo operations
-  async savePhoto(photoData, purchaseId) {
+  async savePhoto(photoData, saleId) {
     try {
       // Save photo to local storage
-      const photoKey = `photo_${purchaseId}`;
+      const photoKey = `photo_${saleId}`;
       await localforage.setItem(photoKey, photoData);
-      
+
       // TODO: Upload to kadaele-services when online
       if (this.isOnline) {
         // Simulate upload
-        console.log('Uploading photo for purchase:', purchaseId);
+        console.log('Uploading photo for sale:', saleId);
         // const formData = new FormData();
         // formData.append('photo', photoData);
         // formData.append('purchaseId', purchaseId);
@@ -828,7 +828,7 @@ class DataService {
         date: doc.data().date?.toDate?.() || doc.data().date,
         createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
       }));
-      await localforage.setItem(DATA_KEYS.PURCHASES, sales);
+      await localforage.setItem(DATA_KEYS.SALES, sales);
       console.log(`✅ Synced ${sales.length} sales`);
       
       // Sync debtors
@@ -880,7 +880,7 @@ class DataService {
       console.log(`✅ Pushed ${goods.length} goods`);
       
       // Push sales
-      const sales = await localforage.getItem(DATA_KEYS.PURCHASES) || [];
+      const sales = await localforage.getItem(DATA_KEYS.SALES) || [];
       const salesBatch = writeBatch(db);
       sales.forEach(sale => {
         const saleRef = doc(db, 'sales', sale.id.toString());
