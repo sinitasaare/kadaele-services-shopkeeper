@@ -342,10 +342,14 @@ class DataService {
     const newPurchase = {
       id: purchase.id || this.generateId(),
       date: serverTime.toISOString(),
+      timestamp: serverTime.toISOString(), // For SalesRecord compatibility
       items: purchase.items,
       total: parseFloat(purchase.total),
+      total_amount: parseFloat(purchase.total), // Duplicate for SalesRecord compatibility
       paymentType: purchase.paymentType, // 'cash' or 'credit'
+      payment_type: purchase.paymentType, // Duplicate for SalesRecord compatibility
       customerName: purchase.customerName || '',
+      customer_name: purchase.customerName || '', // Duplicate for SalesRecord compatibility
       customerPhone: purchase.customerPhone || '',
       status: purchase.status || 'active', // 'active', 'voided', 'refunded'
       photoUrl: purchase.photoUrl || null,
@@ -619,11 +623,49 @@ class DataService {
 
   // Inventory operations
   async getInventory() {
+    try {
+      // Try to get from Firebase first if online
+      if (this.isOnline && auth.currentUser) {
+        const inventorySnapshot = await getDocs(collection(db, 'inventory'));
+        const firebaseInventory = inventorySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          lastUpdated: doc.data().lastUpdated?.toDate?.() || doc.data().lastUpdated
+        }));
+        
+        // Save to local storage
+        await localforage.setItem(DATA_KEYS.INVENTORY, firebaseInventory);
+        return firebaseInventory;
+      }
+    } catch (error) {
+      console.error('Error fetching inventory from Firebase:', error);
+    }
+    
+    // Fallback to local storage
     return await this.get(DATA_KEYS.INVENTORY);
   }
 
   async setInventory(inventory) {
-    return await this.set(DATA_KEYS.INVENTORY, inventory);
+    // Save locally first
+    await localforage.setItem(DATA_KEYS.INVENTORY, inventory);
+    
+    // Sync to Firebase if online
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const batch = writeBatch(db);
+        inventory.forEach(item => {
+          const inventoryRef = doc(db, 'inventory', item.itemId.toString());
+          batch.set(inventoryRef, {
+            ...item,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        });
+        await batch.commit();
+      } catch (error) {
+        console.error('Error syncing inventory to Firebase:', error);
+      }
+    }
+    return true;
   }
 
   async updateInventoryItem(itemId, stockLevel) {
@@ -632,16 +674,30 @@ class DataService {
     
     if (existing) {
       existing.stockLevel = parseInt(stockLevel);
-      existing.lastUpdated = (await this.getServerTime()).toISOString();
+      existing.lastUpdated = new Date().toISOString();
     } else {
       inventory.push({
         itemId: itemId,
         stockLevel: parseInt(stockLevel),
-        lastUpdated: (await this.getServerTime()).toISOString(),
+        lastUpdated: new Date().toISOString(),
       });
     }
     
     await this.setInventory(inventory);
+    
+    // Sync individual item to Firebase if online
+    if (this.isOnline && auth.currentUser) {
+      try {
+        await setDoc(doc(db, 'inventory', itemId.toString()), {
+          itemId: itemId,
+          stockLevel: parseInt(stockLevel),
+          lastUpdated: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (error) {
+        console.error('Error syncing inventory item to Firebase:', error);
+      }
+    }
   }
 
   // Sync queue operations
