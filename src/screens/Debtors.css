@@ -6,7 +6,7 @@
 /* Add Debtor Button Header */
 .debtors-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   margin-bottom: 20px;
 }
 
@@ -320,7 +320,8 @@
 
 /* Details Tab */
 .details-tab {
-  padding: 20px;
+  padding: 5px;
+  margin: 5px;
 }
 
 .details-view {
@@ -412,7 +413,8 @@
 
 /* History Tab */
 .history-tab {
-  padding: 20px;
+  padding: 5px;
+  margin: 5px;
 }
 
 /* Form Actions for Add Debtor */
@@ -575,7 +577,9 @@
 /* Debt History Table */
 .debt-history-table-wrapper {
   overflow-x: auto;
-  margin-top: 20px;
+  margin-top: 10px;
+  margin-left: 5px;
+  margin-right: 5px;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
@@ -681,4 +685,18 @@
   color: #374151;
   line-height: 1.6;
   margin: 0;
+}
+
+/* Stacked detail items (Full Name, WhatsApp, Email) */
+.detail-item-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.detail-item-stacked span {
+  text-align: left;
+  color: #333;
+  font-weight: 500;
+  font-size: 14px;
 }
