@@ -83,7 +83,13 @@ function SalesRecord() {
   };
 
   const toggleFilters = () => {
-    setShowFilters(!showFilters);
+    if (showFilters) {
+      // Closing filters without applying
+      setShowFilters(false);
+    } else {
+      // Opening filters
+      setShowFilters(true);
+    }
   };
 
   const handleApplyFilters = () => {
@@ -124,6 +130,20 @@ function SalesRecord() {
 
     if (appliedDateFilter === 'single') {
       if (appliedSelectedDate) {
+        const selectedDateObj = new Date(appliedSelectedDate);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        // Reset time parts for comparison
+        today.setHours(0, 0, 0, 0);
+        yesterday.setHours(0, 0, 0, 0);
+        selectedDateObj.setHours(0, 0, 0, 0);
+        
+        if (selectedDateObj.getTime() === yesterday.getTime()) {
+          return `${paymentText} Yesterday`;
+        }
+        
         const date = new Date(appliedSelectedDate).toLocaleDateString('en-GB', {
           day: '2-digit',
           month: '2-digit',
@@ -280,11 +300,10 @@ function SalesRecord() {
       )}
 
       <button 
-        className={`filter-toggle-btn ${showFilters && !filtersChanged ? 'disabled' : ''}`}
-        onClick={showFilters ? handleApplyFilters : toggleFilters}
-        disabled={showFilters && !filtersChanged}
+        className={`filter-toggle-btn ${showFilters && !filtersChanged ? '' : ''}`}
+        onClick={showFilters ? (filtersChanged ? handleApplyFilters : toggleFilters) : toggleFilters}
       >
-        {showFilters ? 'Apply Filter' : 'Open Filter'}
+        {showFilters ? (filtersChanged ? 'Apply Filter' : 'Close Filter') : 'Open Filter'}
       </button>
 
       <h2 className="table-title">{getTableTitle()}</h2>
