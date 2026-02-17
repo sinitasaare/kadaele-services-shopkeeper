@@ -94,8 +94,7 @@ function Inventory() {
             </button>
           </div>
         ) : (
-          <div className="content-card">
-            <div className="search-section">
+          <div className="search-section">
               <div className="search-box">
                 <Search size={18} />
                 <input
@@ -109,40 +108,37 @@ function Inventory() {
             </div>
 
             <div className="table-wrapper">
-              <div className="table-container">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Item Name</th>
-                      <th>Price</th>
-                      <th>Stock</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredItems.map((item) => {
-                      const status = getStockStatus(item.stock_quantity);
-                      return (
-                        <tr key={item.id}>
-                          <td>{item.id || 'N/A'}</td>
-                          <td>{item.name || 'Unknown'}</td>
-                          <td>${(item.price || 0).toFixed(2)}</td>
-                          <td>{item.stock_quantity || 0}</td>
-                          <td>
-                            <span className={`status-badge ${status.className}`}>
-                              {status.icon}
-                              {status.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Item Name</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map((item) => {
+                    const status = getStockStatus(item.stock_quantity);
+                    return (
+                      <tr key={item.id}>
+                        <td>{item.id || 'N/A'}</td>
+                        <td>{item.name || 'Unknown'}</td>
+                        <td>${(item.price || 0).toFixed(2)}</td>
+                        <td>{item.stock_quantity || 0}</td>
+                        <td>
+                          <span className={`status-badge ${status.className}`}>
+                            {status.icon}
+                            {status.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </div>
         )}
       </div>
     </div>
