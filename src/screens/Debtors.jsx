@@ -6,7 +6,7 @@ import './Debtors.css';
 function Debtors() {
   const [debtors, setDebtors] = useState([]);
   const [selectedDebtor, setSelectedDebtor] = useState(null);
-  const [debtorPurchases, setDebtorPurchases] = useState([]);
+  const [debtorSales, setDebtorSales] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentPhoto, setPaymentPhoto] = useState(null);
@@ -57,20 +57,20 @@ function Debtors() {
     
     // Load debtor's purchases
     try {
-      const allPurchases = await dataService.getPurchases();
-      const debtorPurchasesList = allPurchases.filter(p => 
-        debtor.purchaseIds?.includes(p.id)
+      const allSales = await dataService.getSales();
+      const debtorSalesList = allSales.filter(s =>
+        debtor.saleIds?.includes(s.id) || debtor.purchaseIds?.includes(s.id)
       );
-      setDebtorPurchases(debtorPurchasesList);
+      setDebtorSales(debtorSalesList);
     } catch (error) {
-      console.error('Error loading debtor purchases:', error);
-      setDebtorPurchases([]);
+      console.error('Error loading debtor sales:', error);
+      setDebtorSales([]);
     }
   };
 
   const closeDebtorModal = () => {
     setSelectedDebtor(null);
-    setDebtorPurchases([]);
+    setDebtorSales([]);
     setIsEditMode(false);
     setEditedDebtor(null);
     setActiveTab('details');
@@ -137,7 +137,7 @@ function Debtors() {
         balance: 0,
         purchaseIds: [],
         createdAt: new Date().toISOString(),
-        lastPurchase: null
+        lastSale: null
       };
       
       // Add to debtors list
@@ -556,32 +556,32 @@ function Debtors() {
                       </tr>
                     </thead>
                     <tbody>
-                      {debtorPurchases.length === 0 ? (
+                      {debtorSales.length === 0 ? (
                         <tr>
                           <td colSpan="7" style={{textAlign: 'center', padding: '20px', color: '#999'}}>
-                            No purchase history
+                            No sales history
                           </td>
                         </tr>
                       ) : (
-                        debtorPurchases.map((purchase) => {
-                          const dateTime = formatDateTime(purchase.date || purchase.timestamp || purchase.createdAt);
-                          const time = purchase.date || purchase.timestamp || purchase.createdAt 
-                            ? new Date(purchase.date || purchase.timestamp || purchase.createdAt).toLocaleTimeString('en-US', { 
+                        debtorSales.map((sale) => {
+                          const dateTime = formatDateTime(sale.date || sale.timestamp || sale.createdAt);
+                          const time = sale.date || sale.timestamp || sale.createdAt
+                            ? new Date(sale.date || sale.timestamp || sale.createdAt).toLocaleTimeString('en-US', {
                                 hour: '2-digit',
                                 minute: '2-digit',
                                 hour12: true
                               })
                             : 'N/A';
                           
-                          return purchase.items?.map((item, index) => (
-                            <tr key={`${purchase.id}-${index}`}>
+                          return sale.items?.map((item, index) => (
+                            <tr key={`${sale.id}-${index}`}>
                               <td>{dateTime}</td>
                               <td>{time}</td>
                               <td>{item.quantity || 0}</td>
                               <td>{item.name || 'N/A'}</td>
                               <td>${(item.price || 0).toFixed(2)}</td>
                               <td>${(item.subtotal || (item.price * item.quantity) || 0).toFixed(2)}</td>
-                              <td>${(purchase.total || purchase.total_amount || 0).toFixed(2)}</td>
+                              <td>${(sale.total || sale.total_amount || 0).toFixed(2)}</td>
                             </tr>
                           ));
                         })
