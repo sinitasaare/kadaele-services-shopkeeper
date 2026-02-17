@@ -148,7 +148,7 @@ function CashRegister() {
         subtotal: item.price * item.qty,
       }));
 
-      await dataService.addPurchase({
+      await dataService.addSale({
         items,
         total,
         paymentType: 'cash',
@@ -231,7 +231,7 @@ function CashRegister() {
         }
       }
 
-      await dataService.addPurchase({
+      await dataService.addSale({
         items,
         total,
         paymentType: 'credit',
