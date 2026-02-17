@@ -110,7 +110,7 @@
   text-align: center;
 }
 
-/* Stats Boxes — floated to opposite ends, 25% smaller */
+/* Stats Boxes — floated to opposite ends, compact */
 .stats-boxes {
   display: flex;
   justify-content: space-between;
@@ -150,7 +150,12 @@
   font-weight: 700;
 }
 
-/* Table Wrapper */
+/*
+  Table wrapper — horizontal scroll only, NO overflow-y.
+  This means the page itself scrolls vertically.
+  Sticky thead then anchors to the page scroll, staying
+  exactly where it is right now, forever.
+*/
 .table-wrapper {
   overflow-x: auto;
   background: white;
@@ -165,14 +170,12 @@
   table-layout: auto;
 }
 
-.sales-table thead {
-  background: #f3f4f6;
+/* th sticky — anchors to page scroll, sticks right where it sits */
+.sales-table th {
   position: sticky;
   top: 0;
-}
-
-.sales-table th {
-  padding: 10px 6px;
+  z-index: 10;
+  padding: 7px 6px;
   text-align: left;
   font-weight: 600;
   text-transform: uppercase;
@@ -180,31 +183,53 @@
   color: #333;
   border-bottom: 2px solid #e0e0e0;
   white-space: nowrap;
+  background: #f3f4f6;
 }
 
-/* ITEMS column expands to fit content, no wrapping */
-.sales-table td.items-cell {
+/* TIME column — no wrap, expands to full time string width */
+.time-col {
   white-space: nowrap;
-  width: auto;
+  width: 1%;
 }
 
-.sales-table tbody tr {
-  border-bottom: 1px solid #f0f0f0;
+/* ITEMS column — no wrap, expands to fit content */
+.items-cell {
+  white-space: nowrap;
 }
 
-.sales-table tbody tr:hover {
-  background: #f8f9fa;
+/* Merged cells (DATE, TIME, TOTAL, PAY/TYPE, CUSTOMER) */
+.merged-cell {
+  vertical-align: middle;
 }
 
-.sales-table td {
-  padding: 10px 6px;
+/* Lines between items within a sale */
+.sale-inner-row td.item-line-cell {
+  border-bottom: 1px solid #e8e8e8;
+}
+
+/* Bottom border of last item row in a sale — separates sales */
+.sale-last-row td.item-line-cell {
+  border-bottom: 2px solid #ccc;
+}
+
+/* Bottom border on merged cells — aligns with sale separation */
+.sale-last-row td.merged-cell {
+  border-bottom: 2px solid #ccc;
+}
+
+.sales-table tbody tr td {
+  padding: 7px 6px;
   color: #555;
+}
+
+.sales-table tbody tr:hover td {
+  background: #f8f9fa;
 }
 
 /* Payment Badge */
 .payment-badge {
   display: inline-block;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
@@ -253,7 +278,7 @@
   }
 
   .sales-table th,
-  .sales-table td {
-    padding: 8px 4px;
+  .sales-table tbody tr td {
+    padding: 5px 4px;
   }
 }
