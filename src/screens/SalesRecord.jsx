@@ -335,7 +335,7 @@ function SalesRecord() {
           <tbody>
             {filteredPurchases.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{textAlign: 'center', padding: '40px', color: '#999'}}>
+                <td colSpan="7" style={{textAlign: 'center', padding: '40px', color: '#999'}}>
                   No sales records found
                 </td>
               </tr>
@@ -343,14 +343,16 @@ function SalesRecord() {
               filteredPurchases.map((purchase) => {
                 const dateTime = formatDateTime(purchase.timestamp || purchase.createdAt);
                 const amount = parseFloat(purchase.total_amount) || 0;
+                const totalQty = purchase.items?.reduce((sum, item) => sum + (item.qty || item.quantity || 0), 0) || 0;
                 
                 return (
                   <tr key={purchase.id}>
                     <td>{dateTime.date}</td>
                     <td>{dateTime.time}</td>
                     <td>
-                      {purchase.items?.map(item => `${item.name} × ${item.qty}`).join(', ') || 'N/A'}
+                      {purchase.items?.map(item => `${item.name} × ${item.qty || item.quantity || 0}`).join(', ') || 'N/A'}
                     </td>
+                    <td>{totalQty}</td>
                     <td>${amount.toFixed(2)}</td>
                     <td>
                       <span className={`payment-badge payment-${purchase.payment_type}`}>
