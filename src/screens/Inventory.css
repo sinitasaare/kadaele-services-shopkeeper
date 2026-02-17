@@ -28,16 +28,18 @@
   margin: 0;
 }
 
+/* Outer wrapper — no background, no shadow, no margin */
 .content-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin: 20px;
+  margin: 0;
 }
 
+/* Search — its own separate container */
 .search-section {
-  margin-bottom: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
 }
 
 .search-box {
@@ -61,14 +63,20 @@
   outline: none;
 }
 
+/* Table — its own separate container, scrollable both axes, thead sticks inside */
 .table-wrapper {
-  overflow-x: auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: auto;
+  max-height: calc(100vh - 180px);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  min-width: 400px;
 }
 
 .table thead {
@@ -76,12 +84,17 @@
   border-bottom: 2px solid #e0e0e0;
 }
 
+/* Sticky on th directly so horizontal scroll carries it along */
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   padding: 12px;
   text-align: left;
   font-weight: 600;
   color: #333;
   white-space: nowrap;
+  background: #f8f9fa;
 }
 
 .table tbody tr {
@@ -155,11 +168,11 @@
   .screen-title {
     font-size: 20px;
   }
-  
+
   .table {
     font-size: 12px;
   }
-  
+
   .table th,
   .table td {
     padding: 8px;
