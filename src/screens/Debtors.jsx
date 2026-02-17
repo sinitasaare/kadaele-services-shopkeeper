@@ -493,8 +493,8 @@ function Debtors() {
                   </div>
                 ) : (
                   <div className="details-view">
-                    <div className="detail-item">
-                      <strong>Full Name:</strong>
+                    <div className="detail-item detail-item-stacked">
+                      <strong>Name:</strong>
                       <span>{selectedDebtor.name || selectedDebtor.customerName || 'N/A'}</span>
                     </div>
                     <div className="detail-item">
@@ -505,11 +505,11 @@ function Debtors() {
                       <strong><Phone size={16} /> Phone:</strong>
                       <span>{selectedDebtor.phone || selectedDebtor.customerPhone || 'N/A'}</span>
                     </div>
-                    <div className="detail-item">
+                    <div className="detail-item detail-item-stacked">
                       <strong><Phone size={16} /> WhatsApp:</strong>
                       <span>{selectedDebtor.whatsapp || 'N/A'}</span>
                     </div>
-                    <div className="detail-item">
+                    <div className="detail-item detail-item-stacked">
                       <strong><Mail size={16} /> Email:</strong>
                       <span>{selectedDebtor.email || 'N/A'}</span>
                     </div>
