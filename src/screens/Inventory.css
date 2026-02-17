@@ -63,13 +63,19 @@
   outline: none;
 }
 
-/* Table — its own separate container, scrollable both axes, thead sticks inside */
+/*
+  Table container — scrolls both axes independently.
+  overflow: auto on THIS element means sticky th works
+  relative to THIS scroller, not the page.
+  The th sticks at top:0 inside the scroll container forever,
+  no matter how many rows scroll past.
+*/
 .table-wrapper {
   background: white;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: auto;
-  max-height: calc(100vh - 180px);
+  height: calc(100vh - 170px);
 }
 
 .table {
@@ -84,7 +90,7 @@
   border-bottom: 2px solid #e0e0e0;
 }
 
-/* Sticky on th directly so horizontal scroll carries it along */
+/* position:sticky on th — sticks inside the scrolling .table-wrapper */
 .table th {
   position: sticky;
   top: 0;
