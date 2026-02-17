@@ -8,6 +8,11 @@ on:
         required: false
         default: 'Manual build'
 
+# Add permissions for the workflow
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -46,7 +51,6 @@ jobs:
     - name: Sync Capacitor
       run: npx cap sync android
     
-    # NEW STEPS FOR ICON GENERATION
     - name: Install ImageMagick
       run: sudo apt-get update && sudo apt-get install -y imagemagick
 
@@ -57,7 +61,6 @@ jobs:
     
     - name: Sync icons to Android
       run: npx cap sync android
-    # END OF NEW STEPS
 
     - name: Build APK
       run: |
@@ -95,12 +98,16 @@ jobs:
           const artifactsToDelete = workflowArtifacts.slice(5);
           
           for (const artifact of artifactsToDelete) {
-            console.log(`Deleting artifact: ${artifact.name} (ID: ${artifact.id})`);
-            await github.rest.actions.deleteArtifact({
-              owner,
-              repo,
-              artifact_id: artifact.id
-            });
+            try {
+              console.log(`Deleting artifact: ${artifact.name} (ID: ${artifact.id})`);
+              await github.rest.actions.deleteArtifact({
+                owner,
+                repo,
+                artifact_id: artifact.id
+              });
+            } catch (error) {
+              console.log(`Failed to delete artifact ${artifact.name}: ${error.message}`);
+            }
           }
           
           console.log(`Kept ${Math.min(workflowArtifacts.length, 5)} most recent artifacts`);
