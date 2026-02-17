@@ -45,6 +45,19 @@ jobs:
 
     - name: Sync Capacitor
       run: npx cap sync android
+    
+    # NEW STEPS FOR ICON GENERATION
+    - name: Install ImageMagick
+      run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+    - name: Generate App Icons and Splash Screens
+      run: |
+        chmod +x generate-icons.sh
+        ./generate-icons.sh
+    
+    - name: Sync icons to Android
+      run: npx cap sync android
+    # END OF NEW STEPS
 
     - name: Build APK
       run: |
