@@ -94,6 +94,7 @@ function Inventory() {
             </button>
           </div>
         ) : (
+          <>
           <div className="search-section">
               <div className="search-box">
                 <Search size={18} />
@@ -139,6 +140,7 @@ function Inventory() {
                 </tbody>
               </table>
             </div>
+          </>
         )}
       </div>
     </div>
