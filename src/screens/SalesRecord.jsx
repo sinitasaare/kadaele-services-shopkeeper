@@ -325,8 +325,8 @@ function SalesRecord() {
             <tr>
               <th>DATE</th>
               <th>TIME</th>
-              <th>ITEMS</th>
               <th>QTY</th>
+              <th>ITEMS</th>
               <th>TOTAL</th>
               <th>PAY/TYPE</th>
               <th>CUSTOMER</th>
@@ -349,10 +349,10 @@ function SalesRecord() {
                   <tr key={purchase.id}>
                     <td>{dateTime.date}</td>
                     <td>{dateTime.time}</td>
-                    <td>
+                    <td>{totalQty}</td>
+                    <td className="items-cell">
                       {purchase.items?.map(item => `${item.name} × ${item.qty || item.quantity || 0}`).join(', ') || 'N/A'}
                     </td>
-                    <td>{totalQty}</td>
                     <td>${amount.toFixed(2)}</td>
                     <td>
                       <span className={`payment-badge payment-${purchase.payment_type}`}>
