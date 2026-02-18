@@ -1,283 +1,691 @@
-.sales-record {
-  padding: 10px;
+.debtors-screen {
+  padding: 20px;
+  min-height: 100vh;
 }
 
-/* Filter Toggle Button — centered */
-.filter-toggle-btn {
-  display: block;
-  margin: 0 auto 10px auto;
+/* ADD DEBTOR BUTTON HEADER */
+.debtors-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+.add-debtor-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s;
-  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
-}
-
-.filter-toggle-btn:hover {
-  transform: translateY(-1px);
-}
-
-/* Filter Section */
-.filters-section {
-  background: white;
+  padding: 10px 20px;
   border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.filter-group {
-  margin-bottom: 12px;
-}
-
-.filter-group:last-child {
-  margin-bottom: 0;
-}
-
-.filter-group label {
-  display: block;
+  font-size: 14px;
   font-weight: 600;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: #333;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
-.filter-buttons {
-  display: flex;
-  gap: 8px;
+.add-debtor-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-.filter-btn {
-  flex: 1;
-  padding: 8px 12px;
-  border: 2px solid #e0e0e0;
+/* LOADING & EMPTY STATES */
+.loading-state {
+  text-align: center;
+  padding: 40px;
+  font-size: 16px;
+  color: #666;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+/* DEBTORS GRID - 3 PER ROW */
+.debtors-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.debtor-card {
   background: white;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.debtor-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.debtor-name {
+  font-weight: 600;
+  font-size: 14px;
   color: #333;
+  margin-bottom: 8px;
+}
+
+.debtor-balance {
+  font-size: 18px;
+  font-weight: bold;
+  color: #e63946;
+}
+
+/* MODAL OVERLAY */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+/* MODAL HEADER */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.edit-btn {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.2s;
+}
+
+.edit-btn:hover {
+  background: #5568d3;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  color: #666;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+/* TAB NAVIGATION */
+.tabs-nav {
+  display: flex;
+  border-bottom: 2px solid #eee;
+  background: #f8f9fa;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 15px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
   font-weight: 500;
-  font-size: 12px;
+  color: #666;
+  border-bottom: 3px solid transparent;
   transition: all 0.2s;
 }
 
-.filter-btn:hover {
-  border-color: #667eea;
+.tab-btn:hover {
+  background: #f0f0f0;
 }
 
-.filter-btn.active {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+.tab-btn.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: white;
 }
 
-.date-input {
-  padding: 8px;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 13px;
-  width: 100%;
+/* DETAILS TAB */
+.details-tab {
+  padding: 20px;
 }
 
-.date-range-inputs {
+.debtor-info {
+  display: grid;
+  gap: 15px;
+}
+
+.info-row {
   display: flex;
+  align-items: center;
   gap: 10px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
 }
 
-.date-range-field {
+.info-row svg {
+  color: #667eea;
+  flex-shrink: 0;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #333;
+  min-width: 80px;
+}
+
+.info-value {
+  color: #555;
   flex: 1;
 }
 
-.date-range-label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 4px;
-  color: #666;
-  font-weight: 500;
-}
-
-/* Table Title */
-.table-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 10px;
+.balance-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  color: white;
   text-align: center;
 }
 
-/* Stats Boxes — floated to opposite ends, compact */
-.stats-boxes {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+.balance-label {
+  font-size: 14px;
+  opacity: 0.9;
   margin-bottom: 10px;
 }
 
-.stat-box {
-  padding: 9px 10px;
+.balance-amount {
+  font-size: 32px;
+  font-weight: bold;
+}
+
+/* PAYMENT BUTTON */
+.payment-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 15px;
+  background: #10b981;
+  color: white;
+  border: none;
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  text-align: center;
-  width: 42%;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
-.stat-box-blue {
+.payment-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* NOTIFY BUTTON */
+.notify-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.notify-btn:hover {
+  background: #667eea;
+  color: white;
+}
+
+/* HISTORY TAB */
+.history-tab {
+  padding: 20px;
+}
+
+.history-summary {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  flex: 1;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.summary-card-blue {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
 }
 
-.stat-box-green {
+.summary-card-green {
   background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
   color: white;
 }
 
-.stat-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 3px;
-  opacity: 0.95;
+.summary-card-red {
+  background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+  color: white;
 }
 
-.stat-value {
-  font-size: 15px;
-  font-weight: 700;
+.summary-label {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-bottom: 5px;
 }
 
-/*
-  Table wrapper — horizontal scroll only, NO overflow-y.
-  This means the page itself scrolls vertically.
-  Sticky thead then anchors to the page scroll, staying
-  exactly where it is right now, forever.
-*/
-.table-wrapper {
-  overflow-x: auto;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+.summary-value {
+  font-size: 20px;
+  font-weight: bold;
 }
 
-.sales-table {
+/* PURCHASE HISTORY TABLE */
+.purchase-history-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
-  table-layout: auto;
+  font-size: 13px;
+  margin-top: 15px;
 }
 
-/* th sticky — anchors to page scroll, sticks right where it sits */
-.sales-table th {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  padding: 7px 6px;
+.purchase-history-table th {
+  padding: 10px 8px;
   text-align: left;
   font-weight: 600;
-  text-transform: uppercase;
-  font-size: 11px;
   color: #333;
+  background: #f8f9fa;
   border-bottom: 2px solid #e0e0e0;
   white-space: nowrap;
-  background: #f3f4f6;
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
-/* TIME column — no wrap, expands to full time string width */
-.time-col {
-  white-space: nowrap;
-  width: 1%;
-}
-
-/* ITEMS column — no wrap, expands to fit content */
-.items-cell {
-  white-space: nowrap;
-}
-
-/* Merged cells (DATE, TIME, TOTAL, PAY/TYPE, CUSTOMER) */
-.merged-cell {
-  vertical-align: middle;
-}
-
-/* Lines between items within a sale */
-.sale-inner-row td.item-line-cell {
-  border-bottom: 1px solid #e8e8e8;
-}
-
-/* Bottom border of last item row in a sale — separates sales */
-.sale-last-row td.item-line-cell {
-  border-bottom: 2px solid #ccc;
-}
-
-/* Bottom border on merged cells — aligns with sale separation */
-.sale-last-row td.merged-cell {
-  border-bottom: 2px solid #ccc;
-}
-
-.sales-table tbody tr td {
-  padding: 7px 6px;
+.purchase-history-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #f0f0f0;
   color: #555;
 }
 
-.sales-table tbody tr:hover td {
+.purchase-history-table tbody tr:hover {
   background: #f8f9fa;
 }
 
-/* Payment Badge */
-.payment-badge {
-  display: inline-block;
-  padding: 3px 6px;
-  border-radius: 4px;
-  font-size: 11px;
+.total-cell {
   font-weight: 600;
-  text-transform: uppercase;
+  color: #667eea;
 }
 
-.payment-cash {
-  background: #d4edda;
-  color: #155724;
+/* EDIT FORM */
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
 }
 
-.payment-credit {
-  background: #fff3cd;
-  color: #856404;
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* Mobile Responsive */
+.form-group label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 10px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+/* GENDER CHECKBOXES */
+.gender-checkboxes {
+  display: flex;
+  gap: 20px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.checkbox-label input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* FORM ACTIONS */
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-cancel,
+.btn-save {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background: #e5e7eb;
+  color: #333;
+}
+
+.btn-cancel:hover {
+  background: #d1d5db;
+}
+
+.btn-save {
+  background: #667eea;
+  color: white;
+}
+
+.btn-save:hover {
+  background: #5568d3;
+}
+
+/* ADD DEBTOR MODAL */
+.add-debtor-modal {
+  max-width: 500px;
+}
+
+.add-debtor-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.add-debtor-form button[type="submit"] {
+  margin-top: 10px;
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-debtor-form button[type="submit"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* PAYMENT MODAL */
+.payment-modal .modal-content {
+  max-width: 450px;
+}
+
+.payment-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.payment-input {
+  width: 100%;
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.payment-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.photo-upload-section {
+  text-align: center;
+}
+
+.photo-upload-btn {
+  padding: 12px 24px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-upload-btn:hover {
+  background: #5568d3;
+}
+
+.photo-preview {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  margin-top: 15px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.payment-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.payment-actions button {
+  flex: 1;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.payment-actions .btn-cancel {
+  background: #e5e7eb;
+  color: #333;
+}
+
+.payment-actions .btn-cancel:hover {
+  background: #d1d5db;
+}
+
+.payment-actions .btn-confirm {
+  background: #10b981;
+  color: white;
+}
+
+.payment-actions .btn-confirm:hover {
+  background: #059669;
+}
+
+/* NOTIFY MODAL */
+.notify-modal .modal-content {
+  max-width: 400px;
+}
+
+.notify-options {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notify-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notify-option:hover {
+  background: #e9ecef;
+  transform: translateX(5px);
+}
+
+.notify-option svg {
+  color: #667eea;
+  flex-shrink: 0;
+}
+
+.notify-option-text {
+  flex: 1;
+}
+
+.notify-option-title {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 3px;
+}
+
+.notify-option-desc {
+  font-size: 12px;
+  color: #666;
+}
+
+/* MOBILE RESPONSIVE */
 @media (max-width: 768px) {
-  .sales-record {
-    padding: 8px;
+  .debtors-screen {
+    padding: 15px;
   }
 
-  .filter-buttons {
-    flex-wrap: nowrap;
+  .debtors-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
 
-  .filter-btn {
-    font-size: 11px;
-    padding: 6px 8px;
+  .modal-content {
+    max-width: 95%;
   }
 
-  .date-range-inputs {
+  .history-summary {
     flex-direction: column;
   }
 
-  .table-title {
-    font-size: 14px;
-  }
-
-  .stat-value {
-    font-size: 13px;
-  }
-
-  .sales-table {
+  .purchase-history-table {
     font-size: 11px;
   }
 
-  .sales-table th,
-  .sales-table tbody tr td {
-    padding: 5px 4px;
+  .purchase-history-table th,
+  .purchase-history-table td {
+    padding: 8px 5px;
+  }
+
+  .tabs-nav {
+    font-size: 13px;
+  }
+
+  .tab-btn {
+    padding: 12px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .debtors-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-amount {
+    font-size: 24px;
+  }
+
+  .summary-value {
+    font-size: 16px;
   }
 }
