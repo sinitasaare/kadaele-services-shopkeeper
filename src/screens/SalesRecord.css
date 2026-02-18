@@ -1,374 +1,226 @@
-import React, { useState, useEffect } from 'react';
-import dataService from '../services/dataService';
-import './SalesRecord.css';
-
-function SalesRecord() {
-  const [purchases, setPurchases] = useState([]);
-  const [filteredPurchases, setFilteredPurchases] = useState([]);
-  const [paymentFilter, setPaymentFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('today');
-  const [selectedDate, setSelectedDate] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [appliedPaymentFilter, setAppliedPaymentFilter] = useState('all');
-  const [appliedDateFilter, setAppliedDateFilter] = useState('today');
-  const [appliedSelectedDate, setAppliedSelectedDate] = useState('');
-  const [appliedStartDate, setAppliedStartDate] = useState('');
-  const [appliedEndDate, setAppliedEndDate] = useState('');
-  const [filtersChanged, setFiltersChanged] = useState(false);
-
-  useEffect(() => {
-    loadPurchases();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [purchases, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
-
-  useEffect(() => {
-    // Check if current filters differ from applied filters
-    const changed = 
-      paymentFilter !== appliedPaymentFilter ||
-      dateFilter !== appliedDateFilter ||
-      selectedDate !== appliedSelectedDate ||
-      startDate !== appliedStartDate ||
-      endDate !== appliedEndDate;
-    setFiltersChanged(changed);
-  }, [paymentFilter, dateFilter, selectedDate, startDate, endDate, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
-
-  const loadPurchases = async () => {
-    const data = await dataService.getPurchases();
-    setPurchases(data || []);
-  };
-
-  const applyFilters = () => {
-    let filtered = purchases;
-
-    if (appliedPaymentFilter !== 'all') {
-      filtered = filtered.filter(p => p.payment_type === appliedPaymentFilter);
-    }
-
-    if (appliedDateFilter === 'today') {
-      const today = new Date().toLocaleDateString();
-      filtered = filtered.filter(p => {
-        if (!(p.timestamp || p.createdAt)) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
-        return purchaseDate === today;
-      });
-    }
-
-    if (appliedDateFilter === 'single' && appliedSelectedDate) {
-      filtered = filtered.filter(p => {
-        if (!p.timestamp || p.createdAt) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
-        const selected = new Date(appliedSelectedDate).toLocaleDateString();
-        return purchaseDate === selected;
-      });
-    }
-
-    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
-      const start = new Date(appliedStartDate);
-      const end = new Date(appliedEndDate);
-      end.setHours(23, 59, 59, 999);
-      
-      filtered = filtered.filter(p => {
-        if (!p.timestamp || p.createdAt) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt);
-        return purchaseDate >= start && purchaseDate <= end;
-      });
-    }
-
-    setFilteredPurchases(filtered);
-  };
-
-  const toggleFilters = () => {
-    if (showFilters) {
-      // Closing filters without applying
-      setShowFilters(false);
-    } else {
-      // Opening filters
-      setShowFilters(true);
-    }
-  };
-
-  const handleApplyFilters = () => {
-    if (!filtersChanged) return;
-    
-    setAppliedPaymentFilter(paymentFilter);
-    setAppliedDateFilter(dateFilter);
-    setAppliedSelectedDate(selectedDate);
-    setAppliedStartDate(startDate);
-    setAppliedEndDate(endDate);
-    setShowFilters(false);
-    
-    // Clear date fields
-    setSelectedDate('');
-    setStartDate('');
-    setEndDate('');
-    setFiltersChanged(false);
-  };
-
-
-  // Get today's date in YYYY-MM-DD format for max attribute
-  const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getTableTitle = () => {
-    let paymentText = 'All Sales';
-    if (appliedPaymentFilter === 'cash') paymentText = 'Cash Sales';
-    if (appliedPaymentFilter === 'credit') paymentText = 'Credit Sales';
-
-    if (appliedDateFilter === 'today') {
-      return `${paymentText} Today`;
-    }
-
-    if (appliedDateFilter === 'single') {
-      if (appliedSelectedDate) {
-        const selectedDateObj = new Date(appliedSelectedDate);
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        // Reset time parts for comparison
-        today.setHours(0, 0, 0, 0);
-        yesterday.setHours(0, 0, 0, 0);
-        selectedDateObj.setHours(0, 0, 0, 0);
-        
-        if (selectedDateObj.getTime() === yesterday.getTime()) {
-          return `${paymentText} Yesterday`;
-        }
-        
-        const date = new Date(appliedSelectedDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        return `${paymentText} on ${date}`;
-      }
-      return `${paymentText} Today`;
-    }
-
-    if (appliedDateFilter === 'range') {
-      if (appliedStartDate && appliedEndDate) {
-        const start = new Date(appliedStartDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        const end = new Date(appliedEndDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        return `${paymentText} from ${start} to ${end}`;
-      }
-      return `${paymentText} Today`;
-    }
-
-    return `${paymentText} Today`;
-  };
-
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) {
-      return { date: 'N/A', time: 'N/A' };
-    }
-
-    // Handle Firestore Timestamp object or ISO string
-    let date;
-    if (timestamp.seconds) {
-      // Firestore Timestamp object
-      date = new Date(timestamp.seconds * 1000);
-    } else {
-      // ISO string or milliseconds
-      date = new Date(timestamp);
-    }
-
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      return { date: 'Invalid', time: 'Invalid' };
-    }
-
-    return {
-      date: date.toLocaleDateString('en-GB', { 
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      }),
-      time: date.toLocaleTimeString('en-US', { 
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      })
-    };
-  };
-
-  const totalRecords = filteredPurchases.length;
-  const grandTotal = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
-
-  return (
-    <div className="sales-record">
-      {showFilters && (
-      <div className="filters-section">
-        <div className="filter-group">
-          <label>Payment Type:</label>
-          <div className="filter-buttons">
-            <button 
-              className={paymentFilter === 'all' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setPaymentFilter('all')}
-            >
-              All Sales
-            </button>
-            <button 
-              className={paymentFilter === 'cash' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setPaymentFilter('cash')}
-            >
-              Cash Only
-            </button>
-            <button 
-              className={paymentFilter === 'credit' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setPaymentFilter('credit')}
-            >
-              Credit Only
-            </button>
-          </div>
-        </div>
-
-        <div className="filter-group">
-          <label>Date Filter:</label>
-          <div className="filter-buttons">
-            <button 
-              className={dateFilter === 'today' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setDateFilter('today')}
-            >
-              Today
-            </button>
-            <button 
-              className={dateFilter === 'single' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setDateFilter('single')}
-            >
-              Single Date
-            </button>
-            <button 
-              className={dateFilter === 'range' ? 'filter-btn active' : 'filter-btn'}
-              onClick={() => setDateFilter('range')}
-            >
-              Date Range
-            </button>
-          </div>
-        </div>
-
-        {dateFilter === 'single' && (
-          <div className="filter-group">
-            <label>Select Date:</label>
-            <input type="date" value={selectedDate} max={getTodayDate()}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="date-input"
-            />
-          </div>
-        )}
-
-        {dateFilter === 'range' && (
-          <div className="filter-group">
-            <label>Date Range:</label>
-            <div className="date-range-inputs">
-              <div className="date-range-field">
-                <label className="date-range-label">From:</label>
-                <input type="date" value={startDate} max={getTodayDate()}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-              <div className="date-range-field">
-                <label className="date-range-label">To:</label>
-                <input type="date" value={endDate} max={getTodayDate()}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        
-      </div>
-      )}
-
-      <button 
-        className={`filter-toggle-btn ${showFilters && !filtersChanged ? '' : ''}`}
-        onClick={showFilters ? (filtersChanged ? handleApplyFilters : toggleFilters) : toggleFilters}
-      >
-        {showFilters ? (filtersChanged ? 'Apply Filter' : 'Close Filter') : 'Open Filter'}
-      </button>
-
-      <h2 className="table-title">{getTableTitle()}</h2>
-
-      <div className="stats-boxes">
-        <div className="stat-box stat-box-blue">
-          <div className="stat-label">TOTAL RECORDS</div>
-          <div className="stat-value">{totalRecords}</div>
-        </div>
-        <div className="stat-box stat-box-green">
-          <div className="stat-label">GRAND TOTAL</div>
-          <div className="stat-value">${grandTotal.toFixed(2)}</div>
-        </div>
-      </div>
-
-      <div className="table-wrapper">
-        <table className="sales-table">
-          <thead>
-            <tr>
-              <th>DATE</th>
-              <th>TIME</th>
-              <th>ITEMS</th>
-              <th>QTY</th>
-              <th>TOTAL</th>
-              <th>PAY/TYPE</th>
-              <th>CUSTOMER</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPurchases.length === 0 ? (
-              <tr>
-                <td colSpan="7" style={{textAlign: 'center', padding: '40px', color: '#999'}}>
-                  No sales records found
-                </td>
-              </tr>
-            ) : (
-              filteredPurchases.map((purchase) => {
-                const dateTime = formatDateTime(purchase.timestamp || purchase.createdAt);
-                const amount = parseFloat(purchase.total_amount) || 0;
-                const totalQty = purchase.items?.reduce((sum, item) => sum + (item.qty || item.quantity || 0), 0) || 0;
-                
-                return (
-                  <tr key={purchase.id}>
-                    <td>{dateTime.date}</td>
-                    <td>{dateTime.time}</td>
-                    <td className="items-cell">
-                      {purchase.items?.map(item => `${item.name} × ${item.qty || item.quantity || 0}`).join(', ') || 'N/A'}
-                    </td>
-                    <td>{totalQty}</td>
-                    <td>${amount.toFixed(2)}</td>
-                    <td>
-                      <span className={`payment-badge payment-${purchase.payment_type}`}>
-                        {purchase.payment_type?.toUpperCase() || 'N/A'}
-                      </span>
-                    </td>
-                    <td>{purchase.customer_name || '-'}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+.sales-record {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-export default SalesRecord;
+/* Header row: Sales Record title on top, Summary button below */
+.record-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.record-header .screen-title {
+  margin: 0 auto;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  width: 100%;
+}
+
+.summary-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.summary-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: rgba(37, 99, 235, 0.05);
+}
+
+/* Dropdown under the Summary button */
+.summary-dropdown {
+  margin-top: 0.5rem;
+  width: 220px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  position: relative;
+}
+
+.summary-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.summary-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: background-color 0.2s ease;
+}
+
+.summary-menu-item:hover {
+  background-color: rgba(37, 99, 235, 0.05);
+  color: var(--primary-color);
+}
+
+/* Alert / notification banners */
+.alert {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.alert-success {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.alert-error {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Sub-header under header + Summary button */
+.sub-header {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+/* Table area */
+.sales-table-container {
+  flex: 1;
+  overflow-x: auto;
+}
+
+.sales-table {
+  width: auto;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background-color: var(--surface);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  table-layout: auto;
+}
+
+.sales-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--surface);
+  z-index: 10;
+}
+
+.sales-table th {
+  background-color: var(--background);
+  padding: 0.875rem calc(0.875rem + 15px);
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  width: auto;
+}
+
+.sales-table td {
+  padding: 0.875rem calc(0.875rem + 15px);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  width: auto;
+}
+
+.sales-table tr:last-child td {
+  border-bottom: none;
+}
+
+.sales-table tr:hover {
+  background-color: rgba(37, 99, 235, 0.02);
+}
+
+.empty-cell {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+
+/* Sales Summary Report layout */
+.summary-report {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.summary-report h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary-report p {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.summary-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.summary-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.summary-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Mobile layout */
+@media (max-width: 768px) {
+  .record-header {
+    align-items: stretch;
+  }
+
+  .record-header .screen-title {
+    margin: 0.5rem auto;
+  }
+
+  .summary-btn {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .summary-dropdown {
+    width: 100%;
+  }
+
+  .summary-stats {
+    grid-template-columns: 1fr;
+  }
+}
