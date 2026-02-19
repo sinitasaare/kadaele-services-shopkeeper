@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dataService from '../services/dataService';
 import './SalesJournal.css';
 
@@ -20,39 +20,52 @@ function SalesJournal() {
 
   const [showFilters, setShowFilters] = useState(false);
 
+  // ── Sticky header refs ────────────────────────────────────────────────────
+  // stickyBarRef  → the purple stats/button bar pinned at the top
+  // theadRef      → the <thead> we want to stick just below the bar
+  //
+  // HOW THIS WORKS (no CSS variables needed):
+  //   1. .table-wrapper has overflow-x:auto but NO overflow-y — so the page
+  //      scroll container (.app-main) is the sticky-positioning ancestor for
+  //      BOTH the bar AND the thead.  This is the fundamental requirement for
+  //      position:sticky on <thead> to work relative to the page.
+  //   2. We measure stickyBar.offsetHeight and write it directly to
+  //      thead.style.top.  We do this after every render, on ResizeObserver
+  //      callbacks (filter panel open/close changes bar height), and on
+  //      scroll (cheap, defensive).
+  // ─────────────────────────────────────────────────────────────────────────
   const stickyBarRef = useRef(null);
-  const [theadTop, setTheadTop] = useState(0);
+  const theadRef     = useRef(null);
 
+  const applyTheadTop = useCallback(() => {
+    if (!stickyBarRef.current || !theadRef.current) return;
+    theadRef.current.style.top = `${stickyBarRef.current.offsetHeight}px`;
+  }, []);
+
+  // Runs after every render — covers filter toggle, data load, any re-render.
+  useEffect(() => { applyTheadTop(); });
+
+  // Covers the sticky bar resizing (filter panel opening/closing).
+  useEffect(() => {
+    if (!stickyBarRef.current) return;
+    const ro = new ResizeObserver(applyTheadTop);
+    ro.observe(stickyBarRef.current);
+    return () => ro.disconnect();
+  }, [applyTheadTop]);
+
+  // Defensive scroll listener — the bar height is stable during scroll but
+  // this costs nothing and future-proofs against edge cases.
+  useEffect(() => {
+    const scroller = document.querySelector('.app-main') || window;
+    scroller.addEventListener('scroll', applyTheadTop, { passive: true });
+    return () => scroller.removeEventListener('scroll', applyTheadTop);
+  }, [applyTheadTop]);
+
+  // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
-  useEffect(() => { applyFilters(); }, [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
-
-  // Measure the sticky bar height so thead sticks just below it
   useEffect(() => {
-    const updateTheadTop = () => {
-      if (stickyBarRef.current) {
-        const rect = stickyBarRef.current.getBoundingClientRect();
-        setTheadTop(rect.bottom);
-      }
-    };
-    updateTheadTop();
-    window.addEventListener('resize', updateTheadTop);
-    return () => window.removeEventListener('resize', updateTheadTop);
-  }, [showFilters, filteredSales]);
-
-  // Also update when sticky bar content changes
-  useEffect(() => {
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => {
-      if (stickyBarRef.current) {
-        const rect = stickyBarRef.current.getBoundingClientRect();
-        setTheadTop(rect.bottom);
-      }
-    }) : null;
-    if (observer && stickyBarRef.current) {
-      observer.observe(stickyBarRef.current);
-    }
-    return () => { if (observer) observer.disconnect(); };
-  }, [showFilters]);
-
+    applyFilters();
+  }, [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadSales = async () => {
     const data = await dataService.getSales();
@@ -72,63 +85,79 @@ function SalesJournal() {
     return isNaN(d.getTime()) ? null : d;
   };
 
-  const toMidnight = (d) => { const c = new Date(d); c.setHours(0,0,0,0); return c; };
+  const toMidnight = (d) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c; };
 
   const applyFilters = () => {
     let filtered = [...sales];
-    if (appliedPaymentFilter !== 'all') filtered = filtered.filter(s => s.payment_type === appliedPaymentFilter);
-    const today = toMidnight(new Date());
+    if (appliedPaymentFilter !== 'all')
+      filtered = filtered.filter(s =>
+        s.payment_type === appliedPaymentFilter || s.paymentType === appliedPaymentFilter
+      );
+
+    const today    = toMidnight(new Date());
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-    if (appliedDateFilter === 'today') {
+
+    if (appliedDateFilter === 'today')
       filtered = filtered.filter(s => { const d = resolveSaleDate(s); return d && d >= today && d < tomorrow; });
-    }
+
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
-      const s = toMidnight(new Date(appliedSelectedDate)), e = new Date(s); e.setDate(e.getDate()+1);
+      const s = toMidnight(new Date(appliedSelectedDate)), e = new Date(s); e.setDate(e.getDate() + 1);
       filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
     }
+
     if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
-      const s = toMidnight(new Date(appliedStartDate)), e = new Date(toMidnight(new Date(appliedEndDate))); e.setDate(e.getDate()+1);
+      const s = toMidnight(new Date(appliedStartDate));
+      const e = new Date(toMidnight(new Date(appliedEndDate))); e.setDate(e.getDate() + 1);
       filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
     }
+
     setFilteredSales(filtered);
   };
 
+  // ── Filter controls ───────────────────────────────────────────────────────
   const isFilterComplete = () => {
-    if (dateFilter === 'today') return true;
+    if (dateFilter === 'today')  return true;
     if (dateFilter === 'single') return !!selectedDate;
-    if (dateFilter === 'range') return !!(startDate && endDate);
+    if (dateFilter === 'range')  return !!(startDate && endDate);
     return false;
   };
-  const hasChanged = () => paymentFilter !== appliedPaymentFilter || dateFilter !== appliedDateFilter || selectedDate !== appliedSelectedDate || startDate !== appliedStartDate || endDate !== appliedEndDate;
+  const hasChanged = () =>
+    paymentFilter !== appliedPaymentFilter || dateFilter !== appliedDateFilter ||
+    selectedDate  !== appliedSelectedDate  || startDate  !== appliedStartDate  || endDate !== appliedEndDate;
   const showApply = isFilterComplete() && hasChanged();
 
   const handleClose = () => {
     setPaymentFilter(appliedPaymentFilter); setDateFilter(appliedDateFilter);
-    setSelectedDate(appliedSelectedDate); setStartDate(appliedStartDate); setEndDate(appliedEndDate);
+    setSelectedDate(appliedSelectedDate);  setStartDate(appliedStartDate); setEndDate(appliedEndDate);
     setShowFilters(false);
   };
   const handleApply = () => {
     setAppliedPaymentFilter(paymentFilter); setAppliedDateFilter(dateFilter);
-    setAppliedSelectedDate(selectedDate); setAppliedStartDate(startDate); setAppliedEndDate(endDate);
+    setAppliedSelectedDate(selectedDate);  setAppliedStartDate(startDate); setAppliedEndDate(endDate);
     setShowFilters(false);
   };
   const handleFilterButtonClick = () => {
-    if (!showFilters) setShowFilters(true);
-    else if (showApply) handleApply();
-    else handleClose();
+    if (!showFilters)    setShowFilters(true);
+    else if (showApply)  handleApply();
+    else                 handleClose();
   };
 
-  const getTodayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; };
-  const formatDisplayDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const getTodayStr = () => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  };
+  const formatDisplayDate = (dateStr) =>
+    new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const isYesterday = (dateStr) => {
     if (!dateStr) return false;
-    const y = new Date(); y.setDate(y.getDate()-1);
+    const y = new Date(); y.setDate(y.getDate() - 1);
     return toMidnight(new Date(dateStr)).getTime() === toMidnight(y).getTime();
   };
 
   const getTableTitle = () => {
     const payMap = { all: 'All Sales', cash: 'Cash Sales', credit: 'Credit Sales' };
-    const label = payMap[appliedPaymentFilter] || 'All Sales';
+    const label  = payMap[appliedPaymentFilter] || 'All Sales';
     if (appliedDateFilter === 'today') return `${label} Today`;
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
       if (isYesterday(appliedSelectedDate)) return `${label} Yesterday`;
@@ -143,71 +172,71 @@ function SalesJournal() {
     const d = resolveSaleDate(sale);
     if (!d) return { date: 'N/A', time: 'N/A' };
     return {
-      date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
-      time: d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
+      date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     };
   };
 
-  const getItemQty        = (item) => item.quantity ?? item.qty ?? 0;
-  const getItemName       = (item) => item.name || '—';
-  const getSaleTotal      = (sale) => parseFloat(sale.total_amount ?? sale.total ?? 0);
-  const getSalePayType    = (sale) => sale.payment_type || sale.paymentType || '';
-  const getSaleCustomer   = (sale) => sale.customer_name || sale.customerName || '';
+  const getItemQty      = (item) => item.quantity ?? item.qty ?? 0;
+  const getItemName     = (item) => item.name || '—';
+  const getSaleTotal    = (sale) => parseFloat(sale.total_amount ?? sale.total ?? 0);
+  const getSalePayType  = (sale) => sale.payment_type || sale.paymentType || '';
+  const getSaleCustomer = (sale) => sale.customer_name || sale.customerName || '';
 
   const totalRecords = filteredSales.length;
   const grandTotal   = filteredSales.reduce((sum, s) => sum + getSaleTotal(s), 0);
   const btnLabel     = !showFilters ? 'Filter Sales' : showApply ? 'Apply Filter' : 'Close Filter';
 
-  // Shared content: button + title + cards — always sticky
-  const TopControls = () => (
-    <div className="sj-sticky-bar" ref={stickyBarRef}>
-      <div className="filter-btn-wrapper">
-        <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
-      </div>
-      <h3 className="table-title">{getTableTitle()}</h3>
-      <div className="stats-boxes">
-        <div className="stat-box stat-box-purple">
-          <div className="stat-label">Total Records</div>
-          <div className="stat-value">{totalRecords}</div>
-        </div>
-        <div className="stat-box stat-box-green">
-          <div className="stat-label">Grand Total</div>
-          <div className="stat-value">${grandTotal.toFixed(2)}</div>
-        </div>
-      </div>
-    </div>
-  );
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="sales-record" style={{ '--sj-thead-top': `${theadTop}px` }}>
+    <div className="sales-record">
 
-      {/* Top controls: always sticky */}
-      <TopControls />
+      {/* Always-sticky bar: button + title + stat cards */}
+      <div className="sj-sticky-bar" ref={stickyBarRef}>
+        <div className="filter-btn-wrapper">
+          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+        </div>
+        <h3 className="table-title">{getTableTitle()}</h3>
+        <div className="stats-boxes">
+          <div className="stat-box stat-box-purple">
+            <div className="stat-label">Total Records</div>
+            <div className="stat-value">{totalRecords}</div>
+          </div>
+          <div className="stat-box stat-box-green">
+            <div className="stat-label">Grand Total</div>
+            <div className="stat-value">${grandTotal.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
 
-      {/* Filter panel — only visible when open, below the sticky bar */}
+      {/* Filter panel — appears below sticky bar when open */}
       {showFilters && (
         <div className="filters-section">
           <div className="filter-group">
             <label>Payment Type</label>
             <div className="filter-buttons">
-              {[['all','All Sales'],['cash','Cash Only'],['credit','Credit Only']].map(([val,lbl]) => (
-                <button key={val} className={`filter-btn${paymentFilter===val?' active':''}`} onClick={() => setPaymentFilter(val)}>{lbl}</button>
+              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                  onClick={() => setPaymentFilter(val)}>{lbl}</button>
               ))}
             </div>
           </div>
           <div className="filter-group">
             <label>Date Filter</label>
             <div className="filter-buttons">
-              {[['today','Today'],['single','Single Date'],['range','Date Range']].map(([val,lbl]) => (
-                <button key={val} className={`filter-btn${dateFilter===val?' active':''}`}
-                  onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>{lbl}</button>
+              {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
+                <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                  onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                  {lbl}
+                </button>
               ))}
             </div>
           </div>
           {dateFilter === 'single' && (
             <div className="filter-group">
               <label>Select Date</label>
-              <input type="date" value={selectedDate} max={getTodayStr()} onChange={e => setSelectedDate(e.target.value)} className="date-input" />
+              <input type="date" value={selectedDate} max={getTodayStr()}
+                onChange={e => setSelectedDate(e.target.value)} className="date-input" />
             </div>
           )}
           {dateFilter === 'range' && (
@@ -222,9 +251,9 @@ function SalesJournal() {
                 </div>
                 <div className="date-range-field">
                   <label className="date-range-label">To:</label>
-                  <input type="date" value={endDate} min={startDate||undefined} max={getTodayStr()}
+                  <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
                     disabled={!startDate} onChange={e => setEndDate(e.target.value)}
-                    className={`date-input${!startDate?' date-input-disabled':''}`} />
+                    className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
                 </div>
               </div>
               {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
@@ -233,10 +262,13 @@ function SalesJournal() {
         </div>
       )}
 
-      {/* Sales table */}
+      {/* Sales table
+          CRITICAL: .table-wrapper has overflow-x:auto ONLY — no overflow-y.
+          This keeps .app-main as the scroll ancestor for the sticky thead.
+          If you add overflow-y here the thead will stop being sticky.       */}
       <div className="table-wrapper">
         <table className="sales-table">
-          <thead>
+          <thead ref={theadRef}>
             <tr>
               <th>Date</th>
               <th>Time</th>
@@ -261,23 +293,11 @@ function SalesJournal() {
 
                 return items.map((item, idx) => (
                   <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}>
-
-                    {/* DATE — rowSpan merges all item rows into one cell */}
                     {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{date}</td>}
-
-                    {/* TIME — merged */}
                     {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
-
-                    {/* ITEMS — one per row */}
                     <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
-
-                    {/* QTY — one per row */}
                     <td className="col-qty">{item ? getItemQty(item) : '—'}</td>
-
-                    {/* TOTAL — one per row */}
                     <td>${total.toFixed(2)}</td>
-
-                    {/* PAY TYPE — merged */}
                     {idx === 0 && (
                       <td rowSpan={rowSpan} className="merged-cell">
                         <span className={`payment-badge payment-${payType}`}>
@@ -285,8 +305,6 @@ function SalesJournal() {
                         </span>
                       </td>
                     )}
-
-                    {/* CUSTOMER — merged */}
                     {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{customer || '—'}</td>}
                   </tr>
                 ));
