@@ -33,6 +33,7 @@ const DATA_KEYS = {
   SALES: 'sales',
   DEBTORS: 'debtors',
   INVENTORY: 'inventory',
+  CASH_ENTRIES: 'cash_entries',
   SYNC_QUEUE: 'sync_queue',
   LAST_SYNC: 'last_sync',
 };
@@ -46,6 +47,7 @@ class DataService {
     // session.  After the first pull we trust localforage as source of truth
     // so that writes made moments ago are never overwritten by a stale read.
     this._debtorsFetchedFromFirebase = false;
+    this._goodsFetchedFromFirebase = false;
     
     // Listen for online/offline events
     window.addEventListener('online', () => {
@@ -65,6 +67,7 @@ class DataService {
       this.currentUser = userCredential.user;
       // Reset so the next getDebtors() call pulls a fresh copy from Firebase
       this._debtorsFetchedFromFirebase = false;
+    this._goodsFetchedFromFirebase = false;
       
       // Store login state persistently
       await localforage.setItem('auth_user', {
@@ -214,23 +217,24 @@ class DataService {
   // Goods operations
   async getGoods() {
     try {
-      // Try to get from Firebase first if online
-      if (this.isOnline && auth.currentUser) {
+      // Pull from Firebase only on the FIRST call of the session so that:
+      // 1. Goods are always up-to-date when the app starts online.
+      // 2. Subsequent calls (e.g. SalesRegister search) use the local cache
+      //    and work correctly offline without hitting Firebase again.
+      if (this.isOnline && auth.currentUser && !this._goodsFetchedFromFirebase) {
+        this._goodsFetchedFromFirebase = true;
         const goodsSnapshot = await getDocs(collection(db, 'goods'));
         const firebaseGoods = goodsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
-        
-        // Save to local storage
         await localforage.setItem(DATA_KEYS.GOODS, firebaseGoods);
         return firebaseGoods;
       }
     } catch (error) {
       console.error('Error fetching goods from Firebase:', error);
     }
-    
-    // Fallback to local storage
+    // Offline or already fetched this session — use local cache
     return await this.get(DATA_KEYS.GOODS);
   }
 
@@ -486,6 +490,7 @@ class DataService {
   // Call this to force a fresh pull from Firebase (e.g. after login sync).
   resetDebtorsFetchFlag() {
     this._debtorsFetchedFromFirebase = false;
+    this._goodsFetchedFromFirebase = false;
   }
 
   async setDebtors(debtors) {
@@ -892,6 +897,42 @@ class DataService {
     } catch (error) {
       console.error('❌ Firebase sync error:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  // Call this to force a fresh goods pull from Firebase (e.g. after login).
+  resetGoodsFetchFlag() {
+    this._goodsFetchedFromFirebase = false;
+  }
+
+  // ── Cash Journal entries ──────────────────────────────────────────────────
+  async getCashEntries() {
+    try {
+      return await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    } catch (error) {
+      console.error('Error getting cash entries:', error);
+      return [];
+    }
+  }
+
+  async addCashEntry(entry) {
+    try {
+      const entries = await this.getCashEntries();
+      const newEntry = {
+        id: this.generateId(),
+        type: entry.type,         // 'in' | 'out'
+        amount: parseFloat(entry.amount),
+        note: entry.note || '',
+        date: entry.date || new Date().toISOString(),
+        source: entry.source || 'manual',
+        createdAt: new Date().toISOString(),
+      };
+      entries.push(newEntry);
+      await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+      return newEntry;
+    } catch (error) {
+      console.error('Error adding cash entry:', error);
+      throw error;
     }
   }
 
