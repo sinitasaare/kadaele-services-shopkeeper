@@ -20,8 +20,39 @@ function SalesJournal() {
 
   const [showFilters, setShowFilters] = useState(false);
 
+  const stickyBarRef = useRef(null);
+  const [theadTop, setTheadTop] = useState(0);
+
   useEffect(() => { loadSales(); }, []);
   useEffect(() => { applyFilters(); }, [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
+
+  // Measure the sticky bar height so thead sticks just below it
+  useEffect(() => {
+    const updateTheadTop = () => {
+      if (stickyBarRef.current) {
+        const rect = stickyBarRef.current.getBoundingClientRect();
+        setTheadTop(rect.bottom);
+      }
+    };
+    updateTheadTop();
+    window.addEventListener('resize', updateTheadTop);
+    return () => window.removeEventListener('resize', updateTheadTop);
+  }, [showFilters, filteredSales]);
+
+  // Also update when sticky bar content changes
+  useEffect(() => {
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => {
+      if (stickyBarRef.current) {
+        const rect = stickyBarRef.current.getBoundingClientRect();
+        setTheadTop(rect.bottom);
+      }
+    }) : null;
+    if (observer && stickyBarRef.current) {
+      observer.observe(stickyBarRef.current);
+    }
+    return () => { if (observer) observer.disconnect(); };
+  }, [showFilters]);
+
 
   const loadSales = async () => {
     const data = await dataService.getSales();
@@ -127,9 +158,9 @@ function SalesJournal() {
   const grandTotal   = filteredSales.reduce((sum, s) => sum + getSaleTotal(s), 0);
   const btnLabel     = !showFilters ? 'Filter Sales' : showApply ? 'Apply Filter' : 'Close Filter';
 
-  // Shared content: button + title + cards
-  const TopControls = ({ sticky }) => (
-    <div className={sticky ? 'sj-sticky-bar' : 'sj-nonsticky-bar'}>
+  // Shared content: button + title + cards — always sticky
+  const TopControls = () => (
+    <div className="sj-sticky-bar" ref={stickyBarRef}>
       <div className="filter-btn-wrapper">
         <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
       </div>
@@ -148,9 +179,12 @@ function SalesJournal() {
   );
 
   return (
-    <div className="sales-record">
+    <div className="sales-record" style={{ '--sj-thead-top': `${theadTop}px` }}>
 
-      {/* Filter panel — only visible when open */}
+      {/* Top controls: always sticky */}
+      <TopControls />
+
+      {/* Filter panel — only visible when open, below the sticky bar */}
       {showFilters && (
         <div className="filters-section">
           <div className="filter-group">
@@ -198,9 +232,6 @@ function SalesJournal() {
           )}
         </div>
       )}
-
-      {/* Top controls: sticky only when filter is hidden */}
-      <TopControls sticky={!showFilters} />
 
       {/* Sales table */}
       <div className="table-wrapper">
