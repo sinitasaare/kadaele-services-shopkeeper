@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import dataService from '../services/dataService';
 import './SalesJournal.css';
 
@@ -19,33 +19,6 @@ function SalesJournal() {
   const [appliedEndDate, setAppliedEndDate] = useState('');
 
   const [showFilters, setShowFilters] = useState(false);
-
-  // ── Refs ──────────────────────────────────────────────────────────────────
-  // stickyBarRef → .sj-sticky-bar whose height drives the thead's sticky top.
-  // We write its pixel height into a CSS custom property on the same element
-  // so the thead's `top` can be set in CSS as `var(--bar-height)` — this
-  // correctly resolves inside the actual scroll container (.app-main) rather
-  // than relying on viewport-relative calculations.
-  const stickyBarRef = useRef(null);
-
-  const updateBarHeight = useCallback(() => {
-    if (!stickyBarRef.current) return;
-    const h = stickyBarRef.current.offsetHeight;
-    stickyBarRef.current.style.setProperty('--bar-height', `${h}px`);
-    // Also write it on the parent .sales-record so the thead CSS var can
-    // inherit it from a common ancestor.
-    if (stickyBarRef.current.parentElement) {
-      stickyBarRef.current.parentElement.style.setProperty('--bar-height', `${h}px`);
-    }
-  }, []);
-
-  useEffect(() => {
-    updateBarHeight();
-    if (!stickyBarRef.current) return;
-    const ro = new ResizeObserver(updateBarHeight);
-    ro.observe(stickyBarRef.current);
-    return () => ro.disconnect();
-  }, [updateBarHeight]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
@@ -227,13 +200,8 @@ function SalesJournal() {
         </div>
       )}
 
-      {/* ── Sticky bar ─────────────────────────────────────────────────────
-           Sticks at top:0 inside .app-main (the scroll container).
-           ResizeObserver writes its rendered height into --bar-height on
-           .sales-record so the thead's CSS top: var(--bar-height) always
-           resolves to the correct offset inside the same scroll context.
-      ─────────────────────────────────────────────────────────────────── */}
-      <div className="sj-sticky-bar" ref={stickyBarRef}>
+      {/* ── Sticky bar ── */}
+      <div className="sj-sticky-bar">
         <div className="filter-btn-wrapper">
           <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
         </div>
@@ -250,13 +218,7 @@ function SalesJournal() {
         </div>
       </div>
 
-      {/* ── Table ──────────────────────────────────────────────────────────
-           Single horizontally-scrollable wrapper. The thead inside uses
-           position:sticky with top: var(--bar-height) so it locks flush
-           against the sticky bar's bottom edge. Both thead and tbody are
-           in the same scroll container so horizontal scroll moves them
-           together as one unit.
-      ─────────────────────────────────────────────────────────────────── */}
+      {/* ── Table ── */}
       <div className="table-wrapper">
         <table className="sales-table">
 
