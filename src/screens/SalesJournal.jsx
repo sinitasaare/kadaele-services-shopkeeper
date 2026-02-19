@@ -39,7 +39,9 @@ function SalesJournal() {
 
   const applyTheadTop = useCallback(() => {
     if (!stickyBarRef.current || !theadRef.current) return;
-    theadRef.current.style.top = `${stickyBarRef.current.offsetHeight}px`;
+    const topVal = `${stickyBarRef.current.offsetHeight}px`;
+    // position:sticky works on <th>, not <thead> — set top on every th cell
+    theadRef.current.querySelectorAll('th').forEach(th => { th.style.top = topVal; });
   }, []);
 
   // Runs after every render — covers filter toggle, data load, any re-render.
@@ -193,6 +195,14 @@ function SalesJournal() {
 
       {/* Always-sticky bar: title + stat cards + filter panel + column headers */}
       <div className="sj-sticky-bar" ref={stickyBarRef}>
+
+        {/* Button sits ABOVE title when filter is closed */}
+        {!showFilters && (
+          <div className="filter-btn-wrapper">
+            <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+          </div>
+        )}
+
         <h3 className="table-title">{getTableTitle()}</h3>
         <div className="stats-boxes">
           <div className="stat-box stat-box-purple">
@@ -205,7 +215,7 @@ function SalesJournal() {
           </div>
         </div>
 
-        {/* Filter panel — inside sticky bar so button stays anchored below it */}
+        {/* Filter panel — inside sticky bar, appears below stat cards */}
         {showFilters && (
           <div className="filters-section">
             <div className="filter-group">
@@ -258,10 +268,12 @@ function SalesJournal() {
           </div>
         )}
 
-        {/* Filter button — always at the bottom of the sticky bar */}
-        <div className="filter-btn-wrapper">
-          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
-        </div>
+        {/* Button sits BELOW filter panel when filter is open */}
+        {showFilters && (
+          <div className="filter-btn-wrapper">
+            <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+          </div>
+        )}
 
       </div>
 
