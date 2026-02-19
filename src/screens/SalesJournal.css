@@ -7,27 +7,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  padding: 0;
-}
-
-/* ── Sticky page header ── */
-.record-header {
-  position: sticky;
-  top: 0;
-  background: var(--surface);
-  z-index: 100;
-  padding: 20px 20px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  width: 100%;
-}
-
-.record-header .screen-title {
-  margin: 0 auto;
-  text-align: center;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #667eea;
-  width: 100%;
+  padding: 16px 0 0;   /* breathing room at top since page header is in App nav bar */
 }
 
 /* ── Filter panel ── */
@@ -135,16 +115,15 @@
   margin-top: 0.25rem;
 }
 
-/* ── Action button wrapper — always centered ── */
+/* ── Action button wrapper — always centered, 10px below header ── */
 .filter-btn-wrapper {
   display: flex;
   justify-content: center;
   padding: 0 20px;
+  margin-top: 10px;
 }
 
-/* ── Main action button
-     Add-Debtor gradient style, 35% narrower than the natural 140px base
-     140px × 0.65 ≈ 91px  →  use 92px min-width  ── */
+/* ── Main action button — Add-Debtor gradient style, width driven by content ── */
 .sales-filter-action-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -156,13 +135,8 @@
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-  /* 35% narrower: cap width so button is compact */
-  min-width: 92px;
-  max-width: 92px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
+  white-space: nowrap;       /* never wrap label text */
+  display: inline-block;     /* shrink to content width */
 }
 
 .sales-filter-action-btn:hover {
@@ -242,7 +216,8 @@
 }
 
 .sales-table {
-  width: 100%;
+  width: max-content;        /* grow as wide as content needs */
+  min-width: 100%;           /* but never narrower than the wrapper */
   border-collapse: collapse;
   font-size: 0.875rem;
   table-layout: auto;
@@ -264,14 +239,14 @@
   letter-spacing: 0.04em;
   color: var(--text-secondary);
   border-bottom: 2px solid var(--border);
-  white-space: nowrap;
+  white-space: nowrap;       /* headers never wrap */
 }
 
 .sales-table td {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);
   color: var(--text-primary);
-  white-space: nowrap;
+  white-space: nowrap;       /* all cells never wrap */
 }
 
 .sales-table tr:last-child td {
@@ -282,10 +257,14 @@
   background-color: rgba(102, 126, 234, 0.03);
 }
 
-/* Items cell: allow text wrapping */
+/* QTY column — header and all cells centered */
+.col-qty {
+  text-align: center !important;
+}
+
+/* Items cell — no wrapping, expands with content */
 .items-cell {
-  white-space: normal !important;
-  max-width: 200px;
+  white-space: nowrap !important;
   font-size: 0.8125rem;
   color: var(--text-secondary);
 }
@@ -368,4 +347,3 @@
     align-items: flex-start;
   }
 }
-
