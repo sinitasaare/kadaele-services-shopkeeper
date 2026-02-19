@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dataService from '../services/dataService';
 import './SalesJournal.css';
 
@@ -43,7 +43,7 @@ function SalesJournal() {
   }, []);
 
   // Runs after every render — covers filter toggle, data load, any re-render.
-  useLayoutEffect(() => { applyTheadTop(); });
+  useEffect(() => { applyTheadTop(); });
 
   // Covers the sticky bar resizing (filter panel opening/closing).
   useEffect(() => {
@@ -207,6 +207,22 @@ function SalesJournal() {
             <div className="stat-value">${grandTotal.toFixed(2)}</div>
           </div>
         </div>
+
+        {/* Column headers live inside the sticky bar so they always stay visible */}
+        <table className="sales-table sj-header-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Items</th>
+              <th className="col-qty">Qty</th>
+              <th>Total</th>
+              <th>Pay Type</th>
+              <th>Customer</th>
+            </tr>
+          </thead>
+        </table>
+
       </div>
 
       {/* Filter panel — appears below sticky bar when open */}
@@ -268,17 +284,7 @@ function SalesJournal() {
           If you add overflow-y here the thead will stop being sticky.       */}
       <div className="table-wrapper">
         <table className="sales-table">
-          <thead ref={theadRef}>
-            <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Items</th>
-              <th className="col-qty">Qty</th>
-              <th>Total</th>
-              <th>Pay Type</th>
-              <th>Customer</th>
-            </tr>
-          </thead>
+
           <tbody>
             {filteredSales.length === 0 ? (
               <tr><td colSpan="7" className="empty-cell">No sales records found</td></tr>
