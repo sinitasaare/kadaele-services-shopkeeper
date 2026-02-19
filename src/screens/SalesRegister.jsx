@@ -21,6 +21,19 @@ function SalesRegister() {
   const [existingDebtors, setExistingDebtors] = useState([]);
   const [showDebtorSuggestions, setShowDebtorSuggestions] = useState(false);
   const [filteredDebtors, setFilteredDebtors] = useState([]);
+  const [selectedDebtorId, setSelectedDebtorId] = useState(null);
+  
+  // Repayment date helpers
+  const getTomorrowStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const getMax14DaysStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
   
   // New states for quantity modal
   const [showQuantityModal, setShowQuantityModal] = useState(false);
@@ -45,19 +58,21 @@ function SalesRegister() {
   const handleCustomerNameChange = (value) => {
     setCustomerName(value);
     
-    if (value.length >= 2) {
+    if (value.length >= 1) {
       const filtered = existingDebtors.filter(debtor =>
         debtor.name?.toLowerCase().includes(value.toLowerCase())
       );
       setFilteredDebtors(filtered);
       setShowDebtorSuggestions(filtered.length > 0);
     } else {
-      setShowDebtorSuggestions(false);
+      setFilteredDebtors(existingDebtors);
+      setShowDebtorSuggestions(existingDebtors.length > 0);
     }
   };
 
   const selectDebtor = (debtor) => {
     setCustomerName(debtor.name);
+    setSelectedDebtorId(debtor.id);
     setCustomerPhone(debtor.phone || '');
     setShowDebtorSuggestions(false);
   };
@@ -210,6 +225,12 @@ function SalesRegister() {
 
   const confirmCreditSale = async (e) => {
     e.preventDefault();
+    
+    if (!selectedDebtorId) {
+      alert('Please search and select a registered debtor.');
+      return;
+    }
+    
     setIsProcessing(true);
 
     try {
@@ -247,6 +268,7 @@ function SalesRegister() {
       setCatalogue([]);
       setCustomerName('');
       setCustomerPhone('');
+      setSelectedDebtorId(null);
       setRepaymentDate('');
       setCapturedPhoto(null);
       setShowCreditModal(false);
@@ -445,10 +467,36 @@ function SalesRegister() {
                   type="text"
                   id="debtor-name"
                   value={customerName}
-                  onChange={(e) => handleCustomerNameChange(e.target.value)}
-                  onFocus={() => customerName.length >= 2 && setShowDebtorSuggestions(true)}
+                  readOnly={!!selectedDebtorId}
+                  onChange={(e) => {
+                    if (!selectedDebtorId) handleCustomerNameChange(e.target.value);
+                  }}
+                  onFocus={() => {
+                    if (!selectedDebtorId) {
+                      setFilteredDebtors(existingDebtors);
+                      setShowDebtorSuggestions(existingDebtors.length > 0);
+                    }
+                  }}
+                  placeholder="Search registered debtor..."
+                  style={{ backgroundColor: selectedDebtorId ? '#f0f0f0' : '' }}
                   required
                 />
+                {selectedDebtorId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerName('');
+                      setCustomerPhone('');
+                      setSelectedDebtorId(null);
+                      setShowDebtorSuggestions(false);
+                    }}
+                    style={{
+                      position: 'absolute', right: '8px', top: '50%',
+                      transform: 'translateY(10%)', background: 'none',
+                      border: 'none', cursor: 'pointer', fontSize: '18px', color: '#999'
+                    }}
+                  >×</button>
+                )}
                 {showDebtorSuggestions && filteredDebtors.length > 0 && (
                   <div style={{
                     position: 'absolute',
@@ -466,31 +514,23 @@ function SalesRegister() {
                     {filteredDebtors.map((debtor, index) => (
                       <div
                         key={index}
-                        onClick={() => selectDebtor(debtor)}
+                        onMouseDown={(e) => { e.preventDefault(); selectDebtor(debtor); }}
                         style={{
                           padding: '10px',
                           cursor: 'pointer',
                           borderBottom: '1px solid #eee'
                         }}
-                        onMouseEnter={(e) => e.target.style.background = '#f5f5f5'}
-                        onMouseLeave={(e) => e.target.style.background = 'white'}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
                       >
                         <div style={{fontWeight: 'bold'}}>{debtor.name}</div>
-                        {debtor.phone && <div style={{fontSize: '12px', color: '#666'}}>{debtor.phone}</div>}
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-              <div>
-                <label htmlFor="debtor-phone">Debtor Phone:</label>
-                <input
-                  type="tel"
-                  id="debtor-phone"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  required
-                />
+                {existingDebtors.length === 0 && (
+                  <p style={{fontSize: '12px', color: '#e44', margin: '4px 0 0'}}>No registered debtors found. Add one in the Debtors section first.</p>
+                )}
               </div>
               <div>
                 <label htmlFor="repayment-date">Repayment Date:</label>
@@ -498,9 +538,12 @@ function SalesRegister() {
                   type="date"
                   id="repayment-date"
                   value={repaymentDate}
+                  min={getTomorrowStr()}
+                  max={getMax14DaysStr()}
                   onChange={(e) => setRepaymentDate(e.target.value)}
                   required
                 />
+                <p style={{fontSize: '11px', color: '#888', margin: '2px 0 0'}}>Only dates within the next 14 days are available.</p>
               </div>
               <div className="sr-photo-section">
                 <label>Photo of Credit Book (Optional):</label>
@@ -523,13 +566,15 @@ function SalesRegister() {
                     setShowCreditModal(false);
                     setCustomerName('');
                     setCustomerPhone('');
+                    setSelectedDebtorId(null);
                     setRepaymentDate('');
                     setCapturedPhoto(null);
+                    setShowDebtorSuggestions(false);
                   }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="sr-btn-confirm">
+                <button type="submit" className="sr-btn-confirm" disabled={isProcessing}>
                   Save
                 </button>
               </div>
