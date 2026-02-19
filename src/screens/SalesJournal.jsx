@@ -20,55 +20,56 @@ function SalesJournal() {
 
   const [showFilters, setShowFilters] = useState(false);
 
-  // ── Sticky header refs ────────────────────────────────────────────────────
-  // stickyBarRef  → the purple stats/button bar pinned at the top
-  // theadRef      → the <thead> we want to stick just below the bar
-  //
-  // HOW THIS WORKS (no CSS variables needed):
-  //   1. .table-wrapper has overflow-x:auto but NO overflow-y — so the page
-  //      scroll container (.app-main) is the sticky-positioning ancestor for
-  //      BOTH the bar AND the thead.  This is the fundamental requirement for
-  //      position:sticky on <thead> to work relative to the page.
-  //   2. We measure stickyBar.offsetHeight and write it directly to
-  //      thead.style.top.  We do this after every render, on ResizeObserver
-  //      callbacks (filter panel open/close changes bar height), and on
-  //      scroll (cheap, defensive).
-  // ─────────────────────────────────────────────────────────────────────────
-  const stickyBarRef = useRef(null);
-  const theadRef     = useRef(null);
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  // bodyTheadRef    → hidden <thead> in body table (drives natural col widths)
+  // stickyTheadRef  → visible <thead> in sticky bar (mirrors those widths)
+  // headerWrapRef   → .sj-header-wrapper (scrolls in sync with body wrapper)
+  // bodyWrapRef     → .table-wrapper (the scroll master)
+  const bodyTheadRef   = useRef(null);
+  const stickyTheadRef = useRef(null);
+  const headerWrapRef  = useRef(null);
+  const bodyWrapRef    = useRef(null);
 
-  const applyTheadTop = useCallback(() => {
-    if (!stickyBarRef.current) return;
-    const topVal = `${stickyBarRef.current.offsetHeight}px`;
-    // Set as a CSS variable on the container so the th sticky rule picks it up
-    // declaratively — more reliable than setting inline styles on each th.
-    stickyBarRef.current.closest('.sales-record')?.style.setProperty('--sticky-bar-height', topVal);
+  // Reads widths from the body thead's th cells and writes them to the
+  // sticky thead's th cells. Called after every render and on resize.
+  const syncColWidths = useCallback(() => {
+    if (!bodyTheadRef.current || !stickyTheadRef.current) return;
+    const sourceCells = bodyTheadRef.current.querySelectorAll('th');
+    const targetCells = stickyTheadRef.current.querySelectorAll('th');
+    sourceCells.forEach((th, i) => {
+      if (targetCells[i]) {
+        targetCells[i].style.width = `${th.offsetWidth}px`;
+        targetCells[i].style.minWidth = `${th.offsetWidth}px`;
+      }
+    });
   }, []);
 
-  // Runs after every render — covers filter toggle, data load, any re-render.
-  useEffect(() => { applyTheadTop(); });
+  // Run after every render (data changes, filter changes, etc.)
+  useEffect(() => { syncColWidths(); });
 
-  // Covers the sticky bar resizing (filter panel opening/closing).
+  // Also run whenever the body table resizes (e.g. window resize)
   useEffect(() => {
-    if (!stickyBarRef.current) return;
-    const ro = new ResizeObserver(applyTheadTop);
-    ro.observe(stickyBarRef.current);
+    if (!bodyTheadRef.current) return;
+    const ro = new ResizeObserver(syncColWidths);
+    ro.observe(bodyTheadRef.current.closest('table'));
     return () => ro.disconnect();
-  }, [applyTheadTop]);
+  }, [syncColWidths]);
 
-  // Defensive scroll listener — the bar height is stable during scroll but
-  // this costs nothing and future-proofs against edge cases.
+  // Keeps the header wrapper scrolled in sync with the body wrapper
   useEffect(() => {
-    const scroller = document.querySelector('.app-main') || window;
-    scroller.addEventListener('scroll', applyTheadTop, { passive: true });
-    return () => scroller.removeEventListener('scroll', applyTheadTop);
-  }, [applyTheadTop]);
+    const body   = bodyWrapRef.current;
+    const header = headerWrapRef.current;
+    if (!body || !header) return;
+    const onScroll = () => { header.scrollLeft = body.scrollLeft; };
+    body.addEventListener('scroll', onScroll, { passive: true });
+    return () => body.removeEventListener('scroll', onScroll);
+  }, []);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
-  useEffect(() => {
-    applyFilters();
-  }, [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
+  useEffect(() => { applyFilters(); },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadSales = async () => {
     const data = await dataService.getSales();
@@ -96,24 +97,19 @@ function SalesJournal() {
       filtered = filtered.filter(s =>
         s.payment_type === appliedPaymentFilter || s.paymentType === appliedPaymentFilter
       );
-
     const today    = toMidnight(new Date());
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-
     if (appliedDateFilter === 'today')
       filtered = filtered.filter(s => { const d = resolveSaleDate(s); return d && d >= today && d < tomorrow; });
-
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
       const s = toMidnight(new Date(appliedSelectedDate)), e = new Date(s); e.setDate(e.getDate() + 1);
       filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
     }
-
     if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
       const s = toMidnight(new Date(appliedStartDate));
       const e = new Date(toMidnight(new Date(appliedEndDate))); e.setDate(e.getDate() + 1);
       filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
     }
-
     setFilteredSales(filtered);
   };
 
@@ -190,65 +186,71 @@ function SalesJournal() {
   const grandTotal   = filteredSales.reduce((sum, s) => sum + getSaleTotal(s), 0);
   const btnLabel     = !showFilters ? 'Filter Sales' : showApply ? 'Apply Filter' : 'Close Filter';
 
+  // Shared header labels
+  const HEADERS = ['Date', 'Time', 'Product', 'Qty', 'Sale Total', 'Payment', 'Customer'];
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="sales-record">
 
-      {/* Filter panel — appears ABOVE everything when open */}
+      {/* Filter panel — appears above everything when open */}
       {showFilters && (
         <div className="filters-section">
-            <div className="filter-group">
-              <label>Payment Type</label>
-              <div className="filter-buttons">
-                {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
-                  <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
-                    onClick={() => setPaymentFilter(val)}>{lbl}</button>
-                ))}
-              </div>
+          <div className="filter-group">
+            <label>Payment Type</label>
+            <div className="filter-buttons">
+              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                  onClick={() => setPaymentFilter(val)}>{lbl}</button>
+              ))}
             </div>
-            <div className="filter-group">
-              <label>Date Filter</label>
-              <div className="filter-buttons">
-                {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
-                  <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
-                    onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
-                    {lbl}
-                  </button>
-                ))}
-              </div>
+          </div>
+          <div className="filter-group">
+            <label>Date Filter</label>
+            <div className="filter-buttons">
+              {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
+                <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                  onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                  {lbl}
+                </button>
+              ))}
             </div>
-            {dateFilter === 'single' && (
-              <div className="filter-group">
-                <label>Select Date</label>
-                <input type="date" value={selectedDate} max={getTodayStr()}
-                  onChange={e => setSelectedDate(e.target.value)} className="date-input" />
-              </div>
-            )}
-            {dateFilter === 'range' && (
-              <div className="filter-group">
-                <label>Date Range</label>
-                <div className="date-range-inputs">
-                  <div className="date-range-field">
-                    <label className="date-range-label">From:</label>
-                    <input type="date" value={startDate} max={getTodayStr()}
-                      onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
-                      className="date-input" />
-                  </div>
-                  <div className="date-range-field">
-                    <label className="date-range-label">To:</label>
-                    <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
-                      disabled={!startDate} onChange={e => setEndDate(e.target.value)}
-                      className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
-                  </div>
+          </div>
+          {dateFilter === 'single' && (
+            <div className="filter-group">
+              <label>Select Date</label>
+              <input type="date" value={selectedDate} max={getTodayStr()}
+                onChange={e => setSelectedDate(e.target.value)} className="date-input" />
+            </div>
+          )}
+          {dateFilter === 'range' && (
+            <div className="filter-group">
+              <label>Date Range</label>
+              <div className="date-range-inputs">
+                <div className="date-range-field">
+                  <label className="date-range-label">From:</label>
+                  <input type="date" value={startDate} max={getTodayStr()}
+                    onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
+                    className="date-input" />
                 </div>
-                {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
+                <div className="date-range-field">
+                  <label className="date-range-label">To:</label>
+                  <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
+                    disabled={!startDate} onChange={e => setEndDate(e.target.value)}
+                    className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
+                </div>
               </div>
-            )}
+              {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Sticky bar: button + title + stat cards — always below filter */}
-      <div className="sj-sticky-bar" ref={stickyBarRef}>
+      {/* ── Sticky bar ──────────────────────────────────────────────────────
+           position:sticky; top:0. The visible header table is the last
+           child — pinned permanently to the bar's bottom edge.
+      ────────────────────────────────────────────────────────────────────── */}
+      <div className="sj-sticky-bar">
         <div className="filter-btn-wrapper">
           <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
         </div>
@@ -263,21 +265,36 @@ function SalesJournal() {
             <div className="stat-value">${grandTotal.toFixed(2)}</div>
           </div>
         </div>
+
+        {/* Visible sticky header — widths are mirrored from the body thead below */}
+        <div className="sj-header-wrapper" ref={headerWrapRef}>
+          <table className="sj-header-table">
+            <thead ref={stickyTheadRef}>
+              <tr>
+                {HEADERS.map((h, i) => (
+                  <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+          </table>
+        </div>
       </div>
 
-      {/* Sales table — single unified table with thead + tbody together */}
-      <div className="table-wrapper">
+      {/* ── Body table ──────────────────────────────────────────────────────
+           table-layout:auto — browser sizes columns to fit content naturally.
+           A hidden <thead> (visibility:hidden) lives here so the browser
+           includes header text in column width calculations. syncColWidths()
+           reads its offsetWidths and mirrors them to the sticky header above.
+      ────────────────────────────────────────────────────────────────────── */}
+      <div className="table-wrapper" ref={bodyWrapRef}>
         <table className="sales-table">
 
-          <thead ref={theadRef}>
+          {/* Hidden thead — drives column widths, invisible to the user */}
+          <thead ref={bodyTheadRef} className="sj-ghost-thead">
             <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Product</th>
-              <th className="col-qty">Qty</th>
-              <th>Sale Total</th>
-              <th>Payment</th>
-              <th>Customer</th>
+              {HEADERS.map((h, i) => (
+                <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
+              ))}
             </tr>
           </thead>
 
@@ -299,7 +316,7 @@ function SalesJournal() {
                     {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
                     <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
                     <td className="col-qty">{item ? getItemQty(item) : '—'}</td>
-                    <td>${total.toFixed(2)}</td>
+                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">${total.toFixed(2)}</td>}
                     {idx === 0 && (
                       <td rowSpan={rowSpan} className="merged-cell">
                         <span className={`payment-badge payment-${payType}`}>
@@ -315,6 +332,7 @@ function SalesJournal() {
           </tbody>
         </table>
       </div>
+
     </div>
   );
 }
