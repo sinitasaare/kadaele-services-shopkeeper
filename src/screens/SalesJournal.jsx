@@ -33,7 +33,7 @@ function SalesJournal() {
   const syncTheadTop = useCallback(() => {
     if (!stickyBarRef.current || !theadRef.current) return;
     const barHeight = stickyBarRef.current.offsetHeight;
-    theadRef.current.style.top = `${barHeight + 1}px`;
+    theadRef.current.style.top = `${barHeight}px`;
   }, []);
 
   // Run once on mount and again whenever the sticky bar changes height
