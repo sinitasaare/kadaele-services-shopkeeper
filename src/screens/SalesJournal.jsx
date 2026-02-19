@@ -371,27 +371,34 @@ function SalesJournal() {
                 const total = getSaleTotal(sale);
                 const payType = getSalePaymentType(sale);
                 const customer = getSaleCustomer(sale);
-                const items = sale.items || [];
-                const totalQty = items.reduce((sum, item) => sum + getItemQty(item), 0);
-                const itemsSummary = items.length > 0
-                  ? items.map(item => getItemName(item)).join(', ')
-                  : 'N/A';
+                const items = sale.items && sale.items.length > 0 ? sale.items : [null];
 
-                return (
-                  <tr key={sale.id}>
+                return items.map((item, idx) => (
+                  <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : ''}>
+                    {/* Date — repeated on every item row */}
                     <td>{date}</td>
+                    {/* Time — repeated on every item row */}
                     <td>{time}</td>
-                    <td className="items-cell">{itemsSummary}</td>
-                    <td className="col-qty">{totalQty}</td>
+                    {/* One item name per row */}
+                    <td className="items-cell">
+                      {item ? getItemName(item) : 'N/A'}
+                    </td>
+                    {/* One item qty per row */}
+                    <td className="col-qty">
+                      {item ? getItemQty(item) : '—'}
+                    </td>
+                    {/* Total — repeated on every item row */}
                     <td>${total.toFixed(2)}</td>
+                    {/* Pay Type — repeated on every item row */}
                     <td>
                       <span className={`payment-badge payment-${payType}`}>
                         {payType ? payType.toUpperCase() : 'N/A'}
                       </span>
                     </td>
+                    {/* Customer — repeated on every item row */}
                     <td>{customer || '—'}</td>
                   </tr>
-                );
+                ));
               })
             )}
           </tbody>
