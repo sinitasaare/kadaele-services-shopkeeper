@@ -232,11 +232,6 @@ function SalesJournal() {
   return (
     <div className="sales-record">
 
-      {/* ── Sticky page header ── */}
-      <div className="record-header">
-        <h2 className="screen-title">Sales Journal</h2>
-      </div>
-
       {/* ── Filter panel ── */}
       {showFilters && (
         <div className="filters-section">
@@ -359,7 +354,7 @@ function SalesJournal() {
               <th>Date</th>
               <th>Time</th>
               <th>Items</th>
-              <th>Qty</th>
+              <th className="col-qty">Qty</th>
               <th>Total</th>
               <th>Pay Type</th>
               <th>Customer</th>
@@ -379,7 +374,7 @@ function SalesJournal() {
                 const items = sale.items || [];
                 const totalQty = items.reduce((sum, item) => sum + getItemQty(item), 0);
                 const itemsSummary = items.length > 0
-                  ? items.map(item => `${getItemName(item)} × ${getItemQty(item)}`).join(', ')
+                  ? items.map(item => getItemName(item)).join(', ')
                   : 'N/A';
 
                 return (
@@ -387,7 +382,7 @@ function SalesJournal() {
                     <td>{date}</td>
                     <td>{time}</td>
                     <td className="items-cell">{itemsSummary}</td>
-                    <td>{totalQty}</td>
+                    <td className="col-qty">{totalQty}</td>
                     <td>${total.toFixed(2)}</td>
                     <td>
                       <span className={`payment-badge payment-${payType}`}>
@@ -407,4 +402,3 @@ function SalesJournal() {
 }
 
 export default SalesJournal;
-
