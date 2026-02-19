@@ -258,6 +258,7 @@ function SalesRegister() {
         paymentType: 'credit',
         customerName,
         customerPhone,
+        debtorId: selectedDebtorId,   // ← tells dataService exactly which debtor record to update
         photoUrl,
         repaymentDate,
         isDebt: true,
