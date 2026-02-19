@@ -342,7 +342,7 @@ class DataService {
     const newSale = {
       id: sale.id || this.generateId(),
       date: serverTime.toISOString(),
-      timestamp: serverTime.toISOString(), // For SalesRecord compatibility
+      timestamp: serverTime.toISOString(), // For SalesJournal compatibility
       items: sale.items,
       total: parseFloat(sale.total),
       total_amount: parseFloat(sale.total),
@@ -713,40 +713,47 @@ class DataService {
   }
 
   async syncToServer() {
-    if (this.syncInProgress || !this.isOnline) return;
-    
+    if (this.syncInProgress || !this.isOnline || !auth.currentUser) return;
+
     this.syncInProgress = true;
     const queue = await localforage.getItem(DATA_KEYS.SYNC_QUEUE) || [];
-    
+
     if (queue.length === 0) {
       this.syncInProgress = false;
       return { success: true, synced: 0 };
     }
-    
-    try {
-      // TODO: Replace with actual kadaele-services endpoint
-      // For now, we'll simulate a successful sync
-      console.log('Syncing to server:', queue.length, 'items');
-      
-      // Simulate API call
-      // const response = await fetch('https://kadaele-services.example.com/sync', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ items: queue }),
-      // });
-      
-      // if (response.ok) {
-        await localforage.setItem(DATA_KEYS.SYNC_QUEUE, []);
-        await localforage.setItem(DATA_KEYS.LAST_SYNC, new Date().toISOString());
-      // }
-      
-      this.syncInProgress = false;
-      return { success: true, synced: queue.length };
-    } catch (error) {
-      console.error('Sync failed:', error);
-      this.syncInProgress = false;
-      return { success: false, error: error.message };
+
+    console.log('Syncing queued items to Firebase:', queue.length);
+    const failed = [];
+    let synced = 0;
+
+    for (const item of queue) {
+      try {
+        // Queue items added by addSale have { type: 'sale', data: newSale }
+        if (item.type === 'sale' && item.data) {
+          await setDoc(doc(db, 'sales', item.data.id), {
+            ...item.data,
+            createdAt: serverTimestamp(),
+            date: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by the generic set() path have { key, value }
+        // These are bulk array writes — skip (they sync via dedicated methods)
+      } catch (error) {
+        console.error('Failed to sync queued item:', item, error);
+        failed.push(item); // keep failed items for next attempt
+      }
     }
+
+    // Persist only items that failed so they retry on next sync
+    await localforage.setItem(DATA_KEYS.SYNC_QUEUE, failed);
+    if (failed.length === 0) {
+      await localforage.setItem(DATA_KEYS.LAST_SYNC, new Date().toISOString());
+    }
+
+    this.syncInProgress = false;
+    return { success: failed.length === 0, synced, failed: failed.length };
   }
 
   async getLastSyncTime() {
