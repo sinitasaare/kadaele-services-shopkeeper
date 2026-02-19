@@ -55,7 +55,7 @@
 .date-range-label { font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
-/* ── Sticky bar: button + title + stat cards ── */
+/* ── Sticky bar: always pinned to top of the scroll container (.app-main) ── */
 .sj-sticky-bar {
   position: sticky;
   top: 0;
@@ -113,13 +113,13 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Table wrapper ──────────────────────────────────────────────────────────
-   overflow-x: auto  → horizontal scroll on narrow screens  ✓
-   overflow-y: NOT SET (do not add it) — if you set overflow-y here it
-   creates a new scroll container and breaks position:sticky on the thead.
-   The page's .app-main scroll container must remain the sole scroll
-   ancestor for both the sticky bar and the thead.
-────────────────────────────────────────────────────────────────────────── */
+/*
+  ── Table wrapper ──
+  overflow-x: auto  → allows horizontal scroll on small screens
+  NO overflow-y     → critical. Setting overflow-y would create a new scroll
+                      container and break position:sticky on the thead.
+                      .app-main must remain the sole scroll ancestor.
+*/
 .table-wrapper {
   overflow-x: auto;
   margin: 0 20px 20px;
@@ -136,16 +136,18 @@
   table-layout: auto;
 }
 
-/* ── Table header: sticky ──────────────────────────────────────────────────
-   position: sticky + top are both required.
-   The 'top' value is written at runtime by JS (applyTheadTop in
-   SalesJournal.jsx) to be exactly the sticky bar's rendered offsetHeight.
-   We set a safe fallback of 0px here; JS will overwrite it on first paint.
-   z-index must be higher than normal cells but lower than the sticky bar.
-────────────────────────────────────────────────────────────────────────── */
+/*
+  ── Table header: sticky ──
+  top: 0 is the CSS fallback only.
+  useLayoutEffect in SalesJournal.jsx overwrites it with the sticky bar's
+  exact offsetHeight before the first paint, so the header always lands
+  flush below the sticky bar regardless of filter panel state.
+  z-index: 20 keeps it above body rows (z-index: auto) but below the
+  sticky bar (z-index: 50).
+*/
 .sales-table thead {
   position: sticky;
-  top: 0;          /* JS overwrites this immediately after first render */
+  top: 0;
   z-index: 20;
   background-color: #f8f9fa;
 }
@@ -154,6 +156,7 @@
   font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--text-secondary); border-bottom: 2px solid var(--border);
   white-space: nowrap;
+  background-color: #f8f9fa;
 }
 .sales-table td {
   padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
