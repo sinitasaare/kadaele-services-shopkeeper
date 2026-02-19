@@ -134,14 +134,15 @@
   table-layout: auto;
 }
 
-.sales-table th, .sj-header-table th {
+.sales-table th {
   padding: 0.75rem 1rem; text-align: left; font-weight: 600;
   font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--text-secondary); border-bottom: 2px solid var(--border);
   white-space: nowrap;
   background-color: #f8f9fa;
   position: sticky;
-  /* top is set dynamically via JS (applyTheadTop) */
+  /* top is kept in sync with .sj-sticky-bar height via --sticky-bar-height CSS var */
+  top: var(--sticky-bar-height, 0px);
   z-index: 10;
 }
 .sales-table td {
