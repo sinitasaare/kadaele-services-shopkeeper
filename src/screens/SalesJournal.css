@@ -11,7 +11,7 @@
 
 /* ── Filter panel ── */
 .filters-section {
-  margin: 16px 20px 0;
+  margin: 0 20px;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -55,7 +55,7 @@
 .date-range-label { font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
-/* ── Sticky bar (button + title + cards) when filter is hidden ── */
+/* ── Sticky bar: button + title + stat cards ── */
 .sj-sticky-bar {
   position: sticky;
   top: 0;
@@ -64,17 +64,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 5px 0 12px;  /* 5px top gap from nav bar border */
-  /* subtle shadow to show content scrolling behind */
+  padding: 5px 0 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-/* Non-sticky version (when filter panel is open) */
-.sj-nonsticky-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 5px 0 0;
 }
 
 /* ── Action button wrapper ── */
@@ -122,15 +113,19 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Table wrapper ── */
+/* ── Table wrapper ──────────────────────────────────────────────────────────
+   overflow-x: auto  → horizontal scroll on narrow screens  ✓
+   overflow-y: NOT SET (do not add it) — if you set overflow-y here it
+   creates a new scroll container and breaks position:sticky on the thead.
+   The page's .app-main scroll container must remain the sole scroll
+   ancestor for both the sticky bar and the thead.
+────────────────────────────────────────────────────────────────────────── */
 .table-wrapper {
+  overflow-x: auto;
   margin: 0 20px 20px;
   background-color: var(--surface);
   border-radius: 0.75rem;
   box-shadow: var(--shadow-sm);
-  overflow-x: auto;
-  /* Allow thead sticky to work relative to viewport */
-  overflow-y: visible;
 }
 
 .sales-table {
@@ -141,12 +136,18 @@
   table-layout: auto;
 }
 
-/* Table header — sticky relative to viewport, below the sticky bar */
+/* ── Table header: sticky ──────────────────────────────────────────────────
+   position: sticky + top are both required.
+   The 'top' value is written at runtime by JS (applyTheadTop in
+   SalesJournal.jsx) to be exactly the sticky bar's rendered offsetHeight.
+   We set a safe fallback of 0px here; JS will overwrite it on first paint.
+   z-index must be higher than normal cells but lower than the sticky bar.
+────────────────────────────────────────────────────────────────────────── */
 .sales-table thead {
   position: sticky;
-  top: var(--sj-thead-top, 0px);
-  background-color: #f8f9fa;
+  top: 0;          /* JS overwrites this immediately after first render */
   z-index: 20;
+  background-color: #f8f9fa;
 }
 .sales-table th {
   padding: 0.75rem 1rem; text-align: left; font-weight: 600;
@@ -167,19 +168,17 @@
 /* Items cell */
 .items-cell { white-space: nowrap !important; font-size: 0.8125rem; color: var(--text-secondary); }
 
-/* Merged cells: Date, Time, Pay Type, Customer — vertically centred, no bottom border between item rows */
+/* Merged cells: Date, Time, Pay Type, Customer — vertically centred */
 .merged-cell {
   vertical-align: middle;
-  border-bottom: 2px solid var(--border) !important; /* thicker separator between sales */
+  border-bottom: 2px solid var(--border) !important;
 }
 
-/* First row of a sale — use a mild top border to visually group */
-.sale-first-row td {
-  border-top: 2px solid rgba(102, 126, 234, 0.15);
-}
+/* First row of a sale — mild top border to visually group */
+.sale-first-row td { border-top: 2px solid rgba(102, 126, 234, 0.15); }
 .sale-first-row:first-child td { border-top: none; }
 
-/* Continuation rows — no top border (the merged cells span them) */
+/* Continuation rows — no top border */
 .sale-continuation-row td { border-top: none; }
 
 /* Payment badges */
@@ -198,7 +197,7 @@
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  .filters-section { margin: 12px 15px 0; }
+  .filters-section { margin: 0 15px; }
   .filter-btn-wrapper { padding: 0 15px; }
   .table-title { margin: 0 15px; }
   .stats-boxes { margin: 0 15px; }
