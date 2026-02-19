@@ -38,10 +38,11 @@ function SalesJournal() {
   const theadRef     = useRef(null);
 
   const applyTheadTop = useCallback(() => {
-    if (!stickyBarRef.current || !theadRef.current) return;
+    if (!stickyBarRef.current) return;
     const topVal = `${stickyBarRef.current.offsetHeight}px`;
-    // position:sticky works on <th>, not <thead> — set top on every th cell
-    theadRef.current.querySelectorAll('th').forEach(th => { th.style.top = topVal; });
+    // Set as a CSS variable on the container so the th sticky rule picks it up
+    // declaratively — more reliable than setting inline styles on each th.
+    stickyBarRef.current.closest('.sales-record')?.style.setProperty('--sticky-bar-height', topVal);
   }, []);
 
   // Runs after every render — covers filter toggle, data load, any re-render.
