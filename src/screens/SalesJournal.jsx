@@ -21,49 +21,30 @@ function SalesJournal() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
-  // bodyTheadRef    → hidden <thead> in body table (drives natural col widths)
-  // stickyTheadRef  → visible <thead> in sticky bar (mirrors those widths)
-  // headerWrapRef   → .sj-header-wrapper (scrolls in sync with body wrapper)
-  // bodyWrapRef     → .table-wrapper (the scroll master)
-  const bodyTheadRef   = useRef(null);
-  const stickyTheadRef = useRef(null);
-  const headerWrapRef  = useRef(null);
-  const bodyWrapRef    = useRef(null);
+  // stickyBarRef → .sj-sticky-bar whose rendered height we observe
+  // theadRef     → <thead> whose `top` we write dynamically so it always
+  //                pins exactly 1 px below the sticky bar's bottom edge
+  const stickyBarRef = useRef(null);
+  const theadRef     = useRef(null);
 
-  // Reads widths from the body thead's th cells and writes them to the
-  // sticky thead's th cells. Called after every render and on resize.
-  const syncColWidths = useCallback(() => {
-    if (!bodyTheadRef.current || !stickyTheadRef.current) return;
-    const sourceCells = bodyTheadRef.current.querySelectorAll('th');
-    const targetCells = stickyTheadRef.current.querySelectorAll('th');
-    sourceCells.forEach((th, i) => {
-      if (targetCells[i]) {
-        targetCells[i].style.width = `${th.offsetWidth}px`;
-        targetCells[i].style.minWidth = `${th.offsetWidth}px`;
-      }
-    });
+  // Measures the sticky bar's current height and writes it (+ 1 px) as the
+  // thead's top offset. Using offsetHeight keeps us in layout coordinates
+  // so the value is correct whether the bar is mid-scroll or fully locked.
+  const syncTheadTop = useCallback(() => {
+    if (!stickyBarRef.current || !theadRef.current) return;
+    const barHeight = stickyBarRef.current.offsetHeight;
+    theadRef.current.style.top = `${barHeight + 1}px`;
   }, []);
 
-  // Run after every render (data changes, filter changes, etc.)
-  useEffect(() => { syncColWidths(); });
-
-  // Also run whenever the body table resizes (e.g. window resize)
+  // Run once on mount and again whenever the sticky bar changes height
+  // (filter panel opens/closes, orientation change, font scaling, etc.)
   useEffect(() => {
-    if (!bodyTheadRef.current) return;
-    const ro = new ResizeObserver(syncColWidths);
-    ro.observe(bodyTheadRef.current.closest('table'));
+    syncTheadTop();
+    if (!stickyBarRef.current) return;
+    const ro = new ResizeObserver(syncTheadTop);
+    ro.observe(stickyBarRef.current);
     return () => ro.disconnect();
-  }, [syncColWidths]);
-
-  // Keeps the header wrapper scrolled in sync with the body wrapper
-  useEffect(() => {
-    const body   = bodyWrapRef.current;
-    const header = headerWrapRef.current;
-    if (!body || !header) return;
-    const onScroll = () => { header.scrollLeft = body.scrollLeft; };
-    body.addEventListener('scroll', onScroll, { passive: true });
-    return () => body.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [syncTheadTop]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
@@ -186,14 +167,13 @@ function SalesJournal() {
   const grandTotal   = filteredSales.reduce((sum, s) => sum + getSaleTotal(s), 0);
   const btnLabel     = !showFilters ? 'Filter Sales' : showApply ? 'Apply Filter' : 'Close Filter';
 
-  // Shared header labels
   const HEADERS = ['Date', 'Time', 'Product', 'Qty', 'Sale Total', 'Payment', 'Customer'];
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="sales-record">
 
-      {/* Filter panel — appears above everything when open */}
+      {/* Filter panel */}
       {showFilters && (
         <div className="filters-section">
           <div className="filter-group">
@@ -246,11 +226,11 @@ function SalesJournal() {
         </div>
       )}
 
-      {/* ── Sticky bar ──────────────────────────────────────────────────────
-           position:sticky; top:0. The visible header table is the last
-           child — pinned permanently to the bar's bottom edge.
-      ────────────────────────────────────────────────────────────────────── */}
-      <div className="sj-sticky-bar">
+      {/* ── Sticky bar ─────────────────────────────────────────────────────
+           ref={stickyBarRef} — its height is observed by ResizeObserver
+           and written to theadRef's `top` style via syncTheadTop().
+      ─────────────────────────────────────────────────────────────────── */}
+      <div className="sj-sticky-bar" ref={stickyBarRef}>
         <div className="filter-btn-wrapper">
           <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
         </div>
@@ -265,32 +245,19 @@ function SalesJournal() {
             <div className="stat-value">${grandTotal.toFixed(2)}</div>
           </div>
         </div>
-
-        {/* Visible sticky header — widths are mirrored from the body thead below */}
-        <div className="sj-header-wrapper" ref={headerWrapRef}>
-          <table className="sj-header-table">
-            <thead ref={stickyTheadRef}>
-              <tr>
-                {HEADERS.map((h, i) => (
-                  <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-          </table>
-        </div>
       </div>
 
-      {/* ── Body table ──────────────────────────────────────────────────────
-           table-layout:auto — browser sizes columns to fit content naturally.
-           A hidden <thead> (visibility:hidden) lives here so the browser
-           includes header text in column width calculations. syncColWidths()
-           reads its offsetWidths and mirrors them to the sticky header above.
-      ────────────────────────────────────────────────────────────────────── */}
-      <div className="table-wrapper" ref={bodyWrapRef}>
+      {/* ── Table ──────────────────────────────────────────────────────────
+           The wrapper scrolls horizontally. The thead inside it is
+           position:sticky — its `top` is set in JS to always sit exactly
+           1 px below the sticky bar above. Because the thead lives inside
+           the same scroll container as the tbody, horizontal scroll carries
+           both together naturally.
+      ─────────────────────────────────────────────────────────────────── */}
+      <div className="table-wrapper">
         <table className="sales-table">
 
-          {/* Hidden thead — drives column widths, invisible to the user */}
-          <thead ref={bodyTheadRef} className="sj-ghost-thead">
+          <thead ref={theadRef} className="sj-thead">
             <tr>
               {HEADERS.map((h, i) => (
                 <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
