@@ -2,11 +2,15 @@
    SalesJournal.css
    ============================================================ */
 
+/* --bar-height is set dynamically in JS via ResizeObserver on .sj-sticky-bar.
+   It is written onto .sales-record so both the bar and the thead can
+   reference the same value. Default 0px prevents any flash before JS runs. */
 .sales-record {
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 0;
+  --bar-height: 0px;
 }
 
 /* ── Filter panel ── */
@@ -56,10 +60,10 @@
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
 /* ── Sticky bar ─────────────────────────────────────────────────────────────
-   position:sticky keeps this bar locked to the top of the viewport while
-   the page scrolls. Its rendered height is observed in JS and used to set
-   the thead's `top` offset so the header row always pins exactly 1 px below
-   this bar's bottom edge regardless of how tall the bar grows or shrinks.
+   position:sticky + top:0 locks this bar to the top of .app-main (the
+   scroll container). Its rendered height is measured by ResizeObserver in JS
+   and written as --bar-height on .sales-record so the thead below can use
+   top: var(--bar-height) to always sit flush under this bar's bottom edge.
 ────────────────────────────────────────────────────────────────────────── */
 .sj-sticky-bar {
   position: sticky;
@@ -116,12 +120,10 @@
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
 /* ── Table wrapper ──────────────────────────────────────────────────────────
-   overflow-x:auto makes this the horizontal scroll container.
-   Both the sticky thead and the tbody rows live inside it, so they scroll
-   left/right together as one unit.
-   overflow-y must NOT be set (leave it as visible/default) — if it were
-   set to anything other than visible, it would create a new stacking context
-   and break position:sticky on the thead inside it.
+   overflow-x:auto is the horizontal scroll container. thead and tbody both
+   live inside it so they scroll left/right as one unit.
+   overflow-y must remain unset — setting it would create a new stacking
+   context and break position:sticky on the thead inside.
 ────────────────────────────────────────────────────────────────────────── */
 .table-wrapper {
   overflow-x: auto;
@@ -132,28 +134,24 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* ── Sales table ─────────────────────────────────────────────────────────────
-   table-layout:auto — the browser measures each column's content and sizes
-   columns to fit naturally. No fixed widths are set anywhere.
-────────────────────────────────────────────────────────────────────────── */
+/* ── Sales table ── */
 .sales-table {
   width: 100%;
-  min-width: max-content;   /* prevents columns from squashing on narrow screens */
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 0.875rem;
   table-layout: auto;
 }
 
 /* ── Sticky thead ────────────────────────────────────────────────────────────
-   position:sticky + z-index keeps the header row visually above the body
-   rows as the user scrolls down. `top` is NOT set in CSS — it is written
-   dynamically in JS (syncTheadTop) to always equal stickyBarRef.offsetHeight
-   + 1px, so the header locks immediately below the sticky bar no matter
-   how tall that bar is at any given moment.
+   top: var(--bar-height) — this CSS custom property is updated in JS every
+   time the sticky bar changes height, ensuring the header row always locks
+   flush against the bottom edge of .sj-sticky-bar inside the same scroll
+   container (.app-main). No JS viewport math needed.
 ────────────────────────────────────────────────────────────────────────── */
 .sj-thead {
   position: sticky;
-  /* `top` is set by JS — do not hardcode it here */
+  top: var(--bar-height);
   z-index: 10;
 }
 
