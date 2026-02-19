@@ -66,7 +66,7 @@
    top: var(--bar-height) to always sit flush under this bar's bottom edge.
 ────────────────────────────────────────────────────────────────────────── */
 .sj-sticky-bar {
-  position: sticky;
+  
   top: 0;
   z-index: 50;
   background-color: var(--background, #f5f5f5);
@@ -150,8 +150,8 @@
    container (.app-main). No JS viewport math needed.
 ────────────────────────────────────────────────────────────────────────── */
 .sj-thead {
-  position: sticky;
-  top: var(--bar-height);
+  
+  
   z-index: 10;
 }
 
