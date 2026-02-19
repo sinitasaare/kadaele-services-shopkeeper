@@ -258,12 +258,12 @@ function SalesRegister() {
     }
   };
   return (
-    <div className="container">
+    <div className="sr-container">
 
       {/* Middle: Table with scrollable body */}
-      <div className="catalogue-area">
-        <div className="catalogue-wrapper">
-          <table className="catalogue-table">
+      <div className="sr-catalogue-area">
+        <div className="sr-catalogue-wrapper">
+          <table className="sr-catalogue-table">
             <thead>
               <tr>
                 <th>Qty</th>
@@ -276,14 +276,14 @@ function SalesRegister() {
             <tbody>
               {catalogue.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="catalogue-empty">
+                  <td colSpan="5" className="sr-catalogue-empty">
                     Catalogue is empty
                   </td>
                 </tr>
               ) : (
                 catalogue.map(item => (
                   <tr key={item.id}>
-                    <td className="qty-cell">
+                    <td className="sr-qty-cell">
                       <input
                         type="number"
                         value={item.qty}
@@ -292,9 +292,9 @@ function SalesRegister() {
                       />
                     </td>
                     <td>{item.name}</td>
-                    <td className="price-cell">${item.price.toFixed(2)}</td>
-                    <td className="total-cell">${(item.price * (parseInt(item.qty, 10) || 0)).toFixed(2)}</td>
-                    <td className="edit-cell">
+                    <td className="sr-price-cell">${item.price.toFixed(2)}</td>
+                    <td className="sr-total-cell">${(item.price * (parseInt(item.qty, 10) || 0)).toFixed(2)}</td>
+                    <td className="sr-edit-cell">
                       <button onClick={() => removeFromCatalogue(item.id)}>×</button>
                     </td>
                   </tr>
@@ -306,22 +306,22 @@ function SalesRegister() {
       </div>
 
       {/* Bottom Section - FIXED at screen bottom */}
-      <div className="bottom-section">
-        <div className="cart-total">
+      <div className="sr-bottom-section">
+        <div className="sr-cart-total">
           <span>Total:</span>
-          <span className="total-amount">{calculateTotal().toFixed(2)}</span>
+          <span className="sr-total-amount">{calculateTotal().toFixed(2)}</span>
         </div>
         
-        <div className="payment-buttons">
+        <div className="sr-payment-buttons">
           <button 
-            className="btn-credit" 
+            className="sr-btn-credit" 
             onClick={handlePayCredit}
             disabled={isProcessing}
           >
             Buy on Credit
           </button>
           <button 
-            className="btn-cash" 
+            className="sr-btn-cash" 
             onClick={handlePayCash}
             disabled={isProcessing}
           >
@@ -330,10 +330,10 @@ function SalesRegister() {
         </div>
 
         {/* Search at bottom */}
-        <div className="search-section">
+        <div className="sr-search-section">
           <input
             type="text"
-            className="search-input"
+            className="sr-search-input"
             placeholder="Type to search goods..."
             value={searchTerm}
             onChange={(e) => {
@@ -346,18 +346,18 @@ function SalesRegister() {
             }}
           />
           {showResults && filteredGoods.length > 0 && (
-            <div className="search-results">
+            <div className="sr-search-results">
               {filteredGoods.map(good => (
                 <div
                   key={good.id}
-                  className="search-result-item"
+                  className="sr-search-result-item"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleItemClick(good);
                   }}
                 >
-                  <span className="item-name">{good.name}</span>
-                  <span className="item-price">${good.price.toFixed(2)}</span>
+                  <span className="sr-item-name">{good.name}</span>
+                  <span className="sr-item-price">${good.price.toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -367,18 +367,18 @@ function SalesRegister() {
 
       {/* Quantity Modal */}
       {showQuantityModal && selectedItem && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="sr-modal-overlay">
+          <div className="sr-modal-content">
             <h2>Add to Cart</h2>
             <p><strong>{selectedItem.name}</strong></p>
-            <p className="item-price-display">Price: ${selectedItem.price.toFixed(2)}</p>
+            <p className="sr-item-price-display">Price: ${selectedItem.price.toFixed(2)}</p>
             
-            <div className="quantity-input-section">
+            <div className="sr-quantity-input-section">
               <label htmlFor="quantity-input">Quantity:</label>
               <input
                 type="number"
                 id="quantity-input"
-                className="quantity-input"
+                className="sr-quantity-input"
                 value={quantityToAdd}
                 onChange={(e) => setQuantityToAdd(e.target.value)}
                 placeholder="Enter quantity"
@@ -387,9 +387,9 @@ function SalesRegister() {
               />
             </div>
 
-            <div className="modal-buttons">
+            <div className="sr-modal-buttons">
               <button 
-                className="btn-cancel" 
+                className="sr-btn-cancel" 
                 onClick={() => {
                   setShowQuantityModal(false);
                   setSelectedItem(null);
@@ -399,7 +399,7 @@ function SalesRegister() {
                 Cancel
               </button>
               <button 
-                className="btn-confirm" 
+                className="sr-btn-confirm" 
                 onClick={confirmAddItem}
               >
                 Add to Cart
@@ -411,19 +411,19 @@ function SalesRegister() {
 
       {/* Cash Payment Popup */}
       {showCashPopup && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="sr-modal-overlay">
+          <div className="sr-modal-content">
             <h2>Confirm Payment</h2>
             <p>Are you sure you want to proceed with this cash payment?</p>
-            <div className="modal-buttons">
+            <div className="sr-modal-buttons">
               <button 
-                className="btn-cancel" 
+                className="sr-btn-cancel" 
                 onClick={() => setShowCashPopup(false)}
               >
                 Cancel
               </button>
               <button 
-                className="btn-confirm" 
+                className="sr-btn-confirm" 
                 onClick={confirmCashPayment}
               >
                 Confirm
@@ -435,10 +435,10 @@ function SalesRegister() {
 
       {/* Credit Sale Modal */}
       {showCreditModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="sr-modal-overlay">
+          <div className="sr-modal-content">
             <h2>Buy on Credit</h2>
-            <form className="credit-form" onSubmit={confirmCreditSale}>
+            <form className="sr-credit-form" onSubmit={confirmCreditSale}>
               <div style={{position: 'relative'}}>
                 <label htmlFor="debtor-name">Debtor Name:</label>
                 <input
@@ -502,23 +502,23 @@ function SalesRegister() {
                   required
                 />
               </div>
-              <div className="photo-section">
+              <div className="sr-photo-section">
                 <label>Photo of Credit Book (Optional):</label>
                 <button 
                   type="button" 
-                  className="btn-photo"
+                  className="sr-btn-photo"
                   onClick={takeCreditPhoto}
                 >
                   {capturedPhoto ? '📷 Retake Photo' : '📷 Take Photo'}
                 </button>
                 {capturedPhoto && (
-                  <img src={capturedPhoto} alt="Credit book" className="photo-preview" />
+                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />
                 )}
               </div>
-              <div className="modal-buttons">
+              <div className="sr-modal-buttons">
                 <button
                   type="button"
-                  className="btn-cancel"
+                  className="sr-btn-cancel"
                   onClick={() => {
                     setShowCreditModal(false);
                     setCustomerName('');
@@ -529,7 +529,7 @@ function SalesRegister() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-confirm">
+                <button type="submit" className="sr-btn-confirm">
                   Save
                 </button>
               </div>
