@@ -55,7 +55,12 @@
 .date-range-label { font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
-/* ── Sticky bar ── */
+/* ── Sticky bar ─────────────────────────────────────────────────────────────
+   position:sticky keeps this bar locked to the top of the viewport while
+   the page scrolls. Its rendered height is observed in JS and used to set
+   the thead's `top` offset so the header row always pins exactly 1 px below
+   this bar's bottom edge regardless of how tall the bar grows or shrinks.
+────────────────────────────────────────────────────────────────────────── */
 .sj-sticky-bar {
   position: sticky;
   top: 0;
@@ -64,7 +69,7 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 5px 0 0;
+  padding: 5px 0 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -110,66 +115,67 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Sticky header table ────────────────────────────────────────────────────
-   table-layout:fixed — column widths are written by syncColWidths() from
-   the body table's ghost thead. The wrapper scrolls horizontally in sync
-   with .table-wrapper via JS (if needed) but widths come from the body.
+/* ── Table wrapper ──────────────────────────────────────────────────────────
+   overflow-x:auto makes this the horizontal scroll container.
+   Both the sticky thead and the tbody rows live inside it, so they scroll
+   left/right together as one unit.
+   overflow-y must NOT be set (leave it as visible/default) — if it were
+   set to anything other than visible, it would create a new stacking context
+   and break position:sticky on the thead inside it.
 ────────────────────────────────────────────────────────────────────────── */
-.sj-header-wrapper {
-  overflow-x: hidden; /* body wrapper is the scroll master */
-  margin: 0 20px;
-  background-color: #f8f9fa;
-  border-radius: 0.75rem 0.75rem 0 0;
-  border: 1px solid var(--border);
-  border-bottom: none;
-}
-
-.sj-header-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed; /* widths set by syncColWidths() */
-  font-size: 0.875rem;
-}
-
-.sj-header-table th {
-  padding: 0.75rem 1rem; text-align: left; font-weight: 600;
-  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--text-secondary);
-  background-color: #f8f9fa;
-  border-bottom: 2px solid var(--border);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-/* ── Body table wrapper ── */
 .table-wrapper {
   overflow-x: auto;
   margin: 0 20px 20px;
   background-color: var(--surface);
-  border-radius: 0 0 0.75rem 0.75rem;
+  border-radius: 0.75rem;
   border: 1px solid var(--border);
-  border-top: none;
   box-shadow: var(--shadow-sm);
 }
 
-/* ── Body table — table-layout:auto lets browser fit columns to content ── */
+/* ── Sales table ─────────────────────────────────────────────────────────────
+   table-layout:auto — the browser measures each column's content and sizes
+   columns to fit naturally. No fixed widths are set anywhere.
+────────────────────────────────────────────────────────────────────────── */
 .sales-table {
   width: 100%;
-  min-width: max-content;
+  min-width: max-content;   /* prevents columns from squashing on narrow screens */
   border-collapse: collapse;
   font-size: 0.875rem;
   table-layout: auto;
 }
 
-/* Ghost thead — invisible but participates in column width calculation */
-.sj-ghost-thead {
-  visibility: hidden;
-  position: absolute; /* takes it out of flow so it adds no height */
+/* ── Sticky thead ────────────────────────────────────────────────────────────
+   position:sticky + z-index keeps the header row visually above the body
+   rows as the user scrolls down. `top` is NOT set in CSS — it is written
+   dynamically in JS (syncTheadTop) to always equal stickyBarRef.offsetHeight
+   + 1px, so the header locks immediately below the sticky bar no matter
+   how tall that bar is at any given moment.
+────────────────────────────────────────────────────────────────────────── */
+.sj-thead {
+  position: sticky;
+  /* `top` is set by JS — do not hardcode it here */
+  z-index: 10;
 }
 
+.sj-thead th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background-color: #f8f9fa;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+/* ── Body rows ── */
 .sales-table td {
-  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
-  color: var(--text-primary); white-space: nowrap;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 .sales-table tr:last-child td { border-bottom: none; }
 .sales-table tbody tr:hover { background-color: rgba(102, 126, 234, 0.03); }
@@ -206,8 +212,7 @@
   .stats-boxes { margin: 0 15px; }
   .stat-box { width: 32.5%; padding: 0.55rem 0.6rem; }
   .stat-value { font-size: 0.9rem; }
-  .sj-header-wrapper { margin: 0 15px; }
   .table-wrapper { margin: 0 15px 15px; }
-  .sj-header-table th, .sales-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
+  .sj-thead th, .sales-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
