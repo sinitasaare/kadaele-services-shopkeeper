@@ -9,7 +9,7 @@
   padding: 0;
 }
 
-/* ── Filter panel — appears above sticky bar when open ── */
+/* ── Filter panel ── */
 .filters-section {
   margin: 0 20px 12px;
   background-color: var(--surface);
@@ -55,11 +55,7 @@
 .date-range-label { font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
-/* ── Sticky bar ─────────────────────────────────────────────────────────────
-   Sticks to top:0 of .app-main (the scroll container).
-   The header table is the last child — its bottom is always the bar's
-   bottom edge. No JS measurement ever needed.
-────────────────────────────────────────────────────────────────────────── */
+/* ── Sticky bar ── */
 .sj-sticky-bar {
   position: sticky;
   top: 0;
@@ -72,7 +68,6 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-/* ── Action button wrapper ── */
 .filter-btn-wrapper {
   display: flex;
   justify-content: center;
@@ -92,13 +87,11 @@
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-/* ── Table title ── */
 .table-title {
   font-size: 1.125rem; font-weight: 600; color: #764ba2;
   margin: 0 20px; text-align: center;
 }
 
-/* ── Stats cards ── */
 .stats-boxes {
   display: flex; justify-content: space-between;
   margin: 0 20px; gap: 0;
@@ -117,9 +110,13 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Header table wrapper — sits at the bottom of .sj-sticky-bar ── */
+/* ── Sticky header table ────────────────────────────────────────────────────
+   table-layout:fixed — column widths are written by syncColWidths() from
+   the body table's ghost thead. The wrapper scrolls horizontally in sync
+   with .table-wrapper via JS (if needed) but widths come from the body.
+────────────────────────────────────────────────────────────────────────── */
 .sj-header-wrapper {
-  overflow-x: auto;
+  overflow-x: hidden; /* body wrapper is the scroll master */
   margin: 0 20px;
   background-color: #f8f9fa;
   border-radius: 0.75rem 0.75rem 0 0;
@@ -130,7 +127,7 @@
 .sj-header-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: fixed; /* widths set by syncColWidths() */
   font-size: 0.875rem;
 }
 
@@ -141,9 +138,10 @@
   background-color: #f8f9fa;
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
+  overflow: hidden;
 }
 
-/* ── Body table wrapper — no top radius, connects flush to header ── */
+/* ── Body table wrapper ── */
 .table-wrapper {
   overflow-x: auto;
   margin: 0 20px 20px;
@@ -154,41 +152,40 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* ── Body table — table-layout:auto lets browser fit columns to content ── */
 .sales-table {
   width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 0.875rem;
-  table-layout: fixed;
+  table-layout: auto;
+}
+
+/* Ghost thead — invisible but participates in column width calculation */
+.sj-ghost-thead {
+  visibility: hidden;
+  position: absolute; /* takes it out of flow so it adds no height */
 }
 
 .sales-table td {
   padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
-  color: var(--text-primary); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--text-primary); white-space: nowrap;
 }
 .sales-table tr:last-child td { border-bottom: none; }
 .sales-table tbody tr:hover { background-color: rgba(102, 126, 234, 0.03); }
 
-/* QTY column — centered */
 .col-qty { text-align: center !important; }
-
-/* Items cell */
 .items-cell { font-size: 0.8125rem; color: var(--text-secondary); }
 
-/* Merged cells — vertically centred */
 .merged-cell {
   vertical-align: middle;
   border-bottom: 2px solid var(--border) !important;
 }
 
-/* First row of a sale — mild top border to visually group */
 .sale-first-row td { border-top: 2px solid rgba(102, 126, 234, 0.15); }
 .sale-first-row:first-child td { border-top: none; }
-
-/* Continuation rows — no top border */
 .sale-continuation-row td { border-top: none; }
 
-/* Payment badges */
 .payment-badge {
   display: inline-block; padding: 0.2rem 0.55rem; border-radius: 0.375rem;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
@@ -196,7 +193,6 @@
 .payment-cash   { background-color: #d1fae5; color: #065f46; }
 .payment-credit { background-color: #fee2e2; color: #991b1b; }
 
-/* Empty state */
 .empty-cell {
   text-align: center; padding: 3rem 1rem;
   color: var(--text-secondary); font-style: italic;
