@@ -5,36 +5,28 @@ import './SalesRecord.css';
 function SalesRecord() {
   const [purchases, setPurchases] = useState([]);
   const [filteredPurchases, setFilteredPurchases] = useState([]);
+
+  // ── Pending (in-panel) filter state ──
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('today');
   const [selectedDate, setSelectedDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+
+  // ── Applied (committed) filter state ──
   const [appliedPaymentFilter, setAppliedPaymentFilter] = useState('all');
   const [appliedDateFilter, setAppliedDateFilter] = useState('today');
   const [appliedSelectedDate, setAppliedSelectedDate] = useState('');
   const [appliedStartDate, setAppliedStartDate] = useState('');
   const [appliedEndDate, setAppliedEndDate] = useState('');
-  const [filtersChanged, setFiltersChanged] = useState(false);
 
-  useEffect(() => {
-    loadPurchases();
-  }, []);
+  const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => { loadPurchases(); }, []);
 
   useEffect(() => {
     applyFilters();
   }, [purchases, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
-
-  useEffect(() => {
-    const changed =
-      paymentFilter !== appliedPaymentFilter ||
-      dateFilter !== appliedDateFilter ||
-      selectedDate !== appliedSelectedDate ||
-      startDate !== appliedStartDate ||
-      endDate !== appliedEndDate;
-    setFiltersChanged(changed);
-  }, [paymentFilter, dateFilter, selectedDate, startDate, endDate, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadPurchases = async () => {
     const data = await dataService.getPurchases();
@@ -52,8 +44,7 @@ function SalesRecord() {
       const today = new Date().toLocaleDateString();
       filtered = filtered.filter(p => {
         if (!(p.timestamp || p.createdAt)) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
-        return purchaseDate === today;
+        return new Date(p.timestamp || p.createdAt).toLocaleDateString() === today;
       });
     }
 
@@ -70,105 +61,106 @@ function SalesRecord() {
       const start = new Date(appliedStartDate);
       const end = new Date(appliedEndDate);
       end.setHours(23, 59, 59, 999);
-
       filtered = filtered.filter(p => {
         if (!(p.timestamp || p.createdAt)) return false;
-        const purchaseDate = new Date(p.timestamp || p.createdAt);
-        return purchaseDate >= start && purchaseDate <= end;
+        const d = new Date(p.timestamp || p.createdAt);
+        return d >= start && d <= end;
       });
     }
 
     setFilteredPurchases(filtered);
   };
 
-  const toggleFilters = () => {
-    setShowFilters(prev => !prev);
+  // ── Is the current pending filter fully filled? ──
+  // "Today" is always complete. "Single Date" needs a date. "Range" needs both.
+  const isFilterComplete = () => {
+    if (dateFilter === 'today') return true;
+    if (dateFilter === 'single') return !!selectedDate;
+    if (dateFilter === 'range') return !!(startDate && endDate);
+    return false;
   };
 
-  const handleApplyFilters = () => {
-    if (!filtersChanged) return;
+  // ── Has anything changed vs. applied? ──
+  const hasChanged = () =>
+    paymentFilter !== appliedPaymentFilter ||
+    dateFilter !== appliedDateFilter ||
+    selectedDate !== appliedSelectedDate ||
+    startDate !== appliedStartDate ||
+    endDate !== appliedEndDate;
 
+  // Show "Apply Filter" label only when filter is complete AND something has changed
+  const showApply = isFilterComplete() && hasChanged();
+
+  const handleToggleOpen = () => {
+    setShowFilters(true);
+  };
+
+  const handleClose = () => {
+    // Revert pending selections back to last applied values
+    setPaymentFilter(appliedPaymentFilter);
+    setDateFilter(appliedDateFilter);
+    setSelectedDate(appliedSelectedDate);
+    setStartDate(appliedStartDate);
+    setEndDate(appliedEndDate);
+    setShowFilters(false);
+  };
+
+  const handleApply = () => {
     setAppliedPaymentFilter(paymentFilter);
     setAppliedDateFilter(dateFilter);
     setAppliedSelectedDate(selectedDate);
     setAppliedStartDate(startDate);
     setAppliedEndDate(endDate);
     setShowFilters(false);
+  };
 
-    setSelectedDate('');
-    setStartDate('');
-    setEndDate('');
-    setFiltersChanged(false);
+  const handleFilterButtonClick = () => {
+    if (!showFilters) {
+      handleToggleOpen();
+    } else if (showApply) {
+      handleApply();
+    } else {
+      handleClose();
+    }
   };
 
   const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
   };
 
+  const formatDisplayDate = (dateStr) =>
+    new Date(dateStr).toLocaleDateString('en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+
+  // ── Table title (reflects APPLIED filters only) ──
   const getTableTitle = () => {
-    let paymentText = 'All Sales';
-    if (appliedPaymentFilter === 'cash') paymentText = 'Cash Sales';
-    if (appliedPaymentFilter === 'credit') paymentText = 'Credit Sales';
+    const payMap = { all: 'All Sales', cash: 'Cash Sales', credit: 'Credit Sales' };
+    const label = payMap[appliedPaymentFilter] || 'All Sales';
 
-    if (appliedDateFilter === 'today') {
-      return `${paymentText} Today`;
-    }
+    if (appliedDateFilter === 'today') return `${label} Today`;
 
-    if (appliedDateFilter === 'single') {
-      if (appliedSelectedDate) {
-        const selectedDateObj = new Date(appliedSelectedDate);
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        yesterday.setHours(0, 0, 0, 0);
-        selectedDateObj.setHours(0, 0, 0, 0);
-
-        if (selectedDateObj.getTime() === yesterday.getTime()) {
-          return `${paymentText} Yesterday`;
-        }
-
-        const date = new Date(appliedSelectedDate).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        });
-        return `${paymentText} on ${date}`;
-      }
-      return `${paymentText} Today`;
+    if (appliedDateFilter === 'single' && appliedSelectedDate) {
+      return `${label} on ${formatDisplayDate(appliedSelectedDate)}`;
     }
 
     if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
-      const start = new Date(appliedStartDate).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      });
-      const end = new Date(appliedEndDate).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      });
-      return `${paymentText} from ${start} to ${end}`;
+      return `${label} from ${formatDisplayDate(appliedStartDate)} to ${formatDisplayDate(appliedEndDate)}`;
     }
 
-    return `${paymentText} Today`;
+    return `${label} Today`;
   };
 
   const formatDateTime = (timestamp) => {
     if (!timestamp) return { date: 'N/A', time: 'N/A' };
-
     let date;
     if (timestamp.seconds) {
       date = new Date(timestamp.seconds * 1000);
     } else {
       date = new Date(timestamp);
     }
-
     if (isNaN(date.getTime())) return { date: 'Invalid', time: 'Invalid' };
-
     return {
       date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
@@ -178,10 +170,16 @@ function SalesRecord() {
   const totalRecords = filteredPurchases.length;
   const grandTotal = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
 
+  const btnLabel = !showFilters
+    ? 'Filter Sales'
+    : showApply
+      ? 'Apply Filter'
+      : 'Close Filter';
+
   return (
     <div className="sales-record">
 
-      {/* ── Page header (sticky, mirrors old record-header pattern) ── */}
+      {/* ── Sticky page header ── */}
       <div className="record-header">
         <h2 className="screen-title">Sales Journal</h2>
       </div>
@@ -189,62 +187,50 @@ function SalesRecord() {
       {/* ── Filter panel ── */}
       {showFilters && (
         <div className="filters-section">
+
           <div className="filter-group">
-            <label>Payment Type:</label>
+            <label>Payment Type</label>
             <div className="filter-buttons">
-              <button
-                className={paymentFilter === 'all' ? 'filter-btn active' : 'filter-btn'}
-                onClick={() => setPaymentFilter('all')}
-              >
-                All Sales
-              </button>
-              <button
-                className={paymentFilter === 'cash' ? 'filter-btn active' : 'filter-btn'}
-                onClick={() => setPaymentFilter('cash')}
-              >
-                Cash Only
-              </button>
-              <button
-                className={paymentFilter === 'credit' ? 'filter-btn active' : 'filter-btn'}
-                onClick={() => setPaymentFilter('credit')}
-              >
-                Credit Only
-              </button>
+              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                <button
+                  key={val}
+                  className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                  onClick={() => setPaymentFilter(val)}
+                >
+                  {lbl}
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="filter-group">
-            <label>Date Filter:</label>
+            <label>Date Filter</label>
             <div className="filter-buttons">
-              <button
-                className={dateFilter === 'today' ? 'filter-btn active' : 'filter-btn'}
-                onClick={() => setDateFilter('today')}
-              >
-                Today
-              </button>
-              <button
-                className={dateFilter === 'single' ? 'filter-btn active' : 'filter-btn'}
-                onClick={() => setDateFilter('single')}
-              >
-                Single Date
-              </button>
-              <button
-                className={dateFilter === 'range' ? 'filter-btn active' : 'filter-btn'}
-                onClick={() => setDateFilter('range')}
-              >
-                Date Range
-              </button>
+              {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
+                <button
+                  key={val}
+                  className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                  onClick={() => {
+                    setDateFilter(val);
+                    setSelectedDate('');
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                >
+                  {lbl}
+                </button>
+              ))}
             </div>
           </div>
 
           {dateFilter === 'single' && (
             <div className="filter-group">
-              <label>Select Date:</label>
+              <label>Select Date</label>
               <input
                 type="date"
                 value={selectedDate}
                 max={getTodayDate()}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={e => setSelectedDate(e.target.value)}
                 className="date-input"
               />
             </div>
@@ -252,7 +238,7 @@ function SalesRecord() {
 
           {dateFilter === 'range' && (
             <div className="filter-group">
-              <label>Date Range:</label>
+              <label>Date Range</label>
               <div className="date-range-inputs">
                 <div className="date-range-field">
                   <label className="date-range-label">From:</label>
@@ -260,7 +246,7 @@ function SalesRecord() {
                     type="date"
                     value={startDate}
                     max={getTodayDate()}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    onChange={e => setStartDate(e.target.value)}
                     className="date-input"
                   />
                 </div>
@@ -270,30 +256,30 @@ function SalesRecord() {
                     type="date"
                     value={endDate}
                     max={getTodayDate()}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    onChange={e => setEndDate(e.target.value)}
                     className="date-input"
                   />
                 </div>
               </div>
             </div>
           )}
+
         </div>
       )}
 
-      {/* ── Filter toggle / apply button (mirrors old summary-btn feel) ── */}
-      <button
-        className="filter-toggle-btn"
-        onClick={showFilters ? (filtersChanged ? handleApplyFilters : toggleFilters) : toggleFilters}
-      >
-        {showFilters ? (filtersChanged ? 'Apply Filter' : 'Close Filter') : 'Filter Sales ▾'}
-      </button>
+      {/* ── Action button: centered, Add-Debtor gradient style ── */}
+      <div className="filter-btn-wrapper">
+        <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>
+          {btnLabel}
+        </button>
+      </div>
 
-      {/* ── Sub-header: dynamic title (mirrors old sub-header pattern) ── */}
+      {/* ── Dynamic purple table title ── */}
       <h3 className="table-title">{getTableTitle()}</h3>
 
-      {/* ── Stats summary boxes ── */}
+      {/* ── Stats cards ── */}
       <div className="stats-boxes">
-        <div className="stat-box stat-box-blue">
+        <div className="stat-box stat-box-purple">
           <div className="stat-label">Total Records</div>
           <div className="stat-value">{totalRecords}</div>
         </div>
@@ -320,12 +306,10 @@ function SalesRecord() {
           <tbody>
             {filteredPurchases.length === 0 ? (
               <tr>
-                <td colSpan="7" className="empty-cell">
-                  No sales records found
-                </td>
+                <td colSpan="7" className="empty-cell">No sales records found</td>
               </tr>
             ) : (
-              filteredPurchases.map((purchase) => {
+              filteredPurchases.map(purchase => {
                 const dateTime = formatDateTime(purchase.timestamp || purchase.createdAt);
                 const amount = parseFloat(purchase.total_amount) || 0;
                 const totalQty = purchase.items?.reduce(
