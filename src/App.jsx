@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import SalesRegister from './screens/SalesRegister';
 import SalesJournal from './screens/SalesJournal';
+import CashJournal from './screens/CashJournal';
 import Debtors from './screens/Debtors';
 import Inventory from './screens/Inventory';
 import Login from './components/Login';
@@ -10,9 +11,10 @@ import './App.css';
 
 const PAGES = [
   { name: 'SALES REGISTER', component: SalesRegister },
-  { name: 'SALES JOURNAL', component: SalesJournal },
-  { name: 'DEBTORS', component: Debtors },
-  { name: 'INVENTORY', component: Inventory },
+  { name: 'SALES JOURNAL',  component: SalesJournal  },
+  { name: 'CASH JOURNAL',   component: CashJournal   },
+  { name: 'DEBTORS',        component: Debtors       },
+  { name: 'INVENTORY',      component: Inventory     },
 ];
 
 function App() {
@@ -20,9 +22,10 @@ function App() {
   const [userEmail, setUserEmail] = useState('');
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Check if user is already logged in (persistent login)
     const checkAuth = async () => {
       const user = await dataService.checkPersistedLogin();
       if (user) {
@@ -31,8 +34,19 @@ function App() {
       }
       setIsCheckingAuth(false);
     };
-    
     checkAuth();
+  }, []);
+
+  // ── Online / Offline indicator ────────────────────────────────────────────
+  useEffect(() => {
+    const goOnline  = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online',  goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online',  goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
   }, []);
 
   const handleLoginSuccess = (user) => {
@@ -55,13 +69,10 @@ function App() {
     setCurrentPageIndex((prev) => (prev === PAGES.length - 1 ? 0 : prev + 1));
   };
 
-  // Show loading while checking auth
   if (isCheckingAuth) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
         height: '100vh',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
       }}>
@@ -88,8 +99,8 @@ function App() {
         </div>
         <div className="header-right">
           <span className="online-indicator">
-            <span className="online-dot"></span>
-            Online
+            <span className={`online-dot${isOnline ? '' : ' offline-dot'}`}></span>
+            {isOnline ? 'Online' : 'Offline'}
           </span>
           <button onClick={handleLogout} className="logout-btn" title="Logout">
             <LogOut size={20} />
