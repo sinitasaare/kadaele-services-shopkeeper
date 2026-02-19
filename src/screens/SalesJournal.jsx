@@ -191,11 +191,8 @@ function SalesJournal() {
   return (
     <div className="sales-record">
 
-      {/* Always-sticky bar: button + title + stat cards */}
+      {/* Always-sticky bar: title + stat cards + filter panel + column headers */}
       <div className="sj-sticky-bar" ref={stickyBarRef}>
-        <div className="filter-btn-wrapper">
-          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
-        </div>
         <h3 className="table-title">{getTableTitle()}</h3>
         <div className="stats-boxes">
           <div className="stat-box stat-box-purple">
@@ -208,82 +205,81 @@ function SalesJournal() {
           </div>
         </div>
 
-        {/* Column headers live inside the sticky bar so they always stay visible */}
-        <table className="sales-table sj-header-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Items</th>
-              <th className="col-qty">Qty</th>
-              <th>Total</th>
-              <th>Pay Type</th>
-              <th>Customer</th>
-            </tr>
-          </thead>
-        </table>
+        {/* Filter panel — inside sticky bar so button stays anchored below it */}
+        {showFilters && (
+          <div className="filters-section">
+            <div className="filter-group">
+              <label>Payment Type</label>
+              <div className="filter-buttons">
+                {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                  <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                    onClick={() => setPaymentFilter(val)}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div className="filter-group">
+              <label>Date Filter</label>
+              <div className="filter-buttons">
+                {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
+                  <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                    onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {dateFilter === 'single' && (
+              <div className="filter-group">
+                <label>Select Date</label>
+                <input type="date" value={selectedDate} max={getTodayStr()}
+                  onChange={e => setSelectedDate(e.target.value)} className="date-input" />
+              </div>
+            )}
+            {dateFilter === 'range' && (
+              <div className="filter-group">
+                <label>Date Range</label>
+                <div className="date-range-inputs">
+                  <div className="date-range-field">
+                    <label className="date-range-label">From:</label>
+                    <input type="date" value={startDate} max={getTodayStr()}
+                      onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
+                      className="date-input" />
+                  </div>
+                  <div className="date-range-field">
+                    <label className="date-range-label">To:</label>
+                    <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
+                      disabled={!startDate} onChange={e => setEndDate(e.target.value)}
+                      className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
+                  </div>
+                </div>
+                {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter button — always at the bottom of the sticky bar */}
+        <div className="filter-btn-wrapper">
+          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+        </div>
 
       </div>
 
-      {/* Filter panel — appears below sticky bar when open */}
-      {showFilters && (
-        <div className="filters-section">
-          <div className="filter-group">
-            <label>Payment Type</label>
-            <div className="filter-buttons">
-              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
-                <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
-                  onClick={() => setPaymentFilter(val)}>{lbl}</button>
-              ))}
-            </div>
-          </div>
-          <div className="filter-group">
-            <label>Date Filter</label>
-            <div className="filter-buttons">
-              {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
-                <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
-                  onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-          {dateFilter === 'single' && (
-            <div className="filter-group">
-              <label>Select Date</label>
-              <input type="date" value={selectedDate} max={getTodayStr()}
-                onChange={e => setSelectedDate(e.target.value)} className="date-input" />
-            </div>
-          )}
-          {dateFilter === 'range' && (
-            <div className="filter-group">
-              <label>Date Range</label>
-              <div className="date-range-inputs">
-                <div className="date-range-field">
-                  <label className="date-range-label">From:</label>
-                  <input type="date" value={startDate} max={getTodayStr()}
-                    onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
-                    className="date-input" />
-                </div>
-                <div className="date-range-field">
-                  <label className="date-range-label">To:</label>
-                  <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
-                    disabled={!startDate} onChange={e => setEndDate(e.target.value)}
-                    className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
-                </div>
-              </div>
-              {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Sales table
-          CRITICAL: .table-wrapper has overflow-x:auto ONLY — no overflow-y.
-          This keeps .app-main as the scroll ancestor for the sticky thead.
-          If you add overflow-y here the thead will stop being sticky.       */}
+      {/* Sales table — single unified table with thead + tbody together */}
       <div className="table-wrapper">
         <table className="sales-table">
+
+          <thead ref={theadRef}>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Product</th>
+              <th className="col-qty">Qty</th>
+              <th>Sale Total</th>
+              <th>Payment</th>
+              <th>Customer</th>
+            </tr>
+          </thead>
 
           <tbody>
             {filteredSales.length === 0 ? (
