@@ -1,1 +1,371 @@
+/* ============================================================
+   SalesJournal.css
+   ============================================================ */
+
+/* ── Root container ── */
+.sales-record {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0;
+}
+
+/* ── Sticky page header ── */
+.record-header {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 100;
+  padding: 20px 20px 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  width: 100%;
+}
+
+.record-header .screen-title {
+  margin: 0 auto;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #667eea;
+  width: 100%;
+}
+
+/* ── Filter panel ── */
+.filters-section {
+  margin: 0 20px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-group > label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Filter option pills inside the panel */
+.filter-btn {
+  padding: 0.4rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background-color: var(--background);
+  border: 1.5px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.filter-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+/* ── Date inputs ── */
+.date-input {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1.5px solid var(--border);
+  border-radius: 0.5rem;
+  background-color: var(--background);
+  color: var(--text-primary);
+  transition: border-color 0.2s ease;
+}
+
+.date-input:focus {
+  border-color: #667eea;
+}
+
+.date-input-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background-color: #f0f0f0;
+}
+
+.date-range-inputs {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.date-range-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-range-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.date-range-hint {
+  font-size: 0.75rem;
+  color: #a07ec0;
+  font-style: italic;
+  margin-top: 0.25rem;
+}
+
+/* ── Action button wrapper — always centered ── */
+.filter-btn-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px;
+}
+
+/* ── Main action button
+     Add-Debtor gradient style, 35% narrower than the natural 140px base
+     140px × 0.65 ≈ 91px  →  use 92px min-width  ── */
+.sales-filter-action-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  /* 35% narrower: cap width so button is compact */
+  min-width: 92px;
+  max-width: 92px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.sales-filter-action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* ── Dynamic table title — centered, purple ── */
+.table-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #764ba2;
+  margin: 0 20px;
+  text-align: center;
+}
+
+/* ── Stats cards
+     Layout: one floats left, one floats right
+     Width: 35% narrower than before
+     Previous flex: each was ~50% of the row  →  now ~32.5% each
+     Text: centered, all white ── */
+.stats-boxes {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 20px;
+  gap: 0;
+}
+
+.stat-box {
+  /* 35% narrower than half-width: roughly 32.5% of container */
+  width: 32.5%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  border-radius: 0.625rem;
+  padding: 0.65rem 0.8rem;
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  align-items: center;
+}
+
+/* Dark purple card */
+.stat-box-purple {
+  background: linear-gradient(135deg, #4c3a8f 0%, #2d1b5e 100%);
+}
+
+/* Dark green card */
+.stat-box-green {
+  background: linear-gradient(135deg, #0f6b50 0%, #064d38 100%);
+}
+
+/* All text in cards: white, centered */
+.stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+}
+
+/* ── Sales table ── */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 0 20px 20px;
+  background-color: var(--surface);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.sales-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  table-layout: auto;
+}
+
+.sales-table thead {
+  position: sticky;
+  top: 0;
+  background-color: #f8f9fa;
+  z-index: 10;
+}
+
+.sales-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+.sales-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.sales-table tr:last-child td {
+  border-bottom: none;
+}
+
+.sales-table tbody tr:hover {
+  background-color: rgba(102, 126, 234, 0.03);
+}
+
+/* Items cell: allow text wrapping */
+.items-cell {
+  white-space: normal !important;
+  max-width: 200px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+/* ── Payment type badges ── */
+.payment-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.payment-cash {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.payment-credit {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* ── Empty state ── */
+.empty-cell {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .record-header {
+    padding: 15px 15px 10px;
+  }
+
+  .record-header .screen-title {
+    font-size: 1.25rem;
+  }
+
+  .filters-section {
+    margin: 0 15px;
+  }
+
+  .filter-btn-wrapper {
+    padding: 0 15px;
+  }
+
+  .table-title {
+    margin: 0 15px;
+  }
+
+  .stats-boxes {
+    margin: 0 15px;
+  }
+
+  .stat-box {
+    width: 32.5%;
+    padding: 0.55rem 0.6rem;
+  }
+
+  .stat-value {
+    font-size: 0.9rem;
+  }
+
+  .table-wrapper {
+    margin: 0 15px 15px;
+  }
+
+  .sales-table th,
+  .sales-table td {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .date-range-inputs {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
