@@ -1,148 +1,116 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Package, AlertTriangle, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search } from 'lucide-react';
 import dataService from '../services/dataService';
 import './Inventory.css';
 
 function Inventory() {
   const [goods, setGoods] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredItems, setFilteredItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastSynced, setLastSynced] = useState(null);
+  const searchBarRef = useRef(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadGoods(); }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [goods, searchTerm]);
-
-  const loadData = async () => {
+  const loadGoods = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const loadedGoods = await dataService.getGoods();
-      console.log('📦 Loaded goods:', loadedGoods.length);
-      
-      // Sort by ID in ascending order
-      const sortedGoods = (loadedGoods || []).sort((a, b) => {
-        const idA = parseInt(a.id) || 0;
-        const idB = parseInt(b.id) || 0;
-        return idA - idB;
-      });
-      
-      setGoods(sortedGoods);
-    } catch (error) {
-      console.error('Error loading goods:', error);
-      setGoods([]);
+      // getGoods() pulls from Firebase when online and caches to localforage.
+      // When offline it falls back to the localforage cache automatically.
+      const data = await dataService.getGoods();
+      const sorted = (data || []).sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '')
+      );
+      setGoods(sorted);
+      setLastSynced(new Date());
+    } catch (err) {
+      console.error('Error loading goods:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = () => {
-    let filtered = goods;
-    if (searchTerm) {
-      filtered = goods.filter(item =>
-        item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.id?.toString().includes(searchTerm)
-      );
-    }
-    setFilteredItems(filtered);
-  };
+  const filtered = goods.filter(g =>
+    (g.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (g.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const getStockStatus = (stockLevel) => {
-    const level = stockLevel || 0;
-    if (level === 0) {
-      return { label: 'Out of Stock', className: 'out-of-stock', icon: <AlertTriangle size={16} /> };
-    } else if (level < 10) {
-      return { label: 'Low Stock', className: 'low-stock', icon: <AlertTriangle size={16} /> };
-    }
-    return { label: 'In Stock', className: 'in-stock', icon: <TrendingUp size={16} /> };
+  const getStockStatus = (qty) => {
+    if (qty === undefined || qty === null) return null;
+    if (qty <= 0)  return { label: 'Out of Stock', cls: 'out-of-stock' };
+    if (qty <= 5)  return { label: 'Low Stock',    cls: 'low-stock'    };
+    return           { label: 'In Stock',       cls: 'in-stock'     };
   };
-
-  if (loading) {
-    return (
-      <div className="inventory">
-          <div className="card empty-state">
-            <Package size={64} />
-            <h3>Loading inventory...</h3>
-          </div>
-      </div>
-    );
-  }
 
   return (
     <div className="inventory">
-      {/* FIXED HEADER */}
-      <div className="sticky-header">
-        <div className="inventory-header">
-          <div style={{ textAlign: 'center', width: '100%' }}>
-            <p className="screen-subtitle">View current stock levels ({goods.length} items)</p>
-          </div>
+
+      {/* ── Sticky search bar ── */}
+      <div className="inv-sticky-bar" ref={searchBarRef}>
+        <div className="inv-search-box">
+          <Search size={16} className="inv-search-icon" />
+          <input
+            type="text"
+            className="inv-search-input"
+            placeholder="Search by name or category…"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button className="inv-search-clear" onClick={() => setSearchTerm('')}>×</button>
+          )}
+        </div>
+        <div className="inv-meta-row">
+          <span className="inv-count">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
+          {lastSynced && (
+            <span className="inv-sync-label">
+              Synced {lastSynced.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* SCROLLABLE CONTENT */}
-      <div className="inventory-scrollable-content">
-        {filteredItems.length === 0 && !searchTerm ? (
-          <div className="card empty-state">
-            <Package size={64} />
-            <h3>No items found</h3>
-            <p>Products will sync from cloud automatically.</p>
-            <button onClick={loadData} style={{marginTop: '20px', padding: '10px 20px', cursor: 'pointer'}}>
-              Retry Sync
-            </button>
+      {/* ── Table ── */}
+      <div className="inv-table-wrapper">
+        {loading ? (
+          <div className="inv-empty">Loading inventory…</div>
+        ) : filtered.length === 0 ? (
+          <div className="inv-empty">
+            {searchTerm ? `No items matching "${searchTerm}"` : 'No goods found. Go online to sync from Firebase.'}
           </div>
         ) : (
-          <>
-          <div className="search-section">
-              <div className="search-box">
-                <Search size={18} />
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="Search items..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="table-wrapper">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Item Name</th>
-                    <th>Price</th>
-                    <th>Stock</th>
-                    <th>Status</th>
+          <table className="inv-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th className="inv-col-right">Price</th>
+                <th className="inv-col-center">Stock</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(good => {
+                const status = getStockStatus(good.stock_quantity);
+                return (
+                  <tr key={good.id}>
+                    <td className="inv-name-cell">{good.name || '—'}</td>
+                    <td className="inv-cat-cell">{good.category || '—'}</td>
+                    <td className="inv-col-right">${parseFloat(good.price || 0).toFixed(2)}</td>
+                    <td className="inv-col-center">{good.stock_quantity ?? '—'}</td>
+                    <td>
+                      {status ? (
+                        <span className={`inv-badge ${status.cls}`}>{status.label}</span>
+                      ) : '—'}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => {
-                    const status = getStockStatus(item.stock_quantity);
-                    return (
-                      <tr key={item.id}>
-                        <td>{item.id || 'N/A'}</td>
-                        <td>{item.name || 'Unknown'}</td>
-                        <td>${(item.price || 0).toFixed(2)}</td>
-                        <td>{item.stock_quantity || 0}</td>
-                        <td>
-                          <span className={`status-badge ${status.className}`}>
-                            {status.icon}
-                            {status.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
+
     </div>
   );
 }
