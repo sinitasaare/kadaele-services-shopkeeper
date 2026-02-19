@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import dataService from '../services/dataService';
 import './SalesJournal.css';
 
@@ -20,52 +20,56 @@ function SalesJournal() {
 
   const [showFilters, setShowFilters] = useState(false);
 
-  // ── Sticky header refs ────────────────────────────────────────────────────
-  // stickyBarRef  → the purple stats/button bar pinned at the top
-  // theadRef      → the <thead> we want to stick just below the bar
+  // ── Sticky refs ───────────────────────────────────────────────────────────
+  // The layout is:
+  //   .app-main  (overflow-y: auto  ← the ONLY scroll container)
+  //     .sales-record
+  //       .sj-sticky-bar   position:sticky top:0   ← pins to top of .app-main
+  //       .filters-section (optional, not sticky)
+  //       .table-wrapper   overflow-x:auto ONLY (no overflow-y)
+  //         <table>
+  //           <thead>       position:sticky top:??  ← needs to pin below the bar
   //
-  // HOW THIS WORKS (no CSS variables needed):
-  //   1. .table-wrapper has overflow-x:auto but NO overflow-y — so the page
-  //      scroll container (.app-main) is the sticky-positioning ancestor for
-  //      BOTH the bar AND the thead.  This is the fundamental requirement for
-  //      position:sticky on <thead> to work relative to the page.
-  //   2. We measure stickyBar.offsetHeight and write it directly to
-  //      thead.style.top.  We do this after every render, on ResizeObserver
-  //      callbacks (filter panel open/close changes bar height), and on
-  //      scroll (cheap, defensive).
+  // Because .table-wrapper has NO overflow-y, .app-main is the scroll ancestor
+  // for the thead too.  So position:sticky on thead works relative to .app-main.
+  //
+  // The thead's `top` must equal the bar's rendered height.  We write it
+  // with useLayoutEffect (runs synchronously after DOM mutations, before paint)
+  // so it is ALWAYS set correctly before the user ever sees the page.
   // ─────────────────────────────────────────────────────────────────────────
   const stickyBarRef = useRef(null);
   const theadRef     = useRef(null);
 
-  const applyTheadTop = useCallback(() => {
+  const syncTop = useCallback(() => {
     if (!stickyBarRef.current || !theadRef.current) return;
-    theadRef.current.style.top = `${stickyBarRef.current.offsetHeight}px`;
+    theadRef.current.style.top = stickyBarRef.current.offsetHeight + 'px';
   }, []);
 
-  // Runs after every render — covers filter toggle, data load, any re-render.
-  useEffect(() => { applyTheadTop(); });
+  // useLayoutEffect — fires after every DOM update, BEFORE the browser paints.
+  // This guarantees the thead top is always correct before anything is visible.
+  useLayoutEffect(() => {
+    syncTop();
+  });
 
-  // Covers the sticky bar resizing (filter panel opening/closing).
+  // ResizeObserver — catches the bar growing/shrinking when filter panel opens.
   useEffect(() => {
     if (!stickyBarRef.current) return;
-    const ro = new ResizeObserver(applyTheadTop);
+    const ro = new ResizeObserver(syncTop);
     ro.observe(stickyBarRef.current);
     return () => ro.disconnect();
-  }, [applyTheadTop]);
+  }, [syncTop]);
 
-  // Defensive scroll listener — the bar height is stable during scroll but
-  // this costs nothing and future-proofs against edge cases.
+  // Scroll listener — purely defensive, offsetHeight doesn't change on scroll
+  // but this future-proofs against any edge case for free.
   useEffect(() => {
-    const scroller = document.querySelector('.app-main') || window;
-    scroller.addEventListener('scroll', applyTheadTop, { passive: true });
-    return () => scroller.removeEventListener('scroll', applyTheadTop);
-  }, [applyTheadTop]);
+    const el = document.querySelector('.app-main') || window;
+    el.addEventListener('scroll', syncTop, { passive: true });
+    return () => el.removeEventListener('scroll', syncTop);
+  }, [syncTop]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
-  useEffect(() => {
-    applyFilters();
-  }, [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
+  useEffect(() => { applyFilters(); }, [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadSales = async () => {
     const data = await dataService.getSales();
@@ -128,18 +132,18 @@ function SalesJournal() {
 
   const handleClose = () => {
     setPaymentFilter(appliedPaymentFilter); setDateFilter(appliedDateFilter);
-    setSelectedDate(appliedSelectedDate);  setStartDate(appliedStartDate); setEndDate(appliedEndDate);
+    setSelectedDate(appliedSelectedDate); setStartDate(appliedStartDate); setEndDate(appliedEndDate);
     setShowFilters(false);
   };
   const handleApply = () => {
     setAppliedPaymentFilter(paymentFilter); setAppliedDateFilter(dateFilter);
-    setAppliedSelectedDate(selectedDate);  setAppliedStartDate(startDate); setAppliedEndDate(endDate);
+    setAppliedSelectedDate(selectedDate); setAppliedStartDate(startDate); setAppliedEndDate(endDate);
     setShowFilters(false);
   };
   const handleFilterButtonClick = () => {
-    if (!showFilters)    setShowFilters(true);
-    else if (showApply)  handleApply();
-    else                 handleClose();
+    if (!showFilters)   setShowFilters(true);
+    else if (showApply) handleApply();
+    else                handleClose();
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -191,7 +195,7 @@ function SalesJournal() {
   return (
     <div className="sales-record">
 
-      {/* Always-sticky bar: button + title + stat cards */}
+      {/* Always-sticky bar */}
       <div className="sj-sticky-bar" ref={stickyBarRef}>
         <div className="filter-btn-wrapper">
           <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
@@ -209,7 +213,7 @@ function SalesJournal() {
         </div>
       </div>
 
-      {/* Filter panel — appears below sticky bar when open */}
+      {/* Filter panel — slides in below sticky bar when open */}
       {showFilters && (
         <div className="filters-section">
           <div className="filter-group">
@@ -262,10 +266,11 @@ function SalesJournal() {
         </div>
       )}
 
-      {/* Sales table
-          CRITICAL: .table-wrapper has overflow-x:auto ONLY — no overflow-y.
-          This keeps .app-main as the scroll ancestor for the sticky thead.
-          If you add overflow-y here the thead will stop being sticky.       */}
+      {/*
+        IMPORTANT — table-wrapper must only have overflow-x:auto.
+        No overflow-y. This keeps .app-main as the sole scroll container
+        so position:sticky on the thead works relative to the page.
+      */}
       <div className="table-wrapper">
         <table className="sales-table">
           <thead ref={theadRef}>
