@@ -158,3 +158,9 @@ body {
     height: 36px;
   }
 }
+
+/* ── Offline indicator dot ── */
+.offline-dot {
+  background: #9ca3af !important;
+  animation: none !important;
+}
