@@ -21,30 +21,31 @@ function SalesJournal() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
-  // stickyBarRef → .sj-sticky-bar whose rendered height we observe
-  // theadRef     → <thead> whose `top` we write dynamically so it always
-  //                pins exactly 1 px below the sticky bar's bottom edge
+  // stickyBarRef → .sj-sticky-bar whose height drives the thead's sticky top.
+  // We write its pixel height into a CSS custom property on the same element
+  // so the thead's `top` can be set in CSS as `var(--bar-height)` — this
+  // correctly resolves inside the actual scroll container (.app-main) rather
+  // than relying on viewport-relative calculations.
   const stickyBarRef = useRef(null);
-  const theadRef     = useRef(null);
 
-  // Measures the sticky bar's current height and writes it (+ 1 px) as the
-  // thead's top offset. Using offsetHeight keeps us in layout coordinates
-  // so the value is correct whether the bar is mid-scroll or fully locked.
-  const syncTheadTop = useCallback(() => {
-    if (!stickyBarRef.current || !theadRef.current) return;
-    const barHeight = stickyBarRef.current.offsetHeight;
-    theadRef.current.style.top = `${barHeight}px`;
+  const updateBarHeight = useCallback(() => {
+    if (!stickyBarRef.current) return;
+    const h = stickyBarRef.current.offsetHeight;
+    stickyBarRef.current.style.setProperty('--bar-height', `${h}px`);
+    // Also write it on the parent .sales-record so the thead CSS var can
+    // inherit it from a common ancestor.
+    if (stickyBarRef.current.parentElement) {
+      stickyBarRef.current.parentElement.style.setProperty('--bar-height', `${h}px`);
+    }
   }, []);
 
-  // Run once on mount and again whenever the sticky bar changes height
-  // (filter panel opens/closes, orientation change, font scaling, etc.)
   useEffect(() => {
-    syncTheadTop();
+    updateBarHeight();
     if (!stickyBarRef.current) return;
-    const ro = new ResizeObserver(syncTheadTop);
+    const ro = new ResizeObserver(updateBarHeight);
     ro.observe(stickyBarRef.current);
     return () => ro.disconnect();
-  }, [syncTheadTop]);
+  }, [updateBarHeight]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
@@ -227,8 +228,10 @@ function SalesJournal() {
       )}
 
       {/* ── Sticky bar ─────────────────────────────────────────────────────
-           ref={stickyBarRef} — its height is observed by ResizeObserver
-           and written to theadRef's `top` style via syncTheadTop().
+           Sticks at top:0 inside .app-main (the scroll container).
+           ResizeObserver writes its rendered height into --bar-height on
+           .sales-record so the thead's CSS top: var(--bar-height) always
+           resolves to the correct offset inside the same scroll context.
       ─────────────────────────────────────────────────────────────────── */}
       <div className="sj-sticky-bar" ref={stickyBarRef}>
         <div className="filter-btn-wrapper">
@@ -248,16 +251,16 @@ function SalesJournal() {
       </div>
 
       {/* ── Table ──────────────────────────────────────────────────────────
-           The wrapper scrolls horizontally. The thead inside it is
-           position:sticky — its `top` is set in JS to always sit exactly
-           1 px below the sticky bar above. Because the thead lives inside
-           the same scroll container as the tbody, horizontal scroll carries
-           both together naturally.
+           Single horizontally-scrollable wrapper. The thead inside uses
+           position:sticky with top: var(--bar-height) so it locks flush
+           against the sticky bar's bottom edge. Both thead and tbody are
+           in the same scroll container so horizontal scroll moves them
+           together as one unit.
       ─────────────────────────────────────────────────────────────────── */}
       <div className="table-wrapper">
         <table className="sales-table">
 
-          <thead ref={theadRef} className="sj-thead">
+          <thead className="sj-thead">
             <tr>
               {HEADERS.map((h, i) => (
                 <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
