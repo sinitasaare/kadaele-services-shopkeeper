@@ -4,584 +4,309 @@ import dataService from '../services/dataService';
 import './Debtors.css';
 
 function Debtors() {
-  const [debtors, setDebtors] = useState([]);
+  const [debtors, setDebtors]           = useState([]);
+  const [searchTerm, setSearchTerm]     = useState('');
   const [selectedDebtor, setSelectedDebtor] = useState(null);
-  const [debtorSales, setDebtorSales] = useState([]);
+  const [debtorSales, setDebtorSales]   = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentPhoto, setPaymentPhoto] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  // Notify modal state
+  const [loading, setLoading]           = useState(true);
   const [showNotifyModal, setShowNotifyModal] = useState(false);
-  
-  // Add Debtor Modal states
   const [showAddDebtorModal, setShowAddDebtorModal] = useState(false);
-  const [newDebtor, setNewDebtor] = useState({
-    fullName: '',
-    gender: '',
-    phone: '',
-    whatsapp: '',
-    email: '',
-    address: ''
-  });
-  
-  // Edit mode states
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [newDebtor, setNewDebtor]       = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  const [isEditMode, setIsEditMode]     = useState(false);
   const [editedDebtor, setEditedDebtor] = useState(null);
-  
-  // View debtor details tab
-  const [activeTab, setActiveTab] = useState('details'); // 'details' or 'history'
+  const [activeTab, setActiveTab]       = useState('details');
 
-  useEffect(() => {
-    loadDebtors();
-  }, []);
+  useEffect(() => { loadDebtors(); }, []);
 
   const loadDebtors = async () => {
     try {
       setLoading(true);
-      const debtorsData = await dataService.getDebtors();
-      setDebtors(debtorsData || []);
-    } catch (error) {
-      console.error('Error loading debtors:', error);
-    } finally {
-      setLoading(false);
-    }
+      const data = await dataService.getDebtors();
+      setDebtors(data || []);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
+
+  const filteredDebtors = debtors.filter(d =>
+    (d.name || d.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleDebtorClick = async (debtor) => {
     setSelectedDebtor(debtor);
     setEditedDebtor({...debtor});
     setIsEditMode(false);
     setActiveTab('details');
-    
-    // Load debtor's purchases
     try {
       const allSales = await dataService.getSales();
-      const debtorSalesList = allSales.filter(s =>
-        debtor.saleIds?.includes(s.id) || debtor.purchaseIds?.includes(s.id)
-      );
-      setDebtorSales(debtorSalesList);
-    } catch (error) {
-      console.error('Error loading debtor sales:', error);
-      setDebtorSales([]);
-    }
+      setDebtorSales(allSales.filter(s => debtor.saleIds?.includes(s.id) || debtor.purchaseIds?.includes(s.id)));
+    } catch (e) { setDebtorSales([]); }
   };
 
   const closeDebtorModal = () => {
-    setSelectedDebtor(null);
-    setDebtorSales([]);
-    setIsEditMode(false);
-    setEditedDebtor(null);
-    setActiveTab('details');
+    setSelectedDebtor(null); setDebtorSales([]);
+    setIsEditMode(false); setEditedDebtor(null); setActiveTab('details');
   };
-  
-  // Add Debtor handlers
+
   const openAddDebtorModal = () => {
     setShowAddDebtorModal(true);
-    setNewDebtor({
-      fullName: '',
-      gender: '',
-      phone: '',
-      whatsapp: '',
-      email: '',
-      address: ''
-    });
+    setNewDebtor({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   };
-  
   const closeAddDebtorModal = () => {
     setShowAddDebtorModal(false);
-    setNewDebtor({
-      fullName: '',
-      gender: '',
-      phone: '',
-      whatsapp: '',
-      email: '',
-      address: ''
-    });
+    setNewDebtor({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   };
-  
+
   const handleAddDebtor = async (e) => {
     e.preventDefault();
-    
-    // Validation
-    if (!newDebtor.fullName || !newDebtor.gender || !newDebtor.phone) {
-      alert('Please fill in all required fields: Full Name, Gender, and Phone');
-      return;
-    }
-    
-    if (!newDebtor.whatsapp && !newDebtor.email) {
-      alert('Please provide at least WhatsApp or Email');
-      return;
-    }
-    
-    if (!newDebtor.address) {
-      alert('Please provide an address');
-      return;
-    }
-    
+    if (!newDebtor.fullName || !newDebtor.gender || !newDebtor.phone) { alert('Full Name, Gender and Phone are required'); return; }
+    if (!newDebtor.whatsapp && !newDebtor.email) { alert('Please provide at least WhatsApp or Email'); return; }
+    if (!newDebtor.address) { alert('Please provide an address'); return; }
     try {
-      // Create new debtor object
       const debtorData = {
-        id: dataService.generateId(),
-        customerName: newDebtor.fullName,
-        name: newDebtor.fullName,
-        phone: newDebtor.phone,
-        customerPhone: newDebtor.phone,
-        gender: newDebtor.gender,
-        whatsapp: newDebtor.whatsapp,
-        email: newDebtor.email,
-        address: newDebtor.address,
-        totalDue: 0,
-        totalPaid: 0,
-        balance: 0,
-        purchaseIds: [],
-        createdAt: new Date().toISOString(),
-        lastSale: null
+        id: dataService.generateId(), customerName: newDebtor.fullName, name: newDebtor.fullName,
+        phone: newDebtor.phone, customerPhone: newDebtor.phone, gender: newDebtor.gender,
+        whatsapp: newDebtor.whatsapp, email: newDebtor.email, address: newDebtor.address,
+        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [],
+        createdAt: new Date().toISOString(), lastSale: null
       };
-      
-      // Add to debtors list
-      const currentDebtors = await dataService.getDebtors();
-      currentDebtors.push(debtorData);
-      await dataService.setDebtors(currentDebtors);
-      
+      const current = await dataService.getDebtors();
+      current.push(debtorData);
+      await dataService.setDebtors(current);
       alert('Debtor added successfully!');
       closeAddDebtorModal();
       await loadDebtors();
-    } catch (error) {
-      console.error('Error adding debtor:', error);
-      alert('Failed to add debtor. Please try again.');
-    }
+    } catch (e) { console.error(e); alert('Failed to add debtor.'); }
   };
-  
-  // Edit debtor handlers
-  const enableEditMode = () => {
-    setIsEditMode(true);
-  };
-  
-  const cancelEditMode = () => {
-    setIsEditMode(false);
-    setEditedDebtor({...selectedDebtor});
-  };
-  
+
+  const enableEditMode  = () => setIsEditMode(true);
+  const cancelEditMode  = () => { setIsEditMode(false); setEditedDebtor({...selectedDebtor}); };
+
   const saveDebtorEdits = async () => {
-    // Validation
-    if (!editedDebtor.name || !editedDebtor.gender || !editedDebtor.phone) {
-      alert('Please fill in all required fields: Full Name, Gender, and Phone');
-      return;
-    }
-    
-    if (!editedDebtor.whatsapp && !editedDebtor.email) {
-      alert('Please provide at least WhatsApp or Email');
-      return;
-    }
-    
-    if (!editedDebtor.address) {
-      alert('Please provide an address');
-      return;
-    }
-    
+    if (!editedDebtor.name || !editedDebtor.gender || !editedDebtor.phone) { alert('Full Name, Gender and Phone are required'); return; }
+    if (!editedDebtor.whatsapp && !editedDebtor.email) { alert('Please provide at least WhatsApp or Email'); return; }
+    if (!editedDebtor.address) { alert('Please provide an address'); return; }
     try {
-      const currentDebtors = await dataService.getDebtors();
-      const index = currentDebtors.findIndex(d => d.id === editedDebtor.id);
-      
-      if (index !== -1) {
-        currentDebtors[index] = {
-          ...currentDebtors[index],
-          name: editedDebtor.name,
-          customerName: editedDebtor.name,
-          phone: editedDebtor.phone,
-          customerPhone: editedDebtor.phone,
-          gender: editedDebtor.gender,
-          whatsapp: editedDebtor.whatsapp,
-          email: editedDebtor.email,
-          address: editedDebtor.address
-        };
-        
-        await dataService.setDebtors(currentDebtors);
-        setSelectedDebtor(currentDebtors[index]);
-        setIsEditMode(false);
-        await loadDebtors();
-        alert('Debtor updated successfully!');
+      const current = await dataService.getDebtors();
+      const idx = current.findIndex(d => d.id === editedDebtor.id);
+      if (idx !== -1) {
+        current[idx] = { ...current[idx], name: editedDebtor.name, customerName: editedDebtor.name,
+          phone: editedDebtor.phone, customerPhone: editedDebtor.phone, gender: editedDebtor.gender,
+          whatsapp: editedDebtor.whatsapp, email: editedDebtor.email, address: editedDebtor.address };
+        await dataService.setDebtors(current);
+        setSelectedDebtor(current[idx]); setIsEditMode(false);
+        await loadDebtors(); alert('Debtor updated!');
       }
-    } catch (error) {
-      console.error('Error updating debtor:', error);
-      alert('Failed to update debtor. Please try again.');
-    }
-  };
-
-  const openPaymentModal = () => {
-    setShowPaymentModal(true);
-  };
-
-  const closePaymentModal = () => {
-    setShowPaymentModal(false);
-    setPaymentAmount('');
-    setPaymentPhoto(null);
-  };
-
-  // Notify handlers
-  const openNotifyModal = () => {
-    setShowNotifyModal(true);
-  };
-
-  const closeNotifyModal = () => {
-    setShowNotifyModal(false);
+    } catch (e) { console.error(e); alert('Failed to update debtor.'); }
   };
 
   const handleNotify = (method) => {
-    const debtor = selectedDebtor;
+    const debtor  = selectedDebtor;
     const balance = debtor.balance || debtor.totalDue || 0;
     const message = `Hello ${debtor.name || debtor.customerName}, this is a reminder that you have an outstanding balance of $${balance.toFixed(2)} with Kadaele Services. Please make payment at your earliest convenience. Thank you!`;
-    
     if (method === 'whatsapp') {
       const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
-      if (!phone) {
-        alert('No WhatsApp number available for this debtor');
-        return;
-      }
-      // Remove any non-numeric characters and format for WhatsApp
-      const cleanPhone = phone.replace(/\D/g, '');
-      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-      window.open(whatsappUrl, '_blank');
+      if (!phone) { alert('No WhatsApp number available'); return; }
+      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(message)}`, '_blank');
     } else if (method === 'email') {
-      const email = debtor.email;
-      if (!email) {
-        alert('No email available for this debtor');
-        return;
-      }
-      const subject = 'Payment Reminder - Kadaele Services';
-      const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-      window.location.href = mailtoUrl;
+      if (!debtor.email) { alert('No email available'); return; }
+      window.location.href = `mailto:${debtor.email}?subject=${encodeURIComponent('Payment Reminder - Kadaele Services')}&body=${encodeURIComponent(message)}`;
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
-      if (!phone) {
-        alert('No phone number available for this debtor');
-        return;
-      }
-      const smsUrl = `sms:${phone}?body=${encodeURIComponent(message)}`;
-      window.location.href = smsUrl;
+      if (!phone) { alert('No phone number available'); return; }
+      window.location.href = `sms:${phone}?body=${encodeURIComponent(message)}`;
     }
-    
-    closeNotifyModal();
+    setShowNotifyModal(false);
   };
 
   const handleTakePhoto = async () => {
     try {
       const { Camera } = await import('@capacitor/camera');
       const { CameraResultType, CameraSource } = await import('@capacitor/camera');
-      
-      const image = await Camera.getPhoto({
-        quality: 90,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl,
-        source: CameraSource.Camera
-      });
-
+      const image = await Camera.getPhoto({ quality:90, allowEditing:false, resultType:CameraResultType.DataUrl, source:CameraSource.Camera });
       setPaymentPhoto(image.dataUrl);
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      alert('Failed to take photo');
-    }
+    } catch (e) { console.error(e); alert('Failed to take photo'); }
   };
 
   const handleRecordPayment = async () => {
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      alert('Please enter a valid payment amount');
-      return;
-    }
-
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
     try {
-      const amount = parseFloat(paymentAmount);
-      
-      // Record payment in dataService
-      await dataService.recordPayment(selectedDebtor.id, amount);
-      
-      alert(`Payment of $${amount.toFixed(2)} recorded successfully`);
-      
-      // Reload debtors and refresh current debtor
+      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount));
+      alert(`Payment of $${parseFloat(paymentAmount).toFixed(2)} recorded`);
       await loadDebtors();
-      const updatedDebtor = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
-      if (updatedDebtor) {
-        setSelectedDebtor(updatedDebtor);
-      }
-      
-      closePaymentModal();
-    } catch (error) {
-      console.error('Error recording payment:', error);
-      alert('Failed to record payment');
-    }
+      const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
+      if (updated) setSelectedDebtor(updated);
+      setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null);
+    } catch (e) { console.error(e); alert('Failed to record payment'); }
   };
 
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    
-    let date;
-    if (timestamp.seconds) {
-      date = new Date(timestamp.seconds * 1000);
-    } else {
-      date = new Date(timestamp);
-    }
-    
-    if (isNaN(date.getTime())) return 'Invalid';
-    
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+  const formatDate = (ts) => {
+    if (!ts) return 'N/A';
+    const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+    return isNaN(d) ? 'Invalid' : d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+  };
+  const formatTime = (ts) => {
+    if (!ts) return 'N/A';
+    const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+    return isNaN(d) ? 'Invalid' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
   };
 
-  if (loading) {
-    return (
-      <div className="debtors-screen">
-        <div className="loading-state">Loading debtors...</div>
-      </div>
-    );
-  }
+  if (loading) return <div className="d-screen"><div className="d-loading">Loading debtors...</div></div>;
 
   return (
-    <div className="debtors-screen">
-      {/* Add Debtor Button */}
-      <div className="debtors-header">
-        <button className="add-debtor-btn" onClick={openAddDebtorModal}>
-          + Add Debtor
-        </button>
+    <div className="d-screen">
+
+      {/* ── Header: search + add button ── */}
+      <div className="d-header">
+        <input
+          type="text"
+          className="d-search"
+          placeholder="Search debtor name…"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+        />
+        <button className="d-add-btn" onClick={openAddDebtorModal}>+ Add Debtor</button>
       </div>
-      
-      <div className="debtors-grid">
-        {debtors.length === 0 ? (
-          <div className="empty-state">
-            <p>No debtors found</p>
-            <p style={{ fontSize: '14px', color: '#666', marginTop: '10px' }}>
-              Click "Add Debtor" to register a new debtor
-            </p>
+
+      {/* ── Debtor cards grid: 3 per row ── */}
+      <div className="d-grid">
+        {filteredDebtors.length === 0 ? (
+          <div className="d-empty">
+            {searchTerm ? 'No debtors match your search.' : 'No debtors yet. Click "+ Add Debtor" to get started.'}
           </div>
         ) : (
-          debtors.map((debtor) => (
-            <div
-              key={debtor.id}
-              className="debtor-card"
-              onClick={() => handleDebtorClick(debtor)}
-            >
-              <div className="debtor-name">{debtor.name || debtor.customerName}</div>
-              <div className="debtor-balance">${(debtor.totalDebt || 0).toFixed(2)}</div>
+          filteredDebtors.map(debtor => (
+            <div key={debtor.id} className="d-card" onClick={() => handleDebtorClick(debtor)}>
+              <div className="d-card-name">{debtor.name || debtor.customerName}</div>
+              <div className="d-card-balance">${(debtor.balance || debtor.totalDue || 0).toFixed(2)}</div>
             </div>
           ))
         )}
       </div>
 
-      {/* Debtor Details Modal */}
+      {/* ── Debtor detail modal ── */}
       {selectedDebtor && (
-        <div className="modal-overlay" onClick={closeDebtorModal}>
-          <div className="modal-content debtor-details-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{selectedDebtor.name || selectedDebtor.customerName}</h2>
-              <div className="header-actions">
-                {!isEditMode && (
-                  <button className="edit-btn" onClick={enableEditMode} title="Edit Details">
-                    <Edit2 size={20} />
-                  </button>
+        <div className="d-overlay" onClick={closeDebtorModal}>
+          <div className="d-modal" onClick={e => e.stopPropagation()}>
+
+            {/* Modal header */}
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">{selectedDebtor.name || selectedDebtor.customerName}</h2>
+              <div className="d-modal-actions">
+                {/* Edit button only on Details tab */}
+                {activeTab === 'details' && !isEditMode && (
+                  <button className="d-edit-btn" onClick={enableEditMode} title="Edit"><Edit2 size={18} /></button>
                 )}
-                <button className="close-btn" onClick={closeDebtorModal}>
-                  <X size={24} />
-                </button>
+                <button className="d-close-btn" onClick={closeDebtorModal}><X size={22} /></button>
               </div>
             </div>
 
-            {/* Tab Navigation */}
-            <div className="tabs-nav">
-              <button 
-                className={`tab-btn ${activeTab === 'details' ? 'active' : ''}`}
-                onClick={() => setActiveTab('details')}
-              >
-                Details
-              </button>
-              <button 
-                className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-                onClick={() => setActiveTab('history')}
-              >
-                Debt History
-              </button>
+            {/* Tabs */}
+            <div className="d-tabs">
+              <button className={`d-tab${activeTab==='details'?' d-tab-active':''}`} onClick={() => setActiveTab('details')}>Details</button>
+              <button className={`d-tab${activeTab==='history'?' d-tab-active':''}`} onClick={() => setActiveTab('history')}>Debt History</button>
             </div>
 
-            {/* Details Tab */}
+            {/* ── Details tab ── */}
             {activeTab === 'details' && (
-              <div className="details-tab">
+              <div className="d-tab-body">
                 {isEditMode ? (
-                  <div className="edit-form">
-                    <div className="form-group">
-                      <label>Full Name: *</label>
-                      <input
-                        type="text"
-                        value={editedDebtor?.name || ''}
-                        onChange={(e) => setEditedDebtor({...editedDebtor, name: e.target.value})}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label>Gender: *</label>
-                      <div className="gender-checkboxes">
-                        <label className="checkbox-label">
-                          <input
-                            type="radio"
-                            name="gender-edit"
-                            checked={editedDebtor?.gender === 'Male'}
-                            onChange={() => setEditedDebtor({...editedDebtor, gender: 'Male'})}
-                          />
-                          Male
-                        </label>
-                        <label className="checkbox-label">
-                          <input
-                            type="radio"
-                            name="gender-edit"
-                            checked={editedDebtor?.gender === 'Female'}
-                            onChange={() => setEditedDebtor({...editedDebtor, gender: 'Female'})}
-                          />
-                          Female
-                        </label>
+                  <div className="d-edit-form">
+                    {[['Full Name *','text',editedDebtor?.name||'','name'],['Phone *','tel',editedDebtor?.phone||'','phone'],
+                      ['WhatsApp','tel',editedDebtor?.whatsapp||'','whatsapp'],['Email','email',editedDebtor?.email||'','email']].map(([lbl,type,val,field]) => (
+                      <div className="d-form-group" key={field}>
+                        <label>{lbl}</label>
+                        <input type={type} value={val} onChange={e => setEditedDebtor({...editedDebtor,[field]:e.target.value})} />
+                      </div>
+                    ))}
+                    <div className="d-form-group">
+                      <label>Gender *</label>
+                      <div className="d-gender">
+                        {['Male','Female'].map(g => (
+                          <label key={g} className="d-gender-option">
+                            <input type="radio" name="edit-gender" checked={editedDebtor?.gender===g} onChange={() => setEditedDebtor({...editedDebtor,gender:g})} />{g}
+                          </label>
+                        ))}
                       </div>
                     </div>
-
-                    <div className="form-group">
-                      <label><Phone size={16} /> Phone: *</label>
-                      <input
-                        type="tel"
-                        value={editedDebtor?.phone || ''}
-                        onChange={(e) => setEditedDebtor({...editedDebtor, phone: e.target.value})}
-                        required
-                      />
+                    <div className="d-form-group">
+                      <label>Address *</label>
+                      <textarea rows="2" value={editedDebtor?.address||''} onChange={e => setEditedDebtor({...editedDebtor,address:e.target.value})} />
                     </div>
-
-                    <div className="form-group">
-                      <label><Phone size={16} /> WhatsApp:</label>
-                      <input
-                        type="tel"
-                        value={editedDebtor?.whatsapp || ''}
-                        onChange={(e) => setEditedDebtor({...editedDebtor, whatsapp: e.target.value})}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label><Mail size={16} /> Email:</label>
-                      <input
-                        type="email"
-                        value={editedDebtor?.email || ''}
-                        onChange={(e) => setEditedDebtor({...editedDebtor, email: e.target.value})}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label><MapPin size={16} /> Address: *</label>
-                      <textarea
-                        value={editedDebtor?.address || ''}
-                        onChange={(e) => setEditedDebtor({...editedDebtor, address: e.target.value})}
-                        rows="3"
-                        required
-                      />
-                    </div>
-
-                    <div className="edit-actions">
-                      <button className="cancel-btn-inline" onClick={cancelEditMode}>
-                        Cancel
-                      </button>
-                      <button className="save-btn-inline" onClick={saveDebtorEdits}>
-                        Save
-                      </button>
+                    <div className="d-form-actions">
+                      <button className="d-btn-cancel" onClick={cancelEditMode}>Cancel</button>
+                      <button className="d-btn-save" onClick={saveDebtorEdits}>Save</button>
                     </div>
                   </div>
                 ) : (
-                  <div className="details-view">
-                    <div className="detail-item detail-item-stacked">
-                      <strong>Name:</strong>
-                      <span>{selectedDebtor.name || selectedDebtor.customerName || 'N/A'}</span>
-                    </div>
-                    <div className="detail-item">
-                      <strong>Gender:</strong>
-                      <span>{selectedDebtor.gender || 'N/A'}</span>
-                    </div>
-                    <div className="detail-item">
-                      <strong><Phone size={16} /> Phone:</strong>
-                      <span>{selectedDebtor.phone || selectedDebtor.customerPhone || 'N/A'}</span>
-                    </div>
-                    <div className="detail-item detail-item-stacked">
-                      <strong><Phone size={16} /> WhatsApp:</strong>
-                      <span>{selectedDebtor.whatsapp || 'N/A'}</span>
-                    </div>
-                    <div className="detail-item detail-item-stacked">
-                      <strong><Mail size={16} /> Email:</strong>
-                      <span>{selectedDebtor.email || 'N/A'}</span>
-                    </div>
-                    <div className="detail-item">
-                      <strong><MapPin size={16} /> Address:</strong>
-                      <span>{selectedDebtor.address || 'N/A'}</span>
-                    </div>
-                    <div className="detail-item debt-summary">
-                      <strong>Total Debt:</strong>
-                      <span className="debt-amount">${(selectedDebtor.balance || selectedDebtor.totalDue || 0).toFixed(2)}</span>
+                  <div className="d-details-view">
+                    {[
+                      ['Name', selectedDebtor.name || selectedDebtor.customerName],
+                      ['Gender', selectedDebtor.gender],
+                      ['Phone', selectedDebtor.phone || selectedDebtor.customerPhone],
+                      ['WhatsApp', selectedDebtor.whatsapp],
+                      ['Email', selectedDebtor.email],
+                      ['Address', selectedDebtor.address],
+                    ].map(([lbl, val]) => (
+                      <div className="d-detail-row" key={lbl}>
+                        <span className="d-detail-label">{lbl}</span>
+                        <span className="d-detail-value">{val || 'N/A'}</span>
+                      </div>
+                    ))}
+                    <div className="d-debt-summary">
+                      <span className="d-detail-label">Outstanding Balance</span>
+                      <span className="d-debt-amount">${(selectedDebtor.balance || selectedDebtor.totalDue || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Debt History Tab */}
+            {/* ── Debt History tab ── */}
             {activeTab === 'history' && (
-              <div className="history-tab">
-                {!isEditMode && (
-                  <div className="action-buttons-row">
-                    <button className="notify-btn" onClick={openNotifyModal}>
-                      <MessageSquare size={20} />
-                      Notify
-                    </button>
-                    <button className="deposit-btn" onClick={openPaymentModal}>
-                      <DollarSign size={20} />
-                      Deposit
-                    </button>
-                  </div>
-                )}
+              <div className="d-history-wrapper">
+                {/* Sticky action bar: Notify (left) + Deposit (right) */}
+                <div className="d-history-actions">
+                  <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
+                    <MessageSquare size={16} /> Notify
+                  </button>
+                  <button className="d-deposit-btn" onClick={() => setShowPaymentModal(true)}>
+                    <DollarSign size={16} /> Deposit
+                  </button>
+                </div>
 
-                <div className="debt-history-table-wrapper">
-                  <table className="debt-history-table">
+                {/* Scrollable table area — header scrolls horizontally with body */}
+                <div className="d-history-scroll">
+                  <table className="d-history-table">
                     <thead>
                       <tr>
                         <th>Date</th>
                         <th>Time</th>
-                        <th>Qtt</th>
                         <th>Item</th>
+                        <th>Qty</th>
                         <th>Price</th>
-                        <th>Total</th>
-                        <th>Balance</th>
+                        <th>Subtotal</th>
+                        <th>Sale Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {debtorSales.length === 0 ? (
-                        <tr>
-                          <td colSpan="7" style={{textAlign: 'center', padding: '20px', color: '#999'}}>
-                            No sales history
-                          </td>
-                        </tr>
+                        <tr><td colSpan="7" className="d-empty-cell">No sales history</td></tr>
                       ) : (
-                        debtorSales.map((sale) => {
-                          const dateTime = formatDateTime(sale.date || sale.timestamp || sale.createdAt);
-                          const time = sale.date || sale.timestamp || sale.createdAt
-                            ? new Date(sale.date || sale.timestamp || sale.createdAt).toLocaleTimeString('en-US', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: true
-                              })
-                            : 'N/A';
-                          
-                          return sale.items?.map((item, index) => (
-                            <tr key={`${sale.id}-${index}`}>
-                              <td>{dateTime}</td>
-                              <td>{time}</td>
-                              <td>{item.quantity || 0}</td>
-                              <td>{item.name || 'N/A'}</td>
-                              <td>${(item.price || 0).toFixed(2)}</td>
-                              <td>${(item.subtotal || (item.price * item.quantity) || 0).toFixed(2)}</td>
-                              <td>${(sale.total || sale.total_amount || 0).toFixed(2)}</td>
+                        debtorSales.map(sale => {
+                          const items = sale.items && sale.items.length > 0 ? sale.items : [null];
+                          const rowSpan = items.length;
+                          const rawTs = sale.date || sale.timestamp || sale.createdAt;
+                          return items.map((item, idx) => (
+                            <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs)}</td>}
+                              <td>{item ? (item.name || 'N/A') : 'N/A'}</td>
+                              <td className="d-qty">{item ? (item.quantity || item.qty || 0) : '—'}</td>
+                              <td>${item ? (item.price || 0).toFixed(2) : '0.00'}</td>
+                              <td>${item ? (item.subtotal || (item.price||0)*(item.quantity||item.qty||0)).toFixed(2) : '0.00'}</td>
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">${(sale.total || sale.total_amount || 0).toFixed(2)}</td>}
                             </tr>
                           ));
                         })
@@ -595,190 +320,91 @@ function Debtors() {
         </div>
       )}
 
-      {/* Add Debtor Modal */}
+      {/* ── Add Debtor Modal ── */}
       {showAddDebtorModal && (
-        <div className="modal-overlay" onClick={closeAddDebtorModal}>
-          <div className="modal-content add-debtor-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Add New Debtor</h2>
-              <button className="close-btn" onClick={closeAddDebtorModal}>
-                <X size={24} />
-              </button>
+        <div className="d-overlay" onClick={closeAddDebtorModal}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Add New Debtor</h2>
+              <button className="d-close-btn" onClick={closeAddDebtorModal}><X size={22} /></button>
             </div>
-
-            <form className="add-debtor-form" onSubmit={handleAddDebtor}>
-              <div className="form-group">
-                <label>Full Name: *</label>
-                <input
-                  type="text"
-                  value={newDebtor.fullName}
-                  onChange={(e) => setNewDebtor({...newDebtor, fullName: e.target.value})}
-                  placeholder="Enter full name"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Gender: *</label>
-                <div className="gender-checkboxes">
-                  <label className="checkbox-label">
-                    <input
-                      type="radio"
-                      name="gender"
-                      checked={newDebtor.gender === 'Male'}
-                      onChange={() => setNewDebtor({...newDebtor, gender: 'Male'})}
-                      required
-                    />
-                    Male
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="radio"
-                      name="gender"
-                      checked={newDebtor.gender === 'Female'}
-                      onChange={() => setNewDebtor({...newDebtor, gender: 'Female'})}
-                      required
-                    />
-                    Female
-                  </label>
+            <form className="d-add-form" onSubmit={handleAddDebtor}>
+              {[['Full Name *','text','fullName','Enter full name'],['Phone *','tel','phone','Phone number'],
+                ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
+                <div className="d-form-group" key={field}>
+                  <label>{lbl}</label>
+                  <input type={type} value={newDebtor[field]} placeholder={ph}
+                    onChange={e => setNewDebtor({...newDebtor,[field]:e.target.value})} />
+                </div>
+              ))}
+              <div className="d-form-group">
+                <label>Gender *</label>
+                <div className="d-gender">
+                  {['Male','Female'].map(g => (
+                    <label key={g} className="d-gender-option">
+                      <input type="radio" name="new-gender" checked={newDebtor.gender===g} onChange={() => setNewDebtor({...newDebtor,gender:g})} />{g}
+                    </label>
+                  ))}
                 </div>
               </div>
-
-              <div className="form-group">
-                <label><Phone size={16} /> Phone: *</label>
-                <input
-                  type="tel"
-                  value={newDebtor.phone}
-                  onChange={(e) => setNewDebtor({...newDebtor, phone: e.target.value})}
-                  placeholder="Enter phone number"
-                  required
-                />
+              <div className="d-form-group">
+                <label>Address *</label>
+                <textarea rows="2" value={newDebtor.address} placeholder="Enter address"
+                  onChange={e => setNewDebtor({...newDebtor,address:e.target.value})} />
               </div>
-
-              <div className="form-group">
-                <label><Phone size={16} /> WhatsApp:</label>
-                <input
-                  type="tel"
-                  value={newDebtor.whatsapp}
-                  onChange={(e) => setNewDebtor({...newDebtor, whatsapp: e.target.value})}
-                  placeholder="Enter WhatsApp number (optional)"
-                />
-              </div>
-
-              <div className="form-group">
-                <label><Mail size={16} /> Email:</label>
-                <input
-                  type="email"
-                  value={newDebtor.email}
-                  onChange={(e) => setNewDebtor({...newDebtor, email: e.target.value})}
-                  placeholder="Enter email address (optional)"
-                />
-              </div>
-
-              <div className="form-group">
-                <label><MapPin size={16} /> Address: *</label>
-                <textarea
-                  value={newDebtor.address}
-                  onChange={(e) => setNewDebtor({...newDebtor, address: e.target.value})}
-                  placeholder="Enter address"
-                  rows="3"
-                  required
-                />
-              </div>
-
-              <div className="form-note">
-                <small>* Required fields | At least WhatsApp or Email required</small>
-              </div>
-
-              <div className="form-actions">
-                <button type="button" className="cancel-btn-inline" onClick={closeAddDebtorModal}>
-                  Cancel
-                </button>
-                <button type="submit" className="save-btn-inline">
-                  Save
-                </button>
+              <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
+              <div className="d-form-actions">
+                <button type="button" className="d-btn-cancel" onClick={closeAddDebtorModal}>Cancel</button>
+                <button type="submit" className="d-btn-save">Save</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Payment Modal */}
+      {/* ── Payment Modal ── */}
       {showPaymentModal && (
-        <div className="modal-overlay payment-modal" onClick={closePaymentModal}>
-          <div className="modal-content payment-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Record Payment</h2>
-              <button className="close-btn" onClick={closePaymentModal}>
-                <X size={24} />
-              </button>
+        <div className="d-overlay" onClick={() => setShowPaymentModal(false)}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Record Payment</h2>
+              <button className="d-close-btn" onClick={() => setShowPaymentModal(false)}><X size={22} /></button>
             </div>
-
-            <div className="payment-form">
-              <div className="form-group">
-                <label>Payment Amount:</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder="Enter amount"
-                />
+            <div className="d-payment-form">
+              <div className="d-form-group">
+                <label>Payment Amount</label>
+                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
+                  onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
               </div>
-
-              <button className="camera-btn" onClick={handleTakePhoto}>
-                <Camera size={20} />
-                {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
+              <button className="d-camera-btn" onClick={handleTakePhoto}>
+                <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
-
-              {paymentPhoto && (
-                <div className="photo-preview">
-                  <img src={paymentPhoto} alt="Receipt" />
-                </div>
-              )}
-
-              <div className="payment-actions">
-                <button className="cancel-btn" onClick={closePaymentModal}>
-                  Cancel
-                </button>
-                <button className="confirm-btn" onClick={handleRecordPayment}>
-                  Confirm Payment
-                </button>
+              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
+              <div className="d-form-actions">
+                <button className="d-btn-cancel" onClick={() => setShowPaymentModal(false)}>Cancel</button>
+                <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Notify Modal */}
+      {/* ── Notify Modal ── */}
       {showNotifyModal && (
-        <div className="modal-overlay notify-modal" onClick={closeNotifyModal}>
-          <div className="modal-content notify-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Select Contact Method</h2>
-              <button className="close-btn" onClick={closeNotifyModal}>
-                <X size={24} />
-              </button>
+        <div className="d-overlay" onClick={() => setShowNotifyModal(false)}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Notify via</h2>
+              <button className="d-close-btn" onClick={() => setShowNotifyModal(false)}><X size={22} /></button>
             </div>
-
-            <div className="notify-options">
-              <button className="notify-option-btn whatsapp-btn" onClick={() => handleNotify('whatsapp')}>
-                <MessageSquare size={24} />
-                <span>WhatsApp</span>
-              </button>
-              <button className="notify-option-btn email-btn" onClick={() => handleNotify('email')}>
-                <Mail size={24} />
-                <span>Email</span>
-              </button>
-              <button className="notify-option-btn sms-btn" onClick={() => handleNotify('sms')}>
-                <Phone size={24} />
-                <span>SMS</span>
-              </button>
+            <div className="d-notify-options">
+              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')}><MessageSquare size={20}/> WhatsApp</button>
+              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')}><Mail size={20}/> Email</button>
+              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')}><Phone size={20}/> SMS</button>
             </div>
-
-            <div className="notify-preview">
-              <p className="notify-preview-label">Message Preview:</p>
-              <p className="notify-preview-text">
+            <div className="d-notify-preview">
+              <p className="d-notify-preview-label">Message Preview</p>
+              <p className="d-notify-preview-text">
                 Hello {selectedDebtor?.name || selectedDebtor?.customerName}, this is a reminder that you have an outstanding balance of ${(selectedDebtor?.balance || selectedDebtor?.totalDue || 0).toFixed(2)} with Kadaele Services. Please make payment at your earliest convenience. Thank you!
               </p>
             </div>
