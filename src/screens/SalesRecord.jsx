@@ -1,75 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import dataService from '../services/dataService';
 import './SalesRecord.css';
-
-// Mock data service for demonstration
-const mockDataService = {
-  getPurchases: async () => {
-    return [
-      {
-        id: '1',
-        date: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        items: [
-          { id: '1', name: 'Rice (1kg)', price: 50, quantity: 2, subtotal: 100 },
-          { id: '2', name: 'Sugar (1kg)', price: 80, quantity: 1, subtotal: 80 }
-        ],
-        total: 180,
-        paymentType: 'cash',
-        customerName: '',
-        customerPhone: '',
-        status: 'active'
-      },
-      {
-        id: '2',
-        date: new Date(Date.now() - 3600000).toISOString(),
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-        items: [
-          { id: '3', name: 'Cooking Oil (1L)', price: 120, quantity: 1, subtotal: 120 }
-        ],
-        total: 120,
-        paymentType: 'credit',
-        customerName: 'John Doe',
-        customerPhone: '+1234567890',
-        status: 'active'
-      },
-      {
-        id: '3',
-        date: new Date(Date.now() - 7200000).toISOString(),
-        createdAt: new Date(Date.now() - 7200000).toISOString(),
-        items: [
-          { id: '4', name: 'Bread', price: 30, quantity: 3, subtotal: 90 },
-          { id: '5', name: 'Milk (1L)', price: 60, quantity: 2, subtotal: 120 }
-        ],
-        total: 210,
-        paymentType: 'cash',
-        customerName: '',
-        customerPhone: '',
-        status: 'active'
-      }
-    ];
-  }
-};
-
-// Simple date formatting function
-const formatDate = (dateStr) => {
-  const date = new Date(dateStr);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
-};
-
-const formatTime = (dateStr) => {
-  const date = new Date(dateStr);
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-};
 
 function SalesRecord() {
   const [purchases, setPurchases] = useState([]);
   const [filteredPurchases, setFilteredPurchases] = useState([]);
-  const [viewMode, setViewMode] = useState('today');
+  const [paymentFilter, setPaymentFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('today');
   const [selectedDate, setSelectedDate] = useState('');
-  const [showSummaryDropdown, setShowSummaryDropdown] = useState(false);
-  const [notification, setNotification] = useState(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [appliedPaymentFilter, setAppliedPaymentFilter] = useState('all');
+  const [appliedDateFilter, setAppliedDateFilter] = useState('today');
+  const [appliedSelectedDate, setAppliedSelectedDate] = useState('');
+  const [appliedStartDate, setAppliedStartDate] = useState('');
+  const [appliedEndDate, setAppliedEndDate] = useState('');
+  const [filtersChanged, setFiltersChanged] = useState(false);
 
   useEffect(() => {
     loadPurchases();
@@ -77,213 +24,338 @@ function SalesRecord() {
 
   useEffect(() => {
     applyFilters();
-  }, [purchases, viewMode, selectedDate]);
+  }, [purchases, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
+
+  useEffect(() => {
+    const changed =
+      paymentFilter !== appliedPaymentFilter ||
+      dateFilter !== appliedDateFilter ||
+      selectedDate !== appliedSelectedDate ||
+      startDate !== appliedStartDate ||
+      endDate !== appliedEndDate;
+    setFiltersChanged(changed);
+  }, [paymentFilter, dateFilter, selectedDate, startDate, endDate, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadPurchases = async () => {
-    const data = await mockDataService.getPurchases();
-    setPurchases(data.sort((a, b) => new Date(b.date) - new Date(a.date)));
-  };
-
-  const showNotification = (message, type = 'success') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
+    const data = await dataService.getPurchases();
+    setPurchases(data || []);
   };
 
   const applyFilters = () => {
-    let filtered = [...purchases];
+    let filtered = purchases;
 
-    const targetDate = selectedDate ? new Date(selectedDate) : null;
-    if (targetDate) {
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
+    if (appliedPaymentFilter !== 'all') {
+      filtered = filtered.filter(p => p.payment_type === appliedPaymentFilter);
+    }
 
+    if (appliedDateFilter === 'today') {
+      const today = new Date().toLocaleDateString();
       filtered = filtered.filter(p => {
-        const saleDate = new Date(p.date);
-        return saleDate >= startOfDay && saleDate <= endOfDay;
-      });
-    } else if (viewMode === 'today') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      filtered = filtered.filter(p => {
-        const saleDate = new Date(p.date);
-        return saleDate >= today && saleDate < tomorrow;
+        if (!(p.timestamp || p.createdAt)) return false;
+        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
+        return purchaseDate === today;
       });
     }
 
-    if (viewMode === 'cashByDate') {
-      filtered = filtered.filter(p => p.paymentType === 'cash');
-    } else if (viewMode === 'creditByDate') {
-      filtered = filtered.filter(p => p.paymentType === 'credit');
+    if (appliedDateFilter === 'single' && appliedSelectedDate) {
+      filtered = filtered.filter(p => {
+        if (!(p.timestamp || p.createdAt)) return false;
+        const purchaseDate = new Date(p.timestamp || p.createdAt).toLocaleDateString();
+        const selected = new Date(appliedSelectedDate).toLocaleDateString();
+        return purchaseDate === selected;
+      });
+    }
+
+    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
+      const start = new Date(appliedStartDate);
+      const end = new Date(appliedEndDate);
+      end.setHours(23, 59, 59, 999);
+
+      filtered = filtered.filter(p => {
+        if (!(p.timestamp || p.createdAt)) return false;
+        const purchaseDate = new Date(p.timestamp || p.createdAt);
+        return purchaseDate >= start && purchaseDate <= end;
+      });
     }
 
     setFilteredPurchases(filtered);
   };
 
-  const getSubHeader = () => {
-    if (viewMode === 'today') {
-      return 'Sales Today';
-    } else if (viewMode === 'byDate') {
-      return `Sales Record on ${selectedDate}`;
-    } else if (viewMode === 'cashByDate') {
-      return `Cash Sales on ${selectedDate}`;
-    } else if (viewMode === 'creditByDate') {
-      return `Credit Sales on ${selectedDate}`;
-    } else if (viewMode === 'summaryReport') {
-      return 'Sales Summary Report';
-    }
-    return '';
+  const toggleFilters = () => {
+    setShowFilters(prev => !prev);
   };
 
-  const handleSummaryClick = (mode) => {
-    setViewMode(mode);
-    setShowSummaryDropdown(false);
+  const handleApplyFilters = () => {
+    if (!filtersChanged) return;
+
+    setAppliedPaymentFilter(paymentFilter);
+    setAppliedDateFilter(dateFilter);
+    setAppliedSelectedDate(selectedDate);
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+    setShowFilters(false);
+
+    setSelectedDate('');
+    setStartDate('');
+    setEndDate('');
+    setFiltersChanged(false);
   };
+
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getTableTitle = () => {
+    let paymentText = 'All Sales';
+    if (appliedPaymentFilter === 'cash') paymentText = 'Cash Sales';
+    if (appliedPaymentFilter === 'credit') paymentText = 'Credit Sales';
+
+    if (appliedDateFilter === 'today') {
+      return `${paymentText} Today`;
+    }
+
+    if (appliedDateFilter === 'single') {
+      if (appliedSelectedDate) {
+        const selectedDateObj = new Date(appliedSelectedDate);
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+        selectedDateObj.setHours(0, 0, 0, 0);
+
+        if (selectedDateObj.getTime() === yesterday.getTime()) {
+          return `${paymentText} Yesterday`;
+        }
+
+        const date = new Date(appliedSelectedDate).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        });
+        return `${paymentText} on ${date}`;
+      }
+      return `${paymentText} Today`;
+    }
+
+    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
+      const start = new Date(appliedStartDate).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+      const end = new Date(appliedEndDate).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+      return `${paymentText} from ${start} to ${end}`;
+    }
+
+    return `${paymentText} Today`;
+  };
+
+  const formatDateTime = (timestamp) => {
+    if (!timestamp) return { date: 'N/A', time: 'N/A' };
+
+    let date;
+    if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      date = new Date(timestamp);
+    }
+
+    if (isNaN(date.getTime())) return { date: 'Invalid', time: 'Invalid' };
+
+    return {
+      date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    };
+  };
+
+  const totalRecords = filteredPurchases.length;
+  const grandTotal = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
 
   return (
     <div className="sales-record">
+
+      {/* ── Page header (sticky, mirrors old record-header pattern) ── */}
       <div className="record-header">
-        <h2 className="screen-title">Sales Record</h2>
-        <button
-          className="summary-btn"
-          onClick={() => setShowSummaryDropdown(!showSummaryDropdown)}
-        >
-          Summary
-          <ChevronDown size={16} />
-        </button>
+        <h2 className="screen-title">Sales Journal</h2>
       </div>
 
-      {showSummaryDropdown && (
-        <div className="summary-dropdown">
-          <ul className="summary-menu">
-            <li>
+      {/* ── Filter panel ── */}
+      {showFilters && (
+        <div className="filters-section">
+          <div className="filter-group">
+            <label>Payment Type:</label>
+            <div className="filter-buttons">
               <button
-                className="summary-menu-item"
-                onClick={() => handleSummaryClick('byDate')}
+                className={paymentFilter === 'all' ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setPaymentFilter('all')}
               >
-                Sales by date
+                All Sales
               </button>
-            </li>
-            <li>
               <button
-                className="summary-menu-item"
-                onClick={() => handleSummaryClick('cashByDate')}
+                className={paymentFilter === 'cash' ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setPaymentFilter('cash')}
               >
-                Cash Sales by date
+                Cash Only
               </button>
-            </li>
-            <li>
               <button
-                className="summary-menu-item"
-                onClick={() => handleSummaryClick('creditByDate')}
+                className={paymentFilter === 'credit' ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setPaymentFilter('credit')}
               >
-                Credit Sales by date
+                Credit Only
               </button>
-            </li>
-            <li>
-              <button
-                className="summary-menu-item"
-                onClick={() => handleSummaryClick('summaryReport')}
-              >
-                Sales Summary Report
-              </button>
-            </li>
-          </ul>
-        </div>
-      )}
-
-      {notification && (
-        <div className={`alert ${notification.type === 'error' ? 'alert-error' : 'alert-success'}`}>
-          <span>{notification.message}</span>
-        </div>
-      )}
-
-      <div className="sub-header">{getSubHeader()}</div>
-
-      {viewMode === 'summaryReport' ? (
-        <div className="summary-report">
-          <h3>Sales Summary Report</h3>
-          <p>
-            This report provides an overview of sales performance including total sales, cash vs credit breakdown, and top performing items.
-          </p>
-          <div className="summary-stats">
-            <div className="summary-stat">
-              <span className="summary-label">Total Sales</span>
-              <span className="summary-value">
-                ${filteredPurchases
-                  .filter(p => p.status === 'active')
-                  .reduce((sum, p) => sum + p.total, 0)
-                  .toFixed(2)}
-              </span>
-            </div>
-            <div className="summary-stat">
-              <span className="summary-label">Cash Sales</span>
-              <span className="summary-value">
-                ${filteredPurchases
-                  .filter(p => p.status === 'active' && p.paymentType === 'cash')
-                  .reduce((sum, p) => sum + p.total, 0)
-                  .toFixed(2)}
-              </span>
-            </div>
-            <div className="summary-stat">
-              <span className="summary-label">Credit Sales</span>
-              <span className="summary-value">
-                ${filteredPurchases
-                  .filter(p => p.status === 'active' && p.paymentType === 'credit')
-                  .reduce((sum, p) => sum + p.total, 0)
-                  .toFixed(2)}
-              </span>
-            </div>
-            <div className="summary-stat">
-              <span className="summary-label">Transactions</span>
-              <span className="summary-value">{filteredPurchases.length}</span>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="sales-table-container">
-          <table className="sales-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPurchases.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="empty-cell">
-                    No sales found
-                  </td>
-                </tr>
-              ) : (
-                filteredPurchases.map(purchase => (
-                  <React.Fragment key={purchase.id}>
-                    {purchase.items.map((item, index) => (
-                      <tr key={`${purchase.id}-${index}`}>
-                        <td>{formatDate(purchase.date)}</td>
-                        <td>{formatTime(purchase.date)}</td>
-                        <td>{item.name}</td>
-                        <td>{item.quantity}</td>
-                        <td>${item.price.toFixed(2)}</td>
-                        <td>${item.subtotal.toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
+
+          <div className="filter-group">
+            <label>Date Filter:</label>
+            <div className="filter-buttons">
+              <button
+                className={dateFilter === 'today' ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setDateFilter('today')}
+              >
+                Today
+              </button>
+              <button
+                className={dateFilter === 'single' ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setDateFilter('single')}
+              >
+                Single Date
+              </button>
+              <button
+                className={dateFilter === 'range' ? 'filter-btn active' : 'filter-btn'}
+                onClick={() => setDateFilter('range')}
+              >
+                Date Range
+              </button>
+            </div>
+          </div>
+
+          {dateFilter === 'single' && (
+            <div className="filter-group">
+              <label>Select Date:</label>
+              <input
+                type="date"
+                value={selectedDate}
+                max={getTodayDate()}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="date-input"
+              />
+            </div>
+          )}
+
+          {dateFilter === 'range' && (
+            <div className="filter-group">
+              <label>Date Range:</label>
+              <div className="date-range-inputs">
+                <div className="date-range-field">
+                  <label className="date-range-label">From:</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    max={getTodayDate()}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="date-input"
+                  />
+                </div>
+                <div className="date-range-field">
+                  <label className="date-range-label">To:</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    max={getTodayDate()}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="date-input"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* ── Filter toggle / apply button (mirrors old summary-btn feel) ── */}
+      <button
+        className="filter-toggle-btn"
+        onClick={showFilters ? (filtersChanged ? handleApplyFilters : toggleFilters) : toggleFilters}
+      >
+        {showFilters ? (filtersChanged ? 'Apply Filter' : 'Close Filter') : 'Filter Sales ▾'}
+      </button>
+
+      {/* ── Sub-header: dynamic title (mirrors old sub-header pattern) ── */}
+      <h3 className="table-title">{getTableTitle()}</h3>
+
+      {/* ── Stats summary boxes ── */}
+      <div className="stats-boxes">
+        <div className="stat-box stat-box-blue">
+          <div className="stat-label">Total Records</div>
+          <div className="stat-value">{totalRecords}</div>
+        </div>
+        <div className="stat-box stat-box-green">
+          <div className="stat-label">Grand Total</div>
+          <div className="stat-value">${grandTotal.toFixed(2)}</div>
+        </div>
+      </div>
+
+      {/* ── Sales table ── */}
+      <div className="table-wrapper">
+        <table className="sales-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Items</th>
+              <th>Qty</th>
+              <th>Total</th>
+              <th>Pay Type</th>
+              <th>Customer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPurchases.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="empty-cell">
+                  No sales records found
+                </td>
+              </tr>
+            ) : (
+              filteredPurchases.map((purchase) => {
+                const dateTime = formatDateTime(purchase.timestamp || purchase.createdAt);
+                const amount = parseFloat(purchase.total_amount) || 0;
+                const totalQty = purchase.items?.reduce(
+                  (sum, item) => sum + (item.qty || item.quantity || 0), 0
+                ) || 0;
+
+                return (
+                  <tr key={purchase.id}>
+                    <td>{dateTime.date}</td>
+                    <td>{dateTime.time}</td>
+                    <td className="items-cell">
+                      {purchase.items?.map(item =>
+                        `${item.name} × ${item.qty || item.quantity || 0}`
+                      ).join(', ') || 'N/A'}
+                    </td>
+                    <td>{totalQty}</td>
+                    <td>${amount.toFixed(2)}</td>
+                    <td>
+                      <span className={`payment-badge payment-${purchase.payment_type}`}>
+                        {purchase.payment_type?.toUpperCase() || 'N/A'}
+                      </span>
+                    </td>
+                    <td>{purchase.customer_name || '—'}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
