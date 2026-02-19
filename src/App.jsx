@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
-import CashRegister from './screens/CashRegister';
-import SalesRecord from './screens/SalesRecord';
+import SalesRegister from './screens/SalesRegister';
+import SalesJournal from './screens/SalesJournal';
 import Debtors from './screens/Debtors';
 import Inventory from './screens/Inventory';
 import Login from './components/Login';
@@ -9,8 +9,8 @@ import dataService from './services/dataService';
 import './App.css';
 
 const PAGES = [
-  { name: 'SALES REGISTER', component: CashRegister },
-  { name: 'SALES JOURNAL', component: SalesRecord },
+  { name: 'SALES REGISTER', component: SalesRegister },
+  { name: 'SALES JOURNAL', component: SalesJournal },
   { name: 'DEBTORS', component: Debtors },
   { name: 'INVENTORY', component: Inventory },
 ];
