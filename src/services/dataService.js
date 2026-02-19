@@ -351,6 +351,7 @@ class DataService {
       customerName: sale.customerName || '',
       customer_name: sale.customerName || '',
       customerPhone: sale.customerPhone || '',
+      debtorId: sale.debtorId || null,           // ← ID of the registered debtor
       status: sale.status || 'active',
       photoUrl: sale.photoUrl || null,
       refund: sale.refund || null,
@@ -380,7 +381,7 @@ class DataService {
       await this.addToSyncQueue({ type: 'sale', data: newSale });
     }
     
-    // Update debtors if credit sale
+    // Update debtor record if this is a credit sale
     if (newSale.paymentType === 'credit' && newSale.customerName) {
       await this.updateDebtor(newSale);
     }
@@ -496,34 +497,49 @@ class DataService {
 
   async updateDebtor(saleData) {
     const debtors = await this.getDebtors();
-    const existingDebtor = debtors.find(
-      d => d.customerPhone === saleData.customerPhone ||
-           d.customerName?.toLowerCase() === saleData.customerName?.toLowerCase()
-    );
+
+    // Match by debtorId first (exact, set by SalesRegister when a registered
+    // debtor is selected from the dropdown).  Fall back to name match only if
+    // debtorId is absent (legacy / manual entries).
+    let existingDebtor = saleData.debtorId
+      ? debtors.find(d => d.id === saleData.debtorId)
+      : debtors.find(d =>
+          d.customerName?.toLowerCase() === saleData.customerName?.toLowerCase() ||
+          d.name?.toLowerCase()         === saleData.customerName?.toLowerCase()
+        );
 
     if (existingDebtor) {
-      existingDebtor.totalDue += saleData.total;
-      existingDebtor.balance = existingDebtor.totalDue - existingDebtor.totalPaid;
-      existingDebtor.saleIds = existingDebtor.saleIds || [];
-      existingDebtor.saleIds.push(saleData.id);
-      existingDebtor.lastSale = saleData.date;
+      // Accumulate the debt on the debtor record
+      existingDebtor.totalDue  = (existingDebtor.totalDue  || 0) + saleData.total;
+      existingDebtor.totalPaid = existingDebtor.totalPaid  || 0;
+      existingDebtor.balance   = existingDebtor.totalDue - existingDebtor.totalPaid;
+
+      // Track the sale ID so Debt History tab can display it
+      existingDebtor.saleIds     = existingDebtor.saleIds || [];
+      existingDebtor.purchaseIds = existingDebtor.purchaseIds || [];
+      if (!existingDebtor.saleIds.includes(saleData.id))     existingDebtor.saleIds.push(saleData.id);
+      if (!existingDebtor.purchaseIds.includes(saleData.id)) existingDebtor.purchaseIds.push(saleData.id);
+
+      existingDebtor.lastSale      = saleData.date;
+      existingDebtor.lastPurchase  = saleData.date;
+
+      // Store the most recent repayment date so the Debtors card can show it
+      if (saleData.repaymentDate) {
+        existingDebtor.repaymentDate = saleData.repaymentDate;
+      }
+
+      await this.setDebtors(debtors);
     } else {
-      debtors.push({
-        id: this.generateId(),
-        customerName: saleData.customerName,
-        customerPhone: saleData.customerPhone,
-        name: saleData.customerName,
-        phone: saleData.customerPhone,
-        totalDue: saleData.total,
-        totalPaid: 0,
-        balance: saleData.total,
-        saleIds: [saleData.id],
-        createdAt: saleData.date,
-        lastSale: saleData.date,
-      });
+      // No matching registered debtor — log a warning.  We deliberately do NOT
+      // create a ghost debtor here; the UI enforces selection of a registered
+      // debtor before saving a credit sale, so this path should not be reached
+      // in normal operation.
+      console.warn(
+        '[updateDebtor] No debtor found for sale:', saleData.id,
+        '| debtorId:', saleData.debtorId,
+        '| customerName:', saleData.customerName
+      );
     }
-    
-    await this.setDebtors(debtors);
   }
 
   async recordPayment(debtorId, amount, purchaseIds = []) {
