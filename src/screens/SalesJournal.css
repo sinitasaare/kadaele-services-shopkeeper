@@ -124,11 +124,13 @@
 
 /* ── Table wrapper ── */
 .table-wrapper {
-  overflow-x: auto;
   margin: 0 20px 20px;
   background-color: var(--surface);
   border-radius: 0.75rem;
   box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  /* Allow thead sticky to work relative to viewport */
+  overflow-y: visible;
 }
 
 .sales-table {
@@ -139,12 +141,12 @@
   table-layout: auto;
 }
 
-/* Table header — sticky within the table-wrapper scroll container */
+/* Table header — sticky relative to viewport, below the sticky bar */
 .sales-table thead {
   position: sticky;
-  top: 0;
+  top: var(--sj-thead-top, 0px);
   background-color: #f8f9fa;
-  z-index: 10;
+  z-index: 20;
 }
 .sales-table th {
   padding: 0.75rem 1rem; text-align: left; font-weight: 600;
