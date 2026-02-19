@@ -5,13 +5,13 @@
 .sales-record {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0;
   padding: 0;
 }
 
-/* ── Filter panel — now inside sticky bar ── */
+/* ── Filter panel — appears above sticky bar when open ── */
 .filters-section {
-  margin: 0;
+  margin: 0 20px 12px;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -55,7 +55,11 @@
 .date-range-label { font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
-/* ── Sticky bar: button + title + stat cards ── */
+/* ── Sticky bar ─────────────────────────────────────────────────────────────
+   Sticks to top:0 of .app-main (the scroll container).
+   The header table is the last child — its bottom is always the bar's
+   bottom edge. No JS measurement ever needed.
+────────────────────────────────────────────────────────────────────────── */
 .sj-sticky-bar {
   position: sticky;
   top: 0;
@@ -64,7 +68,7 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 5px 0 12px;
+  padding: 5px 0 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -113,41 +117,54 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Table wrapper ──────────────────────────────────────────────────────────
-   overflow-x: auto  → horizontal scroll on narrow screens  ✓
-   overflow-y: NOT SET — keeps .app-main as the sole scroll ancestor so
-   position:sticky on thead works correctly.
-────────────────────────────────────────────────────────────────────────── */
+/* ── Header table wrapper — sits at the bottom of .sj-sticky-bar ── */
+.sj-header-wrapper {
+  overflow-x: auto;
+  margin: 0 20px;
+  background-color: #f8f9fa;
+  border-radius: 0.75rem 0.75rem 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+}
+
+.sj-header-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.875rem;
+}
+
+.sj-header-table th {
+  padding: 0.75rem 1rem; text-align: left; font-weight: 600;
+  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background-color: #f8f9fa;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+/* ── Body table wrapper — no top radius, connects flush to header ── */
 .table-wrapper {
   overflow-x: auto;
   margin: 0 20px 20px;
   background-color: var(--surface);
-  border-radius: 0.75rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  border: 1px solid var(--border);
+  border-top: none;
   box-shadow: var(--shadow-sm);
 }
 
 .sales-table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
-.sales-table th {
-  padding: 0.75rem 1rem; text-align: left; font-weight: 600;
-  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--text-secondary); border-bottom: 2px solid var(--border);
-  white-space: nowrap;
-  background-color: #f8f9fa;
-  position: sticky;
-  /* top is kept in sync with .sj-sticky-bar height via --sticky-bar-height CSS var */
-  top: var(--sticky-bar-height, 0px);
-  z-index: 10;
-}
 .sales-table td {
   padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
-  color: var(--text-primary); white-space: nowrap;
+  color: var(--text-primary); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sales-table tr:last-child td { border-bottom: none; }
 .sales-table tbody tr:hover { background-color: rgba(102, 126, 234, 0.03); }
@@ -156,9 +173,9 @@
 .col-qty { text-align: center !important; }
 
 /* Items cell */
-.items-cell { white-space: nowrap !important; font-size: 0.8125rem; color: var(--text-secondary); }
+.items-cell { font-size: 0.8125rem; color: var(--text-secondary); }
 
-/* Merged cells: Date, Time, Pay Type, Customer — vertically centred */
+/* Merged cells — vertically centred */
 .merged-cell {
   vertical-align: middle;
   border-bottom: 2px solid var(--border) !important;
@@ -187,12 +204,14 @@
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
+  .filters-section { margin: 0 15px 12px; }
   .filter-btn-wrapper { padding: 0 15px; }
   .table-title { margin: 0 15px; }
   .stats-boxes { margin: 0 15px; }
   .stat-box { width: 32.5%; padding: 0.55rem 0.6rem; }
   .stat-value { font-size: 0.9rem; }
+  .sj-header-wrapper { margin: 0 15px; }
   .table-wrapper { margin: 0 15px 15px; }
-  .sales-table th, .sales-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
+  .sj-header-table th, .sales-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
