@@ -42,6 +42,10 @@ class DataService {
     this.isOnline = navigator.onLine;
     this.syncInProgress = false;
     this.currentUser = null;
+    // Tracks whether we've done the initial Firebase pull for debtors this
+    // session.  After the first pull we trust localforage as source of truth
+    // so that writes made moments ago are never overwritten by a stale read.
+    this._debtorsFetchedFromFirebase = false;
     
     // Listen for online/offline events
     window.addEventListener('online', () => {
@@ -59,6 +63,8 @@ class DataService {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       this.currentUser = userCredential.user;
+      // Reset so the next getDebtors() call pulls a fresh copy from Firebase
+      this._debtorsFetchedFromFirebase = false;
       
       // Store login state persistently
       await localforage.setItem('auth_user', {
@@ -381,8 +387,10 @@ class DataService {
       await this.addToSyncQueue({ type: 'sale', data: newSale });
     }
     
-    // Update debtor record if this is a credit sale
-    if (newSale.paymentType === 'credit' && newSale.customerName) {
+    // Update debtor record if this is a credit sale.
+    // Check debtorId first — customerName alone is not reliable if the field
+    // was left empty or came through blank from the modal.
+    if (newSale.paymentType === 'credit' && (newSale.debtorId || newSale.customerName)) {
       await this.updateDebtor(newSale);
     }
 
@@ -449,8 +457,12 @@ class DataService {
   // Debtors operations
   async getDebtors() {
     try {
-      // Try to get from Firebase first if online
-      if (this.isOnline && auth.currentUser) {
+      // Only pull from Firebase on the FIRST call of the session.
+      // After that, localforage is the source of truth — this prevents a
+      // stale Firebase read from overwriting a write that just happened
+      // (e.g. updateDebtor called right before loadDebtors in the UI).
+      if (this.isOnline && auth.currentUser && !this._debtorsFetchedFromFirebase) {
+        this._debtorsFetchedFromFirebase = true;
         const debtorsSnapshot = await getDocs(collection(db, 'debtors'));
         const firebaseDebtors = debtorsSnapshot.docs.map(doc => ({
           id: doc.id,
@@ -459,17 +471,21 @@ class DataService {
           lastPurchase: doc.data().lastPurchase?.toDate?.() || doc.data().lastPurchase,
           lastPayment: doc.data().lastPayment?.toDate?.() || doc.data().lastPayment
         }));
-        
-        // Save to local storage
         await localforage.setItem(DATA_KEYS.DEBTORS, firebaseDebtors);
         return firebaseDebtors;
       }
     } catch (error) {
       console.error('Error fetching debtors from Firebase:', error);
     }
-    
-    // Fallback to local storage
+
+    // All subsequent calls within the same session use local storage,
+    // which always has the latest writes from updateDebtor / setDebtors.
     return await this.get(DATA_KEYS.DEBTORS);
+  }
+
+  // Call this to force a fresh pull from Firebase (e.g. after login sync).
+  resetDebtorsFetchFlag() {
+    this._debtorsFetchedFromFirebase = false;
   }
 
   async setDebtors(debtors) {
