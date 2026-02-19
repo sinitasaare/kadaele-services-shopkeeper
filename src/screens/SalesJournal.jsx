@@ -194,31 +194,9 @@ function SalesJournal() {
   return (
     <div className="sales-record">
 
-      {/* Always-sticky bar: title + stat cards + filter panel + column headers */}
-      <div className="sj-sticky-bar" ref={stickyBarRef}>
-
-        {/* Button sits ABOVE title when filter is closed */}
-        {!showFilters && (
-          <div className="filter-btn-wrapper">
-            <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
-          </div>
-        )}
-
-        <h3 className="table-title">{getTableTitle()}</h3>
-        <div className="stats-boxes">
-          <div className="stat-box stat-box-purple">
-            <div className="stat-label">Total Records</div>
-            <div className="stat-value">{totalRecords}</div>
-          </div>
-          <div className="stat-box stat-box-green">
-            <div className="stat-label">Grand Total</div>
-            <div className="stat-value">${grandTotal.toFixed(2)}</div>
-          </div>
-        </div>
-
-        {/* Filter panel — inside sticky bar, appears below stat cards */}
-        {showFilters && (
-          <div className="filters-section">
+      {/* Filter panel — appears ABOVE everything when open */}
+      {showFilters && (
+        <div className="filters-section">
             <div className="filter-group">
               <label>Payment Type</label>
               <div className="filter-buttons">
@@ -266,16 +244,25 @@ function SalesJournal() {
                 {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
               </div>
             )}
-          </div>
-        )}
+        </div>
+      )}
 
-        {/* Button sits BELOW filter panel when filter is open */}
-        {showFilters && (
-          <div className="filter-btn-wrapper">
-            <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+      {/* Sticky bar: button + title + stat cards — always below filter */}
+      <div className="sj-sticky-bar" ref={stickyBarRef}>
+        <div className="filter-btn-wrapper">
+          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+        </div>
+        <h3 className="table-title">{getTableTitle()}</h3>
+        <div className="stats-boxes">
+          <div className="stat-box stat-box-purple">
+            <div className="stat-label">Total Records</div>
+            <div className="stat-value">{totalRecords}</div>
           </div>
-        )}
-
+          <div className="stat-box stat-box-green">
+            <div className="stat-label">Grand Total</div>
+            <div className="stat-value">${grandTotal.toFixed(2)}</div>
+          </div>
+        </div>
       </div>
 
       {/* Sales table — single unified table with thead + tbody together */}
