@@ -1,150 +1,309 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Package, AlertTriangle, TrendingUp } from 'lucide-react';
 import dataService from '../services/dataService';
-import './Inventory.css';
+import './SalesJournal.css';
 
-function Inventory() {
-  const [goods, setGoods] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredItems, setFilteredItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+// ── Shared column widths ───────────────────────────────────────────────────
+// Both the header table (inside sticky bar) and the body table (outside)
+// use identical <colgroup> definitions with table-layout:fixed.
+// This guarantees columns always align regardless of cell content.
+const COL_WIDTHS = [
+  { key: 'date',     width: '90px'  },
+  { key: 'time',     width: '80px'  },
+  { key: 'product',  width: '180px' },
+  { key: 'qty',      width: '55px'  },
+  { key: 'total',    width: '95px'  },
+  { key: 'payment',  width: '85px'  },
+  { key: 'customer', width: '130px' },
+];
 
-  useEffect(() => {
-    loadData();
-  }, []);
+const SharedColGroup = () => (
+  <colgroup>
+    {COL_WIDTHS.map(c => <col key={c.key} style={{ width: c.width }} />)}
+  </colgroup>
+);
 
-  useEffect(() => {
-    applyFilters();
-  }, [goods, searchTerm]);
+function SalesJournal() {
+  const [sales, setSales] = useState([]);
+  const [filteredSales, setFilteredSales] = useState([]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const loadedGoods = await dataService.getGoods();
-      console.log('📦 Loaded goods:', loadedGoods.length);
-      
-      // Sort by ID in ascending order
-      const sortedGoods = (loadedGoods || []).sort((a, b) => {
-        const idA = parseInt(a.id) || 0;
-        const idB = parseInt(b.id) || 0;
-        return idA - idB;
-      });
-      
-      setGoods(sortedGoods);
-    } catch (error) {
-      console.error('Error loading goods:', error);
-      setGoods([]);
-    } finally {
-      setLoading(false);
-    }
+  const [paymentFilter, setPaymentFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('today');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const [appliedPaymentFilter, setAppliedPaymentFilter] = useState('all');
+  const [appliedDateFilter, setAppliedDateFilter] = useState('today');
+  const [appliedSelectedDate, setAppliedSelectedDate] = useState('');
+  const [appliedStartDate, setAppliedStartDate] = useState('');
+  const [appliedEndDate, setAppliedEndDate] = useState('');
+
+  const [showFilters, setShowFilters] = useState(false);
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  useEffect(() => { loadSales(); }, []);
+  useEffect(() => { applyFilters(); },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
+
+  const loadSales = async () => {
+    const data = await dataService.getSales();
+    const sorted = (data || []).sort((a, b) => {
+      const dateA = new Date(a.date || a.createdAt || a.timestamp || 0);
+      const dateB = new Date(b.date || b.createdAt || b.timestamp || 0);
+      return dateB - dateA;
+    });
+    setSales(sorted);
   };
+
+  const resolveSaleDate = (sale) => {
+    const raw = sale.date || sale.timestamp || sale.createdAt;
+    if (!raw) return null;
+    if (raw && typeof raw === 'object' && raw.seconds) return new Date(raw.seconds * 1000);
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const toMidnight = (d) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c; };
 
   const applyFilters = () => {
-    let filtered = goods;
-    if (searchTerm) {
-      filtered = goods.filter(item =>
-        item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.id?.toString().includes(searchTerm)
+    let filtered = [...sales];
+    if (appliedPaymentFilter !== 'all')
+      filtered = filtered.filter(s =>
+        s.payment_type === appliedPaymentFilter || s.paymentType === appliedPaymentFilter
       );
+
+    const today    = toMidnight(new Date());
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (appliedDateFilter === 'today')
+      filtered = filtered.filter(s => { const d = resolveSaleDate(s); return d && d >= today && d < tomorrow; });
+
+    if (appliedDateFilter === 'single' && appliedSelectedDate) {
+      const s = toMidnight(new Date(appliedSelectedDate)), e = new Date(s); e.setDate(e.getDate() + 1);
+      filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
     }
-    setFilteredItems(filtered);
+
+    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
+      const s = toMidnight(new Date(appliedStartDate));
+      const e = new Date(toMidnight(new Date(appliedEndDate))); e.setDate(e.getDate() + 1);
+      filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
+    }
+
+    setFilteredSales(filtered);
   };
 
-  const getStockStatus = (stockLevel) => {
-    const level = stockLevel || 0;
-    if (level === 0) {
-      return { label: 'Out of Stock', className: 'out-of-stock', icon: <AlertTriangle size={16} /> };
-    } else if (level < 10) {
-      return { label: 'Low Stock', className: 'low-stock', icon: <AlertTriangle size={16} /> };
-    }
-    return { label: 'In Stock', className: 'in-stock', icon: <TrendingUp size={16} /> };
+  // ── Filter controls ───────────────────────────────────────────────────────
+  const isFilterComplete = () => {
+    if (dateFilter === 'today')  return true;
+    if (dateFilter === 'single') return !!selectedDate;
+    if (dateFilter === 'range')  return !!(startDate && endDate);
+    return false;
+  };
+  const hasChanged = () =>
+    paymentFilter !== appliedPaymentFilter || dateFilter !== appliedDateFilter ||
+    selectedDate  !== appliedSelectedDate  || startDate  !== appliedStartDate  || endDate !== appliedEndDate;
+  const showApply = isFilterComplete() && hasChanged();
+
+  const handleClose = () => {
+    setPaymentFilter(appliedPaymentFilter); setDateFilter(appliedDateFilter);
+    setSelectedDate(appliedSelectedDate);  setStartDate(appliedStartDate); setEndDate(appliedEndDate);
+    setShowFilters(false);
+  };
+  const handleApply = () => {
+    setAppliedPaymentFilter(paymentFilter); setAppliedDateFilter(dateFilter);
+    setAppliedSelectedDate(selectedDate);  setAppliedStartDate(startDate); setAppliedEndDate(endDate);
+    setShowFilters(false);
+  };
+  const handleFilterButtonClick = () => {
+    if (!showFilters)    setShowFilters(true);
+    else if (showApply)  handleApply();
+    else                 handleClose();
   };
 
-  if (loading) {
-    return (
-      <div className="inventory">
-          <div className="card empty-state">
-            <Package size={64} />
-            <h3>Loading inventory...</h3>
-          </div>
-      </div>
-    );
-  }
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const getTodayStr = () => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  };
+  const formatDisplayDate = (dateStr) =>
+    new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const isYesterday = (dateStr) => {
+    if (!dateStr) return false;
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    return toMidnight(new Date(dateStr)).getTime() === toMidnight(y).getTime();
+  };
 
+  const getTableTitle = () => {
+    const payMap = { all: 'All Sales', cash: 'Cash Sales', credit: 'Credit Sales' };
+    const label  = payMap[appliedPaymentFilter] || 'All Sales';
+    if (appliedDateFilter === 'today') return `${label} Today`;
+    if (appliedDateFilter === 'single' && appliedSelectedDate) {
+      if (isYesterday(appliedSelectedDate)) return `${label} Yesterday`;
+      return `${label} on ${formatDisplayDate(appliedSelectedDate)}`;
+    }
+    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate)
+      return `${label} from ${formatDisplayDate(appliedStartDate)} to ${formatDisplayDate(appliedEndDate)}`;
+    return `${label} Today`;
+  };
+
+  const formatDateTime = (sale) => {
+    const d = resolveSaleDate(sale);
+    if (!d) return { date: 'N/A', time: 'N/A' };
+    return {
+      date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    };
+  };
+
+  const getItemQty      = (item) => item.quantity ?? item.qty ?? 0;
+  const getItemName     = (item) => item.name || '—';
+  const getSaleTotal    = (sale) => parseFloat(sale.total_amount ?? sale.total ?? 0);
+  const getSalePayType  = (sale) => sale.payment_type || sale.paymentType || '';
+  const getSaleCustomer = (sale) => sale.customer_name || sale.customerName || '';
+
+  const totalRecords = filteredSales.length;
+  const grandTotal   = filteredSales.reduce((sum, s) => sum + getSaleTotal(s), 0);
+  const btnLabel     = !showFilters ? 'Filter Sales' : showApply ? 'Apply Filter' : 'Close Filter';
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="inventory">
-      {/* FIXED HEADER */}
-      <div className="sticky-header">
-        <div className="inventory-header">
-          <div style={{ textAlign: 'center', width: '100%' }}>
-            <p className="screen-subtitle">View current stock levels ({goods.length} items)</p>
+    <div className="sales-record">
+
+      {/* Filter panel — appears above everything when open */}
+      {showFilters && (
+        <div className="filters-section">
+          <div className="filter-group">
+            <label>Payment Type</label>
+            <div className="filter-buttons">
+              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                  onClick={() => setPaymentFilter(val)}>{lbl}</button>
+              ))}
+            </div>
           </div>
+          <div className="filter-group">
+            <label>Date Filter</label>
+            <div className="filter-buttons">
+              {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
+                <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                  onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          {dateFilter === 'single' && (
+            <div className="filter-group">
+              <label>Select Date</label>
+              <input type="date" value={selectedDate} max={getTodayStr()}
+                onChange={e => setSelectedDate(e.target.value)} className="date-input" />
+            </div>
+          )}
+          {dateFilter === 'range' && (
+            <div className="filter-group">
+              <label>Date Range</label>
+              <div className="date-range-inputs">
+                <div className="date-range-field">
+                  <label className="date-range-label">From:</label>
+                  <input type="date" value={startDate} max={getTodayStr()}
+                    onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
+                    className="date-input" />
+                </div>
+                <div className="date-range-field">
+                  <label className="date-range-label">To:</label>
+                  <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
+                    disabled={!startDate} onChange={e => setEndDate(e.target.value)}
+                    className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
+                </div>
+              </div>
+              {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Sticky bar ──────────────────────────────────────────────────────
+           position:sticky; top:0 pins this to the top of .app-main.
+           The header table is the last child — its bottom edge is always
+           the bottom edge of this bar. No JS needed.
+      ────────────────────────────────────────────────────────────────────── */}
+      <div className="sj-sticky-bar">
+        <div className="filter-btn-wrapper">
+          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+        </div>
+        <h3 className="table-title">{getTableTitle()}</h3>
+        <div className="stats-boxes">
+          <div className="stat-box stat-box-purple">
+            <div className="stat-label">Total Records</div>
+            <div className="stat-value">{totalRecords}</div>
+          </div>
+          <div className="stat-box stat-box-green">
+            <div className="stat-label">Grand Total</div>
+            <div className="stat-value">${grandTotal.toFixed(2)}</div>
+          </div>
+        </div>
+
+        {/* Header table — glued to the bottom of the sticky bar */}
+        <div className="sj-header-wrapper">
+          <table className="sj-header-table">
+            <SharedColGroup />
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Product</th>
+                <th className="col-qty">Qty</th>
+                <th>Sale Total</th>
+                <th>Payment</th>
+                <th>Customer</th>
+              </tr>
+            </thead>
+          </table>
         </div>
       </div>
 
-      {/* SCROLLABLE CONTENT */}
-      <div className="inventory-scrollable-content">
-        {filteredItems.length === 0 && !searchTerm ? (
-          <div className="card empty-state">
-            <Package size={64} />
-            <h3>No items found</h3>
-            <p>Products will sync from cloud automatically.</p>
-            <button onClick={loadData} style={{marginTop: '20px', padding: '10px 20px', cursor: 'pointer'}}>
-              Retry Sync
-            </button>
-          </div>
-        ) : (
-          <>
-          <div className="search-section">
-              <div className="search-box">
-                <Search size={18} />
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="Search items..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
+      {/* ── Body table — outside sticky bar, scrolls freely under the header ── */}
+      <div className="table-wrapper">
+        <table className="sales-table">
+          <SharedColGroup />
+          <tbody>
+            {filteredSales.length === 0 ? (
+              <tr><td colSpan="7" className="empty-cell">No sales records found</td></tr>
+            ) : (
+              filteredSales.map(sale => {
+                const { date, time } = formatDateTime(sale);
+                const total    = getSaleTotal(sale);
+                const payType  = getSalePayType(sale);
+                const customer = getSaleCustomer(sale);
+                const items    = sale.items && sale.items.length > 0 ? sale.items : [null];
+                const rowSpan  = items.length;
 
-            <div className="table-wrapper">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Item Name</th>
-                    <th>Price</th>
-                    <th>Stock</th>
-                    <th>Status</th>
+                return items.map((item, idx) => (
+                  <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}>
+                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{date}</td>}
+                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
+                    <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
+                    <td className="col-qty">{item ? getItemQty(item) : '—'}</td>
+                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">${total.toFixed(2)}</td>}
+                    {idx === 0 && (
+                      <td rowSpan={rowSpan} className="merged-cell">
+                        <span className={`payment-badge payment-${payType}`}>
+                          {payType ? payType.toUpperCase() : 'N/A'}
+                        </span>
+                      </td>
+                    )}
+                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{customer || '—'}</td>}
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => {
-                    const status = getStockStatus(item.stock_quantity);
-                    return (
-                      <tr key={item.id}>
-                        <td>{item.id || 'N/A'}</td>
-                        <td>{item.name || 'Unknown'}</td>
-                        <td>${(item.price || 0).toFixed(2)}</td>
-                        <td>{item.stock_quantity || 0}</td>
-                        <td>
-                          <span className={`status-badge ${status.className}`}>
-                            {status.icon}
-                            {status.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                ));
+              })
+            )}
+          </tbody>
+        </table>
       </div>
+
     </div>
   );
 }
 
-export default Inventory;
+export default SalesJournal;
