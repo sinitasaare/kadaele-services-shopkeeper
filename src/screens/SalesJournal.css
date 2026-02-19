@@ -269,7 +269,15 @@
   color: var(--text-secondary);
 }
 
-/* ── Payment type badges ── */
+/* Continuation rows (items 2+ of the same sale) — very subtle tint */
+.sale-continuation-row td {
+  border-top: none;
+  background-color: rgba(102, 126, 234, 0.02);
+}
+
+.sale-continuation-row:hover td {
+  background-color: rgba(102, 126, 234, 0.05) !important;
+}
 .payment-badge {
   display: inline-block;
   padding: 0.2rem 0.55rem;
