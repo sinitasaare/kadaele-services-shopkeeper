@@ -113,6 +113,14 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
+/* ── Header table: lives inside .sj-sticky-bar, always visible ── */
+.sj-header-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.875rem;
+}
+
 /* ── Table wrapper ──────────────────────────────────────────────────────────
    overflow-x: auto  → horizontal scroll on narrow screens  ✓
    overflow-y: NOT SET (do not add it) — if you set overflow-y here it
@@ -131,30 +139,17 @@
 .sales-table {
   width: max-content;
   min-width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   font-size: 0.875rem;
   table-layout: auto;
 }
 
-/* ── Table header: sticky ──────────────────────────────────────────────────
-   position: sticky + top are both required.
-   The 'top' value is written at runtime by JS (applyTheadTop in
-   SalesJournal.jsx) to be exactly the sticky bar's rendered offsetHeight.
-   We set a safe fallback of 0px here; JS will overwrite it on first paint.
-   z-index must be higher than normal cells but lower than the sticky bar.
-────────────────────────────────────────────────────────────────────────── */
-.sales-table thead {
-  position: sticky;
-  top: 0;          /* JS overwrites this immediately after first render */
-  z-index: 20;
-  background-color: #f8f9fa;
-}
-.sales-table th {
+.sales-table th, .sj-header-table th {
   padding: 0.75rem 1rem; text-align: left; font-weight: 600;
   font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--text-secondary); border-bottom: 2px solid var(--border);
   white-space: nowrap;
+  background-color: #f8f9fa;
 }
 .sales-table td {
   padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
