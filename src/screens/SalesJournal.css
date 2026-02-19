@@ -9,9 +9,9 @@
   padding: 0;
 }
 
-/* ── Filter panel ── */
+/* ── Filter panel — now inside sticky bar ── */
 .filters-section {
-  margin: 0 20px;
+  margin: 0;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -113,20 +113,10 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Header table: lives inside .sj-sticky-bar, always visible ── */
-.sj-header-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: auto;
-  font-size: 0.875rem;
-}
-
 /* ── Table wrapper ──────────────────────────────────────────────────────────
    overflow-x: auto  → horizontal scroll on narrow screens  ✓
-   overflow-y: NOT SET (do not add it) — if you set overflow-y here it
-   creates a new scroll container and breaks position:sticky on the thead.
-   The page's .app-main scroll container must remain the sole scroll
-   ancestor for both the sticky bar and the thead.
+   overflow-y: NOT SET — keeps .app-main as the sole scroll ancestor so
+   position:sticky on thead works correctly.
 ────────────────────────────────────────────────────────────────────────── */
 .table-wrapper {
   overflow-x: auto;
@@ -150,6 +140,9 @@
   color: var(--text-secondary); border-bottom: 2px solid var(--border);
   white-space: nowrap;
   background-color: #f8f9fa;
+  position: sticky;
+  /* top is set dynamically via JS (applyTheadTop) */
+  z-index: 10;
 }
 .sales-table td {
   padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
@@ -193,7 +186,6 @@
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  .filters-section { margin: 0 15px; }
   .filter-btn-wrapper { padding: 0 15px; }
   .table-title { margin: 0 15px; }
   .stats-boxes { margin: 0 15px; }
