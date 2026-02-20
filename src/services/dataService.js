@@ -217,10 +217,7 @@ class DataService {
   // Goods operations
   async getGoods() {
     try {
-      // Pull from Firebase only on the FIRST call of the session so that:
-      // 1. Goods are always up-to-date when the app starts online.
-      // 2. Subsequent calls (e.g. SalesRegister search) use the local cache
-      //    and work correctly offline without hitting Firebase again.
+      // Pull from Firebase only on the FIRST call of the session.
       if (this.isOnline && auth.currentUser && !this._goodsFetchedFromFirebase) {
         this._goodsFetchedFromFirebase = true;
         const goodsSnapshot = await getDocs(collection(db, 'goods'));
@@ -228,8 +225,25 @@ class DataService {
           id: doc.id,
           ...doc.data()
         }));
-        await localforage.setItem(DATA_KEYS.GOODS, firebaseGoods);
-        return firebaseGoods;
+
+        // Add any local-only items (added offline) that Firebase doesnt have by ID.
+        const localGoods = await localforage.getItem(DATA_KEYS.GOODS) || [];
+        const firebaseIds = new Set(firebaseGoods.map(g => String(g.id)));
+        const localOnlyGoods = localGoods.filter(g => !firebaseIds.has(String(g.id)));
+        const rawMerged = [...firebaseGoods, ...localOnlyGoods];
+
+        // Deduplicate by name (case-insensitive, trimmed) keeping the first occurrence.
+        // This cleans up any existing duplicates already in Firebase or local storage.
+        const seenNames = new Set();
+        const merged = rawMerged.filter(g => {
+          const key = (g.name || '').toLowerCase().trim();
+          if (!key || seenNames.has(key)) return false;
+          seenNames.add(key);
+          return true;
+        });
+
+        await localforage.setItem(DATA_KEYS.GOODS, merged);
+        return merged;
       }
     } catch (error) {
       console.error('Error fetching goods from Firebase:', error);
@@ -272,21 +286,16 @@ class DataService {
       stock_quantity: good.stock_quantity || 0,
       createdAt: new Date().toISOString(),
     };
+    // Guard: never push if this ID OR this name already exists
+    const nameKey = (newGood.name || '').toLowerCase().trim();
+    const isDuplicate = goods.some(g =>
+      String(g.id) === String(newGood.id) ||
+      (nameKey && (g.name || '').toLowerCase().trim() === nameKey)
+    );
+    if (isDuplicate) return newGood;
     goods.push(newGood);
+    // setGoods handles both local save AND Firebase batch sync
     await this.setGoods(goods);
-    
-    // Sync to Firebase
-    if (this.isOnline && auth.currentUser) {
-      try {
-        await setDoc(doc(db, 'goods', newGood.id.toString()), {
-          ...newGood,
-          createdAt: serverTimestamp()
-        });
-      } catch (error) {
-        console.error('Error adding good to Firebase:', error);
-      }
-    }
-    
     return newGood;
   }
 
@@ -349,10 +358,13 @@ class DataService {
     const sales = await this.getSales();
     const serverTime = new Date();
 
+    // Use manual date if provided (forgotten entry), otherwise now
+    const saleDate = sale.date ? new Date(sale.date) : serverTime;
+
     const newSale = {
       id: sale.id || this.generateId(),
-      date: serverTime.toISOString(),
-      timestamp: serverTime.toISOString(), // For SalesJournal compatibility
+      date: saleDate.toISOString(),
+      timestamp: saleDate.toISOString(), // For SalesJournal compatibility
       items: sale.items,
       total: parseFloat(sale.total),
       total_amount: parseFloat(sale.total),
@@ -373,6 +385,20 @@ class DataService {
     sales.push(newSale);
     await this.setSales(sales);
     
+    // ── Auto-record cash sales in the Cash Journal ────────────────────────
+    // Every cash sale is also a Cash IN entry so the Cash Journal stays in sync.
+    if (newSale.paymentType === 'cash') {
+      const itemNames = (newSale.items || []).map(i => i.name).filter(Boolean).join(', ');
+      await this.addCashEntry({
+        type: 'in',
+        amount: newSale.total,
+        note: `CASH Sale${itemNames ? ': ' + itemNames : ''}`,
+        date: saleDate.toISOString(),
+        source: 'sale',
+        saleId: newSale.id,  // link back to the originating sale
+      });
+    }
+
     // Sync to Firebase 'sales' collection
     if (this.isOnline && auth.currentUser) {
       try {
