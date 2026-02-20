@@ -64,9 +64,6 @@ jobs:
       run: |
         chmod +x generate-icons.sh
         ./generate-icons.sh
-    
-    - name: Sync icons to Android
-      run: npx cap sync android
 
     - name: Build APK
       run: |
