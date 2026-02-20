@@ -156,6 +156,8 @@
 
 .inv-col-right  { text-align: right !important; }
 .inv-col-center { text-align: center !important; }
+.inv-col-num    { width: 36px; min-width: 36px; text-align: center !important; }
+.inv-num-cell   { text-align: center !important; color: #9ca3af; font-size: 12px; font-weight: 500; }
 
 .inv-name-cell { font-weight: 500; }
 .inv-cat-cell  { color: var(--text-secondary, #888); font-size: 0.8125rem; }
