@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
 import dataService from '../services/dataService';
+import html2canvas from 'html2canvas';
 import './Debtors.css';
 
 function Debtors() {
@@ -21,6 +22,8 @@ function Debtors() {
   const [sortOrder, setSortOrder]       = useState(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef                     = useRef(null);
+  const historyRef                      = useRef(null);  // ref for debt history section → PDF
+  const [pdfGenerating, setPdfGenerating] = useState(false);
 
   useEffect(() => { loadDebtors(); }, []);
 
@@ -234,17 +237,114 @@ Kadaele Services`;
     return { subject, body };
   };
 
-  const handleNotify = (method) => {
+  // ── Generate statement as PNG image data URL ──────────────────────────────
+  const generateStatementImage = async () => {
+    const el = historyRef.current;
+    if (!el) return null;
+    try {
+      const canvas = await html2canvas(el, {
+        backgroundColor: '#ffffff',
+        scale: 2,          // retina-quality
+        useCORS: true,
+        logging: false,
+      });
+      return canvas.toDataURL('image/png');
+    } catch (err) {
+      console.error('html2canvas error:', err);
+      return null;
+    }
+  };
+
+  // ── Share / save the generated image via Capacitor (Android) ─────────────
+  const shareImageViaCapacitor = async (dataUrl, fileName) => {
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const { Share }                 = await import('@capacitor/share');
+
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+      await Filesystem.writeFile({
+        path:      fileName,
+        data:      base64,
+        directory: Directory.Cache,
+      });
+      const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
+      return uri;
+    } catch (err) {
+      console.error('Capacitor share error:', err);
+      return null;
+    }
+  };
+
+  const handleNotify = async (method) => {
     const debtor = selectedDebtor;
     const { subject, body } = buildNotifyMessage();
 
+    // ── Step 1: Generate the debt-statement image ─────────────────────────
+    setPdfGenerating(true);
+    let fileUri = null;
+    try {
+      const imgDataUrl = await generateStatementImage();
+      if (imgDataUrl) {
+        const debtorName = (debtor.name || debtor.customerName || 'debtor').replace(/\s+/g, '_');
+        const fileName   = `statement_${debtorName}_${Date.now()}.png`;
+
+        // On native Android (Capacitor), save to cache and share
+        const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+        if (isNative) {
+          fileUri = await shareImageViaCapacitor(imgDataUrl, fileName);
+        } else {
+          // On web/PWA: trigger a download so the user has the image ready to attach
+          const link = document.createElement('a');
+          link.href = imgDataUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      }
+    } finally {
+      setPdfGenerating(false);
+    }
+
+    // ── Step 2: Open the messaging app with the pre-composed message ───────
     if (method === 'whatsapp') {
       const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
-      // WhatsApp doesn't support subjects, just send the body
+      // If native and we have a fileUri, use Capacitor Share (attaches image)
+      if (fileUri) {
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({
+            title: subject,
+            text:  body,
+            url:   fileUri,
+            dialogTitle: `Send to ${debtor.name || debtor.customerName}`,
+          });
+          setShowNotifyModal(false);
+          return;
+        } catch (err) {
+          console.error('Share API error:', err);
+        }
+      }
       window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(body)}`, '_blank');
     } else if (method === 'email') {
       if (!debtor.email) { alert('No email available'); return; }
+      // Email: if native and file was saved, use Share to let user pick mail client with attachment
+      if (fileUri) {
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({
+            title: subject,
+            text:  body,
+            url:   fileUri,
+            dialogTitle: `Email to ${debtor.name || debtor.customerName}`,
+          });
+          setShowNotifyModal(false);
+          return;
+        } catch (err) {
+          console.error('Share API error:', err);
+        }
+      }
       window.location.href = `mailto:${debtor.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
@@ -452,7 +552,7 @@ Kadaele Services`;
 
             {/* ── Debt History tab ── */}
             {activeTab === 'history' && (
-              <div className="d-history-wrapper">
+              <div className="d-history-wrapper" ref={historyRef}>
                 <div className="d-history-actions">
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
@@ -609,16 +709,29 @@ Kadaele Services`;
 
       {/* ── Notify Modal ── */}
       {showNotifyModal && (
-        <div className="d-overlay" onClick={() => setShowNotifyModal(false)}>
+        <div className="d-overlay" onClick={() => !pdfGenerating && setShowNotifyModal(false)}>
           <div className="d-modal d-modal-sm d-notify-modal" onClick={e => e.stopPropagation()}>
             <div className="d-modal-header" style={{ flexShrink: 0 }}>
               <h2 className="d-modal-title">Notify via</h2>
-              <button className="d-close-btn" onClick={() => setShowNotifyModal(false)}><X size={22} /></button>
+              <button className="d-close-btn" onClick={() => !pdfGenerating && setShowNotifyModal(false)}><X size={22} /></button>
             </div>
+            {pdfGenerating && (
+              <div style={{ padding: '10px 16px', background: '#fef3c7', borderRadius: '8px', margin: '0 16px 8px',
+                fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '16px' }}>⏳</span>
+                Generating statement image, please wait…
+              </div>
+            )}
             <div className="d-notify-options" style={{ flexShrink: 0 }}>
-              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')}><MessageSquare size={20}/> WhatsApp</button>
-              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')}><Mail size={20}/> Email</button>
-              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')}><Phone size={20}/> SMS</button>
+              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')} disabled={pdfGenerating}>
+                <MessageSquare size={20}/> {pdfGenerating ? '…' : 'WhatsApp'}
+              </button>
+              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')} disabled={pdfGenerating}>
+                <Mail size={20}/> {pdfGenerating ? '…' : 'Email'}
+              </button>
+              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')} disabled={pdfGenerating}>
+                <Phone size={20}/> {pdfGenerating ? '…' : 'SMS'}
+              </button>
             </div>
             <div className="d-notify-preview d-notify-preview-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               <p className="d-notify-preview-label">Message Preview</p>
