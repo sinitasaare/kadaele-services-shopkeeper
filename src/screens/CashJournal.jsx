@@ -103,19 +103,12 @@ function CashJournal() {
   useEffect(() => { applyFilters(); }, [entries, appliedTypeFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadEntries = async () => {
-    const sales = await dataService.getSales();
-    const cashSaleEntries = (sales || [])
-      .filter(s => (s.paymentType === 'cash' || s.payment_type === 'cash') && s.status !== 'voided')
-      .map(s => ({
-        id: s.id, source: 'sale', type: TYPE_IN,
-        amount: parseFloat(s.total_amount ?? s.total ?? 0),
-        note: s.items?.length > 0 ? s.items.map(i => i.name).join(', ') : 'Cash Sale',
-        date: s.date || s.timestamp || s.createdAt,
-      }));
-
+    // Cash sales are now automatically recorded in cashEntries by dataService.addSale()
+    // with note "CASH Sale: …" so we only need to read from getCashEntries().
+    // This avoids the previous double-counting that came from merging getSales() + getCashEntries().
     const manualEntries = await dataService.getCashEntries();
 
-    const all = [...cashSaleEntries, ...(manualEntries || [])]
+    const all = (manualEntries || [])
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     let running = 0;
@@ -342,7 +335,9 @@ function CashJournal() {
         )}
 
         <div className="cj-top-row">
-          <button className="cj-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+          <button
+            className={`cj-filter-action-btn${!showFilters ? ' cjfab-open' : showApply ? ' cjfab-apply' : ' cjfab-close'}`}
+            onClick={handleFilterButtonClick}>{btnLabel}</button>
           {/* Hide + Add Entry while filter panel is open */}
           {!showFilters && (
             <button className="cj-add-btn" onClick={openAddModal}>+ Add Entry</button>
