@@ -610,17 +610,17 @@ Kadaele Services`;
       {/* ── Notify Modal ── */}
       {showNotifyModal && (
         <div className="d-overlay" onClick={() => setShowNotifyModal(false)}>
-          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="d-modal-header">
+          <div className="d-modal d-modal-sm d-notify-modal" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header" style={{ flexShrink: 0 }}>
               <h2 className="d-modal-title">Notify via</h2>
               <button className="d-close-btn" onClick={() => setShowNotifyModal(false)}><X size={22} /></button>
             </div>
-            <div className="d-notify-options">
+            <div className="d-notify-options" style={{ flexShrink: 0 }}>
               <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')}><MessageSquare size={20}/> WhatsApp</button>
               <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')}><Mail size={20}/> Email</button>
               <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')}><Phone size={20}/> SMS</button>
             </div>
-            <div className="d-notify-preview">
+            <div className="d-notify-preview d-notify-preview-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               <p className="d-notify-preview-label">Message Preview</p>
               <pre className="d-notify-preview-text" style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'inherit',margin:0}}>
                 {selectedDebtor ? buildNotifyMessage().body : ''}
