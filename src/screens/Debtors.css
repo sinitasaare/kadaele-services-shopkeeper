@@ -297,7 +297,21 @@
 .d-notify-sms { background: #fef3c7; color: #d97706; }
 .d-notify-sms:hover { background: #d97706; color: #fff; }
 
+/* Notify modal – flex column so preview area can scroll independently */
+.d-notify-modal {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 82vh !important;
+  overflow: hidden !important;
+}
 .d-notify-preview { padding: 12px 20px 18px; border-top: 1px solid #f0f0f0; }
+.d-notify-preview-scroll {
+  flex: 1; min-height: 0;
+  padding: 12px 20px 18px;
+  border-top: 1px solid #f0f0f0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .d-notify-preview-label { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; margin-bottom: 6px; }
 .d-notify-preview-text { font-size: 12px; color: #6b7280; line-height: 1.5; }
 
