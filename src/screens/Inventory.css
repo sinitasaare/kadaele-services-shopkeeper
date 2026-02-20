@@ -165,3 +165,62 @@
   .inv-table th,
   .inv-table td     { padding: 0.5rem 0.75rem; font-size: 0.75rem; }
 }
+
+/* ── Barcode column ── */
+.inv-barcode-cell { min-width: 140px; }
+
+.inv-barcode-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.inv-barcode-display:hover { background: rgba(102,126,234,0.07); }
+
+.inv-barcode-value {
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  color: #374151;
+  letter-spacing: 0.03em;
+}
+.inv-barcode-empty {
+  font-size: 0.75rem;
+  color: #bbb;
+  font-style: italic;
+}
+.inv-barcode-edit-icon {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+.inv-barcode-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.inv-barcode-input {
+  flex: 1;
+  padding: 4px 7px;
+  font-size: 0.8rem;
+  border: 1.5px solid #667eea;
+  border-radius: 5px;
+  outline: none;
+  min-width: 0;
+  font-family: 'Courier New', monospace;
+}
+.inv-barcode-save, .inv-barcode-cancel {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.inv-barcode-save  { color: #10b981; }
+.inv-barcode-save:hover  { background: #d1fae5; }
+.inv-barcode-cancel { color: #ef4444; }
+.inv-barcode-cancel:hover { background: #fee2e2; }
