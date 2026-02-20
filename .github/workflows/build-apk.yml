@@ -63,6 +63,18 @@ jobs:
         # generate-icons.sh also writes it into colors.xml, causing a duplicate build error.
         # We remove the standalone file so colors.xml is the single source of truth.
         rm -f android/app/src/main/res/values/ic_launcher_background.xml
+
+    - name: Apply Android 12+ SplashScreen theme to MainActivity
+      run: |
+        # Point MainActivity at our custom SplashScreen theme so the logo
+        # appears during loading instead of a blank white screen.
+        MANIFEST="android/app/src/main/AndroidManifest.xml"
+        if grep -q 'android:theme="@style/AppTheme"' "$MANIFEST"; then
+          sed -i 's|android:theme="@style/AppTheme"|android:theme="@style/AppTheme.SplashScreen"|g' "$MANIFEST"
+          echo "SplashScreen theme applied to MainActivity."
+        else
+          echo "Theme attribute not found — skipping (may already be set)."
+        fi
     
     - name: Install ImageMagick
       run: sudo apt-get update && sudo apt-get install -y imagemagick
