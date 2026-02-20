@@ -76,17 +76,29 @@
 }
 
 .cj-filter-action-btn {
-  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
   color: white; border: none; padding: 10px 20px; border-radius: 8px;
   font-size: 14px; font-weight: 600; cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
   white-space: nowrap;
 }
-.cj-filter-action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+/* Filter Entries — purplish green */
+.cj-filter-action-btn.cjfab-open {
+  background: linear-gradient(135deg, #3d9970 0%, #5b4fcf 100%);
+  box-shadow: 0 2px 8px rgba(61,153,112,0.35);
 }
+.cj-filter-action-btn.cjfab-open:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(61,153,112,0.45); }
+/* Apply Filter — purplish blue */
+.cj-filter-action-btn.cjfab-apply {
+  background: linear-gradient(135deg, #3b82f6 0%, #667eea 100%);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.35);
+}
+.cj-filter-action-btn.cjfab-apply:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59,130,246,0.45); }
+/* Close Filter — purplish red */
+.cj-filter-action-btn.cjfab-close {
+  background: linear-gradient(135deg, #e05252 0%, #9b3fbf 100%);
+  box-shadow: 0 2px 8px rgba(224,82,82,0.35);
+}
+.cj-filter-action-btn.cjfab-close:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(224,82,82,0.45); }
 
 .cj-add-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
