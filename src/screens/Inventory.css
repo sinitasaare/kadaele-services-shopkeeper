@@ -32,7 +32,9 @@
   padding: 9px 12px;
   gap: 8px;
   transition: border-color 0.2s;
-  width: 65%;          /* ← reduced by 35% */
+  width: 65%;
+  align-self: center;  /* centres in flex-column parent */
+  margin: 0 auto;      /* belt-and-suspenders centering */
 }
 .inv-search-box:focus-within {
   border-color: #667eea;
