@@ -301,6 +301,40 @@
 .d-notify-preview-label { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; margin-bottom: 6px; }
 .d-notify-preview-text { font-size: 12px; color: #6b7280; line-height: 1.5; }
 
+/* ── Sort button ── */
+.d-sort-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+.d-sort-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  background: #fff; border: 1.5px solid #d1d5db;
+  border-radius: 8px; cursor: pointer; color: #6b7280;
+  transition: all 0.2s;
+}
+.d-sort-btn:hover { border-color: #667eea; color: #667eea; }
+.d-sort-active { border-color: #667eea !important; background: #667eea !important; color: #fff !important; }
+
+.d-sort-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 3000;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14); min-width: 210px;
+  overflow: hidden;
+}
+.d-sort-option {
+  display: block; width: 100%;
+  padding: 11px 16px; text-align: left;
+  background: none; border: none; border-bottom: 1px solid #f0f0f0;
+  font-size: 13px; font-weight: 500; color: #374151; cursor: pointer;
+  transition: background 0.15s;
+}
+.d-sort-option:last-child { border-bottom: none; }
+.d-sort-option:hover { background: #f5f5f5; }
+.d-sort-option-active { color: #667eea; font-weight: 700; background: #eef0fd; }
+.d-sort-clear { color: #ef4444; font-size: 12px; }
+.d-sort-clear:hover { background: #fee2e2; }
+
 /* ── Mobile ── */
 @media (max-width: 480px) {
   .d-screen { padding: 12px 12px 16px; }
