@@ -93,7 +93,7 @@ function Inventory() {
       </div>
 
       {/* ── Table ── */}
-      <div className="inv-table-wrapper">
+      <div className="inv-scroll-body">
         {loading ? (
           <div className="inv-empty">Loading inventory…</div>
         ) : filtered.length === 0 ? (
@@ -101,8 +101,9 @@ function Inventory() {
             {searchTerm ? `No items matching "${searchTerm}"` : 'No goods found. Go online to sync from Firebase.'}
           </div>
         ) : (
+          <div className="inv-table-wrapper">
           <table className="inv-table">
-            <thead>
+            <thead className="inv-thead">
               <tr>
                 <th>Name</th>
                 <th>Category</th>
@@ -160,6 +161,7 @@ function Inventory() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
