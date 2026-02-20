@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Globe, Moon, Sun, DollarSign, Bell,
   ClipboardList, Wallet, ChevronDown, ChevronUp, X, Check,
-  CreditCard
+  CreditCard,  // kept for future use
 } from 'lucide-react';
 import dataService from '../services/dataService';
 import './Settings.css';
@@ -26,11 +26,10 @@ const T = {
     notifDailySales: 'Daily sales milestone',
     notifDailySalesDesc: 'Notify when daily sales reaches an increment of $500',
     forgottenEntries: 'Enter Forgotten Records',
-    forgottenSale: 'Forgotten Cash Sale',
-    forgottenSaleDesc: 'Record a past cash sale with a manual date',
-    forgottenCredit: 'Forgotten Credit Sale',
-    forgottenCreditDesc: 'Record a past credit sale with a manual date',
-    forgottenCash: 'Forgotten Cash Entry',
+    forgottenEntriesNote: 'Records before the business uses this system, if need be, can be entered here.',
+    forgottenSale: 'Unrecorded Sales',
+    forgottenSaleDesc: 'Record past sales (cash or credit) with a manual date',
+    forgottenCash: 'Unrecorded Cash Entry',
     forgottenCashDesc: 'Record a past cash in/out with a manual date',
     save: 'Save',
     cancel: 'Cancel',
@@ -75,10 +74,9 @@ const T = {
     notifDailySales: 'Kaungaaki ni Boraoi',
     notifDailySalesDesc: 'Kaungaaki ngkana e roko $500 ni boraoi',
     forgottenEntries: 'Katinanikaki ni Boraoi',
-    forgottenSale: 'Boraoi ae Makuri (Amwarake)',
+    forgottenEntriesNote: 'Katinanikaki ni Boraoi ao e kona n reke ikai.',
+    forgottenSale: 'Boraoi ae Makuri (Akawa)',
     forgottenSaleDesc: 'Katikui boraoi are e nakoraoi ma bong ni makuri',
-    forgottenCredit: 'Boraoi ae Makuri (Otinaomata)',
-    forgottenCreditDesc: 'Katikui boraoi n otinaomata are e nakoraoi',
     forgottenCash: 'Katinanikaki n Amwarake',
     forgottenCashDesc: 'Katikui amwarake are e nakoraoi ma bong ni makuri',
     save: 'Katikui',
@@ -124,11 +122,11 @@ const T = {
     notifDailySales: '每日销售里程碑',
     notifDailySalesDesc: '当日销售额每增加500美元时通知',
     forgottenEntries: '补录遗漏记录',
-    forgottenSale: '遗漏现金销售',
-    forgottenSaleDesc: '手动输入日期记录过去的现金销售',
-    forgottenCredit: '遗漏赊账销售',
-    forgottenCreditDesc: '手动输入日期记录过去的赊账销售',
-    forgottenCash: '遗漏现金记录',
+    forgottenEntriesNote: '如有需要，可在此处输入使用本系统之前的记录。',
+    forgottenSale: '未记录销售',
+    forgottenSaleDesc: '手动输入日期记录过去的销售',
+    forgottenCash: '未记录现金记录',
+    forgottenCashDesc: '手动输入日期记录过去的现金收支',
     forgottenCashDesc: '手动输入日期记录过去的现金收支',
     save: '保存',
     cancel: '取消',
@@ -163,8 +161,9 @@ const T = {
 const LANG_NAMES = { en: 'English', ki: 'Kiribati', zh: '中文' };
 const CURRENCY_SYMBOLS = ['$', '£', '€', 'A$', 'KES', '¥', 'AUD'];
 
+
 // ─────────────────────────────────────────────────────────────
-// Forgotten Sale Modal
+// Unrecorded Sales Modal (cash OR credit, pre-system records)
 // ─────────────────────────────────────────────────────────────
 function ForgottenSaleModal({ t, onClose, onSaved }) {
   const [goods, setGoods]           = useState([]);
@@ -196,6 +195,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const addToCart = (good) => {
     setCart(prev => {
       const ex = prev.find(i => i.id === good.id);
+      // Default quantity is 1
       return ex ? prev.map(i => i.id === good.id ? { ...i, qty: i.qty + 1 } : i)
                 : [...prev, { ...good, qty: 1 }];
     });
@@ -228,6 +228,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
         isDebt: payType === 'credit',
         manualDate: saleDate,
         date: new Date(saleDate).toISOString(),
+        isUnrecorded: true,
       });
       onSaved();
     } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
@@ -235,7 +236,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   };
 
   const todayStr = () => {
-    const d = new Date(); 
+    const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
@@ -247,15 +248,11 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
           <button className="st-modal-close" onClick={onClose}><X size={20}/></button>
         </div>
         <div className="st-modal-body">
-
-          {/* Date */}
           <div className="st-field">
             <label>{t.saleDate} *</label>
             <input type="date" max={todayStr()} value={saleDate}
               onChange={e => setSaleDate(e.target.value)} className="st-input" />
           </div>
-
-          {/* Payment type */}
           <div className="st-field">
             <label>{t.paymentType}</label>
             <div className="st-toggle-row">
@@ -267,8 +264,6 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
               ))}
             </div>
           </div>
-
-          {/* Debtor (credit only) */}
           {payType === 'credit' && (
             <>
               <div className="st-field">
@@ -287,8 +282,6 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
               </div>
             </>
           )}
-
-          {/* Item search */}
           <div className="st-field" style={{ position: 'relative' }}>
             <label>{t.addItem}</label>
             <input type="text" className="st-input" placeholder={t.searchItem}
@@ -308,8 +301,6 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
               </div>
             )}
           </div>
-
-          {/* Cart */}
           {cart.length > 0 && (
             <div className="st-cart">
               <div className="st-cart-header">
@@ -334,7 +325,6 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
             </div>
           )}
         </div>
-
         <div className="st-modal-footer">
           <button className="st-btn-cancel" onClick={onClose}>{t.cancel}</button>
           <button className="st-btn-save" onClick={handleSave} disabled={saving}>
@@ -347,7 +337,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Forgotten Cash Entry Modal
+// Unrecorded Cash Entry Modal
 // ─────────────────────────────────────────────────────────────
 function ForgottenCashModal({ t, onClose, onSaved }) {
   const [cashDate, setCashDate]       = useState('');
@@ -371,6 +361,7 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
       await dataService.addCashEntry({
         type: cashType, amount: amt, note: description.trim(),
         date: new Date(cashDate).toISOString(), source: 'manual_backdated',
+        isUnrecorded: true,
       });
       onSaved();
     } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
@@ -424,165 +415,6 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Forgotten Credit Sale Modal
-// ─────────────────────────────────────────────────────────────
-function ForgottenCreditModal({ t, onClose, onSaved }) {
-  const [goods, setGoods]           = useState([]);
-  const [debtors, setDebtors]       = useState([]);
-  const [saleDate, setSaleDate]     = useState('');
-  const [cart, setCart]             = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
-  const [debtorId, setDebtorId]     = useState('');
-  const [repayDate, setRepayDate]   = useState('');
-  const [saving, setSaving]         = useState(false);
-
-  useEffect(() => {
-    dataService.getGoods().then(g => setGoods(g || []));
-    dataService.getDebtors().then(d => setDebtors(d || []));
-  }, []);
-
-  const smartSearch = (term) => {
-    if (!term.trim()) return [];
-    const t2 = term.toLowerCase();
-    return goods.filter(g => {
-      const w = (g.name || '').toLowerCase().split(/\s+/);
-      return w[0]?.startsWith(t2) || (w[1] && w[1].startsWith(t2));
-    }).slice(0, 8);
-  };
-  const searchResults = smartSearch(searchTerm);
-
-  const addToCart = (good) => {
-    setCart(prev => {
-      const ex = prev.find(i => i.id === good.id);
-      return ex ? prev.map(i => i.id === good.id ? { ...i, qty: i.qty + 1 } : i)
-                : [...prev, { ...good, qty: 1 }];
-    });
-    setSearchTerm(''); setShowSearch(false);
-  };
-  const updateQty = (id, qty) => {
-    const q = parseInt(qty, 10);
-    if (isNaN(q) || q < 1) return;
-    setCart(prev => prev.map(i => i.id === id ? { ...i, qty: q } : i));
-  };
-  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
-  const total = cart.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
-
-  const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  };
-
-  const handleSave = async () => {
-    if (!saleDate) { alert('Please enter the sale date.'); return; }
-    if (cart.length === 0) { alert('Please add at least one item.'); return; }
-    if (!debtorId) { alert('Please select a debtor.'); return; }
-    if (!repayDate) { alert('Please enter a repayment date.'); return; }
-    setSaving(true);
-    try {
-      const debtor = debtors.find(d => d.id === debtorId);
-      await dataService.addSale({
-        items: cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.qty, subtotal: i.price * i.qty })),
-        total,
-        paymentType: 'credit',
-        customerName: debtor?.name || debtor?.customerName || '',
-        customerPhone: debtor?.phone || '',
-        debtorId: debtorId,
-        repaymentDate: repayDate,
-        isDebt: true,
-        manualDate: saleDate,
-        date: new Date(saleDate).toISOString(),
-      });
-      onSaved();
-    } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div className="st-modal-overlay">
-      <div className="st-modal">
-        <div className="st-modal-header">
-          <h3>{t.forgottenCredit}</h3>
-          <button className="st-modal-close" onClick={onClose}><X size={20}/></button>
-        </div>
-        <div className="st-modal-body">
-          <div className="st-field">
-            <label>{t.saleDate} *</label>
-            <input type="date" max={todayStr()} value={saleDate}
-              onChange={e => setSaleDate(e.target.value)} className="st-input" />
-          </div>
-
-          <div className="st-field">
-            <label>{t.debtorName} *</label>
-            <select className="st-input" value={debtorId} onChange={e => setDebtorId(e.target.value)}>
-              <option value="">{t.selectDebtor}</option>
-              {debtors.map(d => (
-                <option key={d.id} value={d.id}>{d.name || d.customerName}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="st-field">
-            <label>{t.repayDate} *</label>
-            <input type="date" className="st-input" value={repayDate}
-              onChange={e => setRepayDate(e.target.value)} />
-          </div>
-
-          <div className="st-field" style={{ position: 'relative' }}>
-            <label>{t.addItem}</label>
-            <input type="text" className="st-input" placeholder={t.searchItem}
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setShowSearch(true); }}
-              onFocus={() => setShowSearch(true)}
-              onBlur={() => setTimeout(() => setShowSearch(false), 200)} />
-            {showSearch && searchResults.length > 0 && (
-              <div className="st-search-dropdown">
-                {searchResults.map(g => (
-                  <div key={g.id} className="st-search-item"
-                    onMouseDown={() => addToCart(g)}>
-                    <span>{g.name}</span>
-                    <span className="st-search-price">${(g.price||0).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {cart.length > 0 && (
-            <div className="st-cart">
-              <div className="st-cart-header">
-                <span>{t.items}</span><span>{t.qty}</span>
-                <span>{t.price}</span><span></span>
-              </div>
-              {cart.map(item => (
-                <div key={item.id} className="st-cart-row">
-                  <span className="st-cart-name">{item.name}</span>
-                  <input type="number" className="st-cart-qty" value={item.qty} min="1"
-                    onChange={e => updateQty(item.id, e.target.value)} />
-                  <span className="st-cart-price">${(item.price * item.qty).toFixed(2)}</span>
-                  <button className="st-cart-remove" onClick={() => removeItem(item.id)}>
-                    <X size={14}/>
-                  </button>
-                </div>
-              ))}
-              <div className="st-cart-total">
-                <span>{t.total}</span>
-                <span className="st-cart-total-val">${total.toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="st-modal-footer">
-          <button className="st-btn-cancel" onClick={onClose}>{t.cancel}</button>
-          <button className="st-btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? '…' : t.recordSale}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Section wrapper
@@ -612,7 +444,6 @@ function Settings({ onSettingsChange }) {
   const [loaded, setLoaded]         = useState(false);
   const [showSavedMsg, setShowSavedMsg] = useState(false);
   const [showForgotSale, setShowForgotSale]     = useState(false);
-  const [showForgotCredit, setShowForgotCredit] = useState(false);
   const [showForgotCash, setShowForgotCash]     = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
 
@@ -750,6 +581,10 @@ function Settings({ onSettingsChange }) {
 
       {/* ── Forgotten Entries ── */}
       <Section icon={<ClipboardList size={18}/>} title={t.forgottenEntries}>
+        {/* Explanatory note */}
+        <p style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic', margin: '0 0 12px 0', lineHeight: '1.5' }}>
+          {t.forgottenEntriesNote}
+        </p>
         <div className="st-forgotten-row">
           <div className="st-forgotten-info">
             <span className="st-notif-label">{t.forgottenSale}</span>
@@ -758,16 +593,6 @@ function Settings({ onSettingsChange }) {
           <button className="st-forgotten-btn st-forgotten-sale"
             onClick={() => setShowForgotSale(true)}>
             <ClipboardList size={16}/> {t.forgottenSale}
-          </button>
-        </div>
-        <div className="st-forgotten-row" style={{ marginTop: 12 }}>
-          <div className="st-forgotten-info">
-            <span className="st-notif-label">{t.forgottenCredit}</span>
-            <span className="st-notif-desc">{t.forgottenCreditDesc}</span>
-          </div>
-          <button className="st-forgotten-btn st-forgotten-credit"
-            onClick={() => setShowForgotCredit(true)}>
-            <CreditCard size={16}/> {t.forgottenCredit}
           </button>
         </div>
         <div className="st-forgotten-row" style={{ marginTop: 12 }}>
@@ -794,12 +619,6 @@ function Settings({ onSettingsChange }) {
         <ForgottenSaleModal t={t}
           onClose={() => setShowForgotSale(false)}
           onSaved={() => { setShowForgotSale(false); setShowSavedMsg(true); setTimeout(() => setShowSavedMsg(false), 2500); }}
-        />
-      )}
-      {showForgotCredit && (
-        <ForgottenCreditModal t={t}
-          onClose={() => setShowForgotCredit(false)}
-          onSaved={() => { setShowForgotCredit(false); setShowSavedMsg(true); setTimeout(() => setShowSavedMsg(false), 2500); }}
         />
       )}
       {showForgotCash && (
