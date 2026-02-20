@@ -7,12 +7,13 @@
   flex-direction: column;
   gap: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* ── Sticky search bar ── */
 .inv-sticky-bar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 50;
   background-color: var(--background, #f5f5f5);
   padding: 12px 20px 10px;
@@ -31,6 +32,7 @@
   padding: 9px 12px;
   gap: 8px;
   transition: border-color 0.2s;
+  width: 65%;          /* ← reduced by 35% */
 }
 .inv-search-box:focus-within {
   border-color: #667eea;
@@ -85,14 +87,22 @@
   font-style: italic;
 }
 
+/* ── Scroll body — only scroll container ── */
+.inv-scroll-body {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ── Table wrapper ── */
 .inv-table-wrapper {
-  overflow-x: auto;
   margin: 0 20px 20px;
   background: white;
   border-radius: 0.75rem;
   border: 1px solid var(--border, #e0e0e0);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  min-width: max-content;
+  width: calc(100% - 40px);
 }
 
 .inv-empty {
@@ -112,11 +122,14 @@
   table-layout: auto;
 }
 
-.inv-table thead {
-  background: #f8f9fa;
+/* ── Sticky thead ── */
+.inv-thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.inv-table th {
+.inv-thead th {
   padding: 0.75rem 1rem;
   text-align: left;
   font-weight: 600;
@@ -124,6 +137,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary, #888);
+  background-color: #f8f9fa;
   border-bottom: 2px solid var(--border, #e0e0e0);
   white-space: nowrap;
 }
