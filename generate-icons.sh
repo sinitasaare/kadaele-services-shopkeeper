@@ -5,7 +5,7 @@
 
 echo "🎨 Generating Android Icons & Splash Screens..."
 
-cd "$(dirname "$0")/resources"
+cd "$(dirname "$0")"
 
 # Check if ImageMagick is installed
 if ! command -v convert &> /dev/null; then
@@ -15,8 +15,8 @@ if ! command -v convert &> /dev/null; then
 fi
 
 # Source icon (should be at least 1024x1024)
-SOURCE_ICON="icon.png"
-SOURCE_SPLASH="splash.png"
+SOURCE_ICON="resources/icon.png"
+SOURCE_SPLASH="resources/splash.png"
 
 if [ ! -f "$SOURCE_ICON" ]; then
     echo "❌ Error: icon.png not found in resources folder"
