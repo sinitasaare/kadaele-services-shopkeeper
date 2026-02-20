@@ -256,3 +256,66 @@
   .cj-thead th, .cj-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .cj-date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Description option buttons ── */
+.cj-desc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cj-desc-option {
+  text-align: left;
+  padding: 0.55rem 0.875rem;
+  border: 1.5px solid var(--border, #e0e0e0);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: var(--background, #f9fafb);
+  color: var(--text-primary, #333);
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.cj-desc-option:hover { border-color: #10b981; color: #10b981; }
+.cj-desc-selected { background: #d1fae5; border-color: #10b981; color: #065f46; font-weight: 600; }
+.cj-desc-resolved { font-size: 0.75rem; }
+
+.cj-desc-preview {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f0fdf4;
+  border-left: 3px solid #10b981;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.8125rem;
+  color: #065f46;
+  font-style: italic;
+}
+
+/* ── Sub-modal (layered on top of main modal) ── */
+.cj-sub-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 20px;
+}
+/* Make the parent modal position:relative so sub-overlay anchors to it */
+.cj-modal-content { position: relative; }
+
+.cj-sub-modal {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  width: 100%;
+  max-width: 320px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+}
+.cj-sub-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 1rem;
+}
