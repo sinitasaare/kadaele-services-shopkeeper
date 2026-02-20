@@ -105,7 +105,8 @@ function Inventory() {
           <table className="inv-table">
             <thead className="inv-thead">
               <tr>
-                <th>Name</th>
+                <th className="inv-col-num">#</th>
+                <th>PRODUCT NAME</th>
                 <th>Category</th>
                 <th className="inv-col-right">Price</th>
                 <th className="inv-col-center">Stock</th>
@@ -114,11 +115,12 @@ function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(good => {
+              {filtered.map((good, idx) => {
                 const status = getStockStatus(good.stock_quantity);
                 const isEditing = editingBarcode === good.id;
                 return (
                   <tr key={good.id}>
+                    <td className="inv-col-num inv-num-cell">{idx + 1}</td>
                     <td className="inv-name-cell">{good.name || '—'}</td>
                     <td className="inv-cat-cell">{good.category || '—'}</td>
                     <td className="inv-col-right">${parseFloat(good.price || 0).toFixed(2)}</td>
