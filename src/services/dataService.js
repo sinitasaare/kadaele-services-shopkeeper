@@ -452,6 +452,7 @@ class DataService {
       repaymentDate: sale.repaymentDate || '',
       isDebt: sale.isDebt || false,
       createdAt: serverTime.toISOString(),
+      ...(sale.isUnrecorded ? { isUnrecorded: true } : {}),
     };
     
     sales.push(newSale);
@@ -466,7 +467,8 @@ class DataService {
         note: 'CASH Sale',
         date: saleDate.toISOString(),
         source: 'sale',
-        saleId: newSale.id,  // link back to the originating sale
+        saleId: newSale.id,
+        ...(sale.isUnrecorded ? { isUnrecorded: true } : {}),
       });
     }
 
@@ -1164,8 +1166,9 @@ class DataService {
         date: entry.date || new Date().toISOString(),
         source: entry.source || 'manual',
         createdAt: new Date().toISOString(),
-        ...(entry.saleId   ? { saleId:   entry.saleId   } : {}),
-        ...(entry.debtorId ? { debtorId: entry.debtorId } : {}),
+        ...(entry.saleId      ? { saleId:      entry.saleId      } : {}),
+        ...(entry.debtorId    ? { debtorId:    entry.debtorId    } : {}),
+        ...(entry.isUnrecorded ? { isUnrecorded: true }           : {}),
       };
       entries.push(newEntry);
       // Save to localforage first
