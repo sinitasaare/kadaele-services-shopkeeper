@@ -569,9 +569,34 @@ class DataService {
     
     if (debtor) {
       const paymentAmount = parseFloat(amount);
-      debtor.totalPaid += paymentAmount;
-      debtor.balance = debtor.totalDue - debtor.totalPaid;
+      debtor.totalPaid = (debtor.totalPaid || 0) + paymentAmount;
+      debtor.balance = (debtor.totalDue || 0) - debtor.totalPaid;
       debtor.lastPayment = new Date().toISOString();
+
+      // Record the deposit as a line item in the debtor's history
+      // so the Debt History table can render it as a special deposit row.
+      const depositEntry = {
+        id: this.generateId(),
+        type: 'deposit',
+        amount: paymentAmount,
+        date: debtor.lastPayment,
+      };
+      debtor.deposits = debtor.deposits || [];
+      debtor.deposits.push(depositEntry);
+
+      // Wire to Cash Journal — deposit counts as Cash IN
+      const debtorName = debtor.name || debtor.customerName || 'Unknown';
+      const gender = debtor.gender || '';
+      const prefix = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+      const displayName = prefix ? `${prefix} ${debtorName}` : debtorName;
+      await this.addCashEntry({
+        type: 'in',
+        amount: paymentAmount,
+        note: `Debt repayment by ${displayName}`,
+        date: debtor.lastPayment,
+        source: 'deposit',
+        debtorId,
+      });
       
       // Mark specific sales as paid if provided
       if (purchaseIds.length > 0) {
