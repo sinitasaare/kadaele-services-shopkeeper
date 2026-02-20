@@ -565,3 +565,159 @@
     font-size: 1.125rem;
   }
 }
+
+/* ── Barcode scanner button ── */
+.sr-btn-scan {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  align-self: center;
+}
+.sr-btn-scan:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.5);
+}
+.sr-btn-scan-active {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+  animation: sr-scan-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sr-scan-pulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(220,38,38,0.4); }
+  50%       { box-shadow: 0 4px 22px rgba(220,38,38,0.7); }
+}
+
+/* ── Scanner overlay ── */
+.sr-scanner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.sr-scanner-modal {
+  background: #1a1a2e;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+}
+.sr-scanner-modal-sm { max-width: 320px; padding: 20px; }
+
+.sr-scanner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.sr-scanner-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+.sr-scanner-close {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #fff;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.sr-scanner-close:hover { background: rgba(255,255,255,0.22); }
+
+/* Live camera feed */
+.sr-scanner-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  overflow: hidden;
+}
+.sr-scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Targeting reticle */
+.sr-scanner-reticle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sr-reticle-corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-color: #7c3aed;
+  border-style: solid;
+}
+.sr-reticle-tl { top: 20%; left: 15%; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+.sr-reticle-tr { top: 20%; right: 15%; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+.sr-reticle-bl { bottom: 20%; left: 15%; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+.sr-reticle-br { bottom: 20%; right: 15%; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+/* Animated scan line */
+.sr-reticle-line {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #7c3aed, transparent);
+  animation: sr-scan-line 2s ease-in-out infinite;
+  top: 50%;
+}
+@keyframes sr-scan-line {
+  0%   { top: 22%; opacity: 1; }
+  50%  { top: 78%; opacity: 1; }
+  100% { top: 22%; opacity: 1; }
+}
+
+.sr-scanner-hint {
+  padding: 12px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sr-scan-success { color: #34d399; font-weight: 600; }
+.sr-scan-fail    { color: #f87171; font-weight: 600; }
+
+.sr-scanner-error-msg {
+  color: rgba(255,255,255,0.8);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 12px 0 0;
+}
