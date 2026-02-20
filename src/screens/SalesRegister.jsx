@@ -459,7 +459,7 @@ function SalesRegister() {
         </div>
       )}
 
-      {/* Scanner error (no BarcodeDetector support) */}
+      {/* Scanner error (no BarcodeDetector support or camera permission denied) */}
       {scannerError && !scannerActive && (
         <div className="sr-scanner-overlay">
           <div className="sr-scanner-modal sr-scanner-modal-sm">
@@ -468,7 +468,29 @@ function SalesRegister() {
               <button className="sr-scanner-close" onClick={() => setScannerError('')}>✕</button>
             </div>
             <p className="sr-scanner-error-msg">{scannerError}</p>
-            <button className="sr-btn-confirm" style={{marginTop:'1rem',width:'100%'}} onClick={() => setScannerError('')}>OK</button>
+            {(scannerError.includes('denied') || scannerError.includes('permission')) && Capacitor.isNativePlatform() && (
+              <button
+                className="sr-btn-confirm"
+                style={{marginTop:'0.5rem',width:'100%',background:'#4c3a8f'}}
+                onClick={async () => {
+                  try {
+                    // Try Capacitor App openUrl — works on iOS; on Android use intent URL
+                    const { App } = await import('@capacitor/app');
+                    const platform = Capacitor.getPlatform();
+                    if (platform === 'ios') {
+                      await App.openUrl({ url: 'app-settings:' });
+                    } else {
+                      // Android: open app-specific settings via intent URL
+                      const appId = (await import('@capacitor/core')).Capacitor.getAppId?.() || 'com.kadaele.shopkeeper';
+                      await App.openUrl({ url: `package:${appId}` });
+                    }
+                  } catch {
+                    alert('Please open your device Settings → Apps → Shopkeeper → Permissions → Camera and enable it, then return to the app.');
+                  }
+                }}
+              >Open App Settings</button>
+            )}
+            <button className="sr-btn-confirm" style={{marginTop:'0.5rem',width:'100%'}} onClick={() => setScannerError('')}>OK</button>
           </div>
         </div>
       )}
