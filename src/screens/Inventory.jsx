@@ -8,15 +8,16 @@ function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState(null);
-  const searchBarRef = useRef(null);
+
+  // Edit barcode inline
+  const [editingBarcode, setEditingBarcode] = useState(null); // good.id being edited
+  const [barcodeValue, setBarcodeValue] = useState('');
 
   useEffect(() => { loadGoods(); }, []);
 
   const loadGoods = async () => {
     setLoading(true);
     try {
-      // getGoods() pulls from Firebase when online and caches to localforage.
-      // When offline it falls back to the localforage cache automatically.
       const data = await dataService.getGoods();
       const sorted = (data || []).sort((a, b) =>
         (a.name || '').localeCompare(b.name || '')
@@ -32,7 +33,8 @@ function Inventory() {
 
   const filtered = goods.filter(g =>
     (g.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (g.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (g.category || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (g.barcode || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getStockStatus = (qty) => {
@@ -42,17 +44,37 @@ function Inventory() {
     return           { label: 'In Stock',       cls: 'in-stock'     };
   };
 
+  const startEditBarcode = (good) => {
+    setEditingBarcode(good.id);
+    setBarcodeValue(good.barcode || '');
+  };
+
+  const saveBarcode = async (good) => {
+    try {
+      await dataService.updateGood(good.id, { barcode: barcodeValue.trim() || null });
+      setGoods(prev => prev.map(g =>
+        g.id === good.id ? { ...g, barcode: barcodeValue.trim() || null } : g
+      ));
+    } catch (err) {
+      console.error('Failed to save barcode:', err);
+      alert('Failed to save barcode.');
+    } finally {
+      setEditingBarcode(null);
+      setBarcodeValue('');
+    }
+  };
+
   return (
     <div className="inventory">
 
       {/* ── Sticky search bar ── */}
-      <div className="inv-sticky-bar" ref={searchBarRef}>
+      <div className="inv-sticky-bar">
         <div className="inv-search-box">
           <Search size={16} className="inv-search-icon" />
           <input
             type="text"
             className="inv-search-input"
-            placeholder="Search by name or category…"
+            placeholder="Search name, category or barcode…"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
@@ -87,11 +109,13 @@ function Inventory() {
                 <th className="inv-col-right">Price</th>
                 <th className="inv-col-center">Stock</th>
                 <th>Status</th>
+                <th>Barcode</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(good => {
                 const status = getStockStatus(good.stock_quantity);
+                const isEditing = editingBarcode === good.id;
                 return (
                   <tr key={good.id}>
                     <td className="inv-name-cell">{good.name || '—'}</td>
@@ -102,6 +126,34 @@ function Inventory() {
                       {status ? (
                         <span className={`inv-badge ${status.cls}`}>{status.label}</span>
                       ) : '—'}
+                    </td>
+                    <td className="inv-barcode-cell">
+                      {isEditing ? (
+                        <div className="inv-barcode-edit">
+                          <input
+                            className="inv-barcode-input"
+                            value={barcodeValue}
+                            onChange={e => setBarcodeValue(e.target.value)}
+                            placeholder="Enter barcode…"
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveBarcode(good);
+                              if (e.key === 'Escape') setEditingBarcode(null);
+                            }}
+                          />
+                          <button className="inv-barcode-save" onClick={() => saveBarcode(good)}>✓</button>
+                          <button className="inv-barcode-cancel" onClick={() => setEditingBarcode(null)}>✕</button>
+                        </div>
+                      ) : (
+                        <div className="inv-barcode-display" onClick={() => startEditBarcode(good)}>
+                          {good.barcode ? (
+                            <span className="inv-barcode-value">{good.barcode}</span>
+                          ) : (
+                            <span className="inv-barcode-empty">Tap to add</span>
+                          )}
+                          <span className="inv-barcode-edit-icon">✎</span>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
