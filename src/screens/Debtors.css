@@ -311,3 +311,41 @@
   .d-search { padding: 8px 10px; font-size: 12px; }
   .d-add-btn { padding: 8px 12px; font-size: 12px; }
 }
+
+/* ── Deposit row ── */
+.d-deposit-row td {
+  background-color: #f1f3f5;
+  border-top: 2px solid #dee2e6;
+  border-bottom: 2px solid #dee2e6;
+}
+
+/* Merged grey cell with spaced-letter text */
+.d-deposit-merged-cell {
+  text-align: center;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-style: italic;
+  vertical-align: middle;
+  background: #e9ecef !important;
+  padding: 10px 8px !important;
+}
+
+.d-deposited-amount {
+  font-weight: 700;
+  color: #10b981;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Balance column */
+.d-balance-cell {
+  font-weight: 700;
+  color: #374151;
+  text-align: right;
+  white-space: nowrap;
+}
+.d-balance-neg {
+  color: #dc2626;
+}
