@@ -260,7 +260,8 @@ function CashJournal() {
     if (!d) return { date:'N/A', time:'N/A' };
     return {
       date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
-      time: d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
+      // Show UNRECORDED for entries entered via the Settings "Unrecorded Cash Entry" modal
+      time: entry.isUnrecorded ? 'UNRECORDED' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
     };
   };
 
