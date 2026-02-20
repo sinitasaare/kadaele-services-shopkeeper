@@ -472,21 +472,8 @@ function SalesRegister() {
               <button
                 className="sr-btn-confirm"
                 style={{marginTop:'0.5rem',width:'100%',background:'#4c3a8f'}}
-                onClick={async () => {
-                  try {
-                    // Try Capacitor App openUrl — works on iOS; on Android use intent URL
-                    const { App } = await import('@capacitor/app');
-                    const platform = Capacitor.getPlatform();
-                    if (platform === 'ios') {
-                      await App.openUrl({ url: 'app-settings:' });
-                    } else {
-                      // Android: open app-specific settings via intent URL
-                      const appId = (await import('@capacitor/core')).Capacitor.getAppId?.() || 'com.kadaele.shopkeeper';
-                      await App.openUrl({ url: `package:${appId}` });
-                    }
-                  } catch {
-                    alert('Please open your device Settings → Apps → Shopkeeper → Permissions → Camera and enable it, then return to the app.');
-                  }
+                onClick={() => {
+                  alert('Camera permission is required.\n\nPlease go to:\nSettings → Apps → Shopkeeper → Permissions → Camera\nand enable it, then return to the app.');
                 }}
               >Open App Settings</button>
             )}
