@@ -91,10 +91,15 @@ if [ -f "$COLORS_FILE" ]; then
         sed -i 's|</resources>|    <color name="ic_launcher_background">#667eea</color>\n</resources>|' "$COLORS_FILE"
     fi
 else
-    printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#667eea</color>\n</resources>\n' > "$COLORS_FILE"
+    printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#667eea</color>\n    <color name="splash_background">#667eea</color>\n</resources>\n' > "$COLORS_FILE"
 fi
 
-echo "Generating splash screens..."
+# Add splash_background colour if not already present
+if ! grep -q "splash_background" "$COLORS_FILE"; then
+    sed -i 's|</resources>|    <color name="splash_background">#667eea</color>\n</resources>|' "$COLORS_FILE"
+fi
+
+echo "Generating splash screens (PNG fallback for older Android)..."
 convert -size 320x480   canvas:'#667eea' "$SOURCE_ICON" -resize 200x200 -gravity center -composite android/app/src/main/res/drawable-port-mdpi/splash.png
 convert -size 480x800   canvas:'#667eea' "$SOURCE_ICON" -resize 300x300 -gravity center -composite android/app/src/main/res/drawable-port-hdpi/splash.png
 convert -size 720x1280  canvas:'#667eea' "$SOURCE_ICON" -resize 450x450 -gravity center -composite android/app/src/main/res/drawable-port-xhdpi/splash.png
@@ -106,6 +111,48 @@ convert -size 1280x720  canvas:'#667eea' "$SOURCE_ICON" -resize 450x450 -gravity
 convert -size 1600x960  canvas:'#667eea' "$SOURCE_ICON" -resize 600x600 -gravity center -composite android/app/src/main/res/drawable-land-xxhdpi/splash.png
 convert -size 1920x1280 canvas:'#667eea' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable-land-xxxhdpi/splash.png
 convert -size 2732x2732 canvas:'#667eea' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable/splash.png
+
+echo "Writing XML splash drawable (Android 12+ SplashScreen API)..."
+# Android 12+ uses a SplashScreen API that reads a layer-list XML drawable.
+# Without this, only the background colour shows — the icon is invisible.
+mkdir -p android/app/src/main/res/drawable-v31
+cat > android/app/src/main/res/drawable-v31/splash.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ SplashScreen API compatible splash drawable.
+     The SplashScreen API ignores PNG splash images and instead renders
+     the windowSplashScreenAnimatedIcon value from the theme.
+     This layer-list is used by older Capacitor SplashScreen plugin versions
+     as a fallback for the splash window background. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Full-screen purple background -->
+    <item>
+        <color android:color="#667eea"/>
+    </item>
+    <!-- Centred app icon, scaled to ~38% of screen (matches Android guidelines) -->
+    <item
+        android:width="200dp"
+        android:height="200dp"
+        android:gravity="center"
+        android:drawable="@mipmap/ic_launcher_foreground"/>
+</layer-list>
+EOF
+
+echo "Writing Android 12+ SplashScreen theme override..."
+mkdir -p android/app/src/main/res/values-v31
+cat > android/app/src/main/res/values-v31/styles.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ SplashScreen: sets the icon shown during startup.
+         Without this, Android 12+ shows only a white screen until
+         the Capacitor WebView finishes loading. -->
+    <style name="AppTheme.SplashScreen" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#667eea</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="windowSplashScreenAnimationDuration">500</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+    </style>
+</resources>
+EOF
 
 echo "Done! Icons and splash screens generated."
 echo ""
