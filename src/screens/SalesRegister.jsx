@@ -39,6 +39,7 @@ function SalesRegister() {
   const [showDebtorSuggestions, setShowDebtorSuggestions] = useState(false);
   const [filteredDebtors, setFilteredDebtors] = useState([]);
   const [selectedDebtorId, setSelectedDebtorId] = useState(null);
+  const [selectedDebtorObj, setSelectedDebtorObj] = useState(null);
 
   // Quantity modal states
   const [showQuantityModal, setShowQuantityModal] = useState(false);
@@ -75,6 +76,14 @@ function SalesRegister() {
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const getTomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return dateStr(d); };
   const getMax14DaysStr = () => { const d = new Date(); d.setDate(d.getDate() + 14); return dateStr(d); };
+  // If the selected debtor already has an outstanding debt with a due date,
+  // the new repayment date cannot go beyond that existing promise date.
+  const getRepaymentMaxStr = () => {
+    if (selectedDebtorObj && selectedDebtorObj.repaymentDate && (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) > 0) {
+      return selectedDebtorObj.repaymentDate; // locked to their existing due date
+    }
+    return getMax14DaysStr(); // no outstanding debt — allow up to 14 days
+  };
 
   // ── Debtor search ──────────────────────────────────────────────────────
   const handleDebtorSearchChange = (value) => {
@@ -94,10 +103,14 @@ function SalesRegister() {
     setCustomerName(debtor.name || debtor.customerName || '');
     setCustomerPhone(debtor.phone || debtor.customerPhone || '');
     setSelectedDebtorId(debtor.id);
+    // Store the debtor's existing due date so we can cap the repayment date picker
+    setSelectedDebtorObj(debtor);
+    setRepaymentDate(''); // reset so user must pick within allowed range
     setShowDebtorSuggestions(false);
   };
   const clearDebtorSelection = () => {
-    setCustomerName(''); setCustomerPhone(''); setSelectedDebtorId(null); setShowDebtorSuggestions(false);
+    setCustomerName(''); setCustomerPhone(''); setSelectedDebtorId(null);
+    setSelectedDebtorObj(null); setRepaymentDate(''); setShowDebtorSuggestions(false);
   };
 
   // ── Catalogue ──────────────────────────────────────────────────────────
@@ -593,11 +606,13 @@ function SalesRegister() {
                   Repayment Date:
                 </label>
                 <input type="date" id="repayment-date" value={repaymentDate}
-                  min={getTomorrowStr()} max={getMax14DaysStr()}
+                  min={getTomorrowStr()} max={getRepaymentMaxStr()}
                   onChange={(e) => setRepaymentDate(e.target.value)} required
                   style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #ccc', borderRadius:'6px' }} />
-                <p style={{ fontSize:'11px', color:'#888', marginTop:'3px' }}>
-                  Only dates within the next 14 days are selectable.
+                <p style={{ fontSize:'11px', color: selectedDebtorObj?.repaymentDate && (selectedDebtorObj?.balance||0) > 0 ? '#c00' : '#888', marginTop:'3px' }}>
+                  {selectedDebtorObj?.repaymentDate && (selectedDebtorObj?.balance||0) > 0
+                    ? `⚠️ Locked to existing due date: ${selectedDebtorObj.repaymentDate}. Debt must be cleared before a later date can be set.`
+                    : 'Select a date within the next 14 days.'}
                 </p>
               </div>
 
