@@ -388,11 +388,10 @@ class DataService {
     // ── Auto-record cash sales in the Cash Journal ────────────────────────
     // Every cash sale is also a Cash IN entry so the Cash Journal stays in sync.
     if (newSale.paymentType === 'cash') {
-      const itemNames = (newSale.items || []).map(i => i.name).filter(Boolean).join(', ');
       await this.addCashEntry({
         type: 'in',
         amount: newSale.total,
-        note: `CASH Sale${itemNames ? ': ' + itemNames : ''}`,
+        note: 'CASH Sale',
         date: saleDate.toISOString(),
         source: 'sale',
         saleId: newSale.id,  // link back to the originating sale
@@ -501,8 +500,32 @@ class DataService {
           lastPurchase: doc.data().lastPurchase?.toDate?.() || doc.data().lastPurchase,
           lastPayment: doc.data().lastPayment?.toDate?.() || doc.data().lastPayment
         }));
-        await localforage.setItem(DATA_KEYS.DEBTORS, firebaseDebtors);
-        return firebaseDebtors;
+
+        // Get existing local data
+        const localDebtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+
+        // Merge: for each debtor, take whichever version has the more recent
+        // updatedAt timestamp. This way locally-saved debt entries (balance,
+        // saleIds, etc.) are never silently overwritten by a stale Firebase read.
+        const merged = [...firebaseDebtors];
+        for (const local of localDebtors) {
+          const fbIdx = merged.findIndex(d => d.id === local.id);
+          if (fbIdx === -1) {
+            // Exists only locally (e.g. created offline) — keep it
+            merged.push(local);
+          } else {
+            // Both exist: keep whichever is newer by updatedAt
+            const fbTime  = new Date(merged[fbIdx].updatedAt || 0).getTime();
+            const locTime = new Date(local.updatedAt || 0).getTime();
+            if (locTime > fbTime) {
+              // Local is newer (e.g. credit sale just recorded) — prefer local
+              merged[fbIdx] = local;
+            }
+          }
+        }
+
+        await localforage.setItem(DATA_KEYS.DEBTORS, merged);
+        return merged;
       }
     } catch (error) {
       console.error('Error fetching debtors from Firebase:', error);
@@ -551,7 +574,9 @@ class DataService {
   }
 
   async updateDebtor(saleData) {
-    const debtors = await this.getDebtors();
+    // Always read from localforage directly (not getDebtors which may re-fetch
+    // from Firebase and overwrite a write that just happened moments ago)
+    const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
 
     // Match by debtorId first (exact, set by SalesRegister when a registered
     // debtor is selected from the dropdown).  Fall back to name match only if
@@ -577,13 +602,39 @@ class DataService {
 
       existingDebtor.lastSale      = saleData.date;
       existingDebtor.lastPurchase  = saleData.date;
+      existingDebtor.updatedAt     = new Date().toISOString();
 
       // Store the most recent repayment date so the Debtors card can show it
       if (saleData.repaymentDate) {
         existingDebtor.repaymentDate = saleData.repaymentDate;
       }
 
-      await this.setDebtors(debtors);
+      // ── Save to localforage FIRST so the data survives a restart ──────────
+      await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+
+      // ── Then push to Firebase ──────────────────────────────────────────────
+      if (this.isOnline && auth.currentUser) {
+        try {
+          const { deposits: _deposits, ...debtorForFirestore } = existingDebtor;
+          // Strip base64 photos from deposits before sending to Firestore
+          const depositsForFirestore = (existingDebtor.deposits || []).map(dep => {
+            const { photo: _photo, ...rest } = dep;
+            return rest;
+          });
+          await setDoc(doc(db, 'debtors', existingDebtor.id.toString()), {
+            ...debtorForFirestore,
+            deposits: depositsForFirestore,
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
+        } catch (error) {
+          console.error('Error syncing debtor to Firebase after credit sale:', error);
+          // Queue for retry — debtor data is already safe in localforage
+          await this.addToSyncQueue({ type: 'debtor', data: existingDebtor });
+        }
+      } else {
+        // Offline — queue for sync when connectivity returns
+        await this.addToSyncQueue({ type: 'debtor', data: existingDebtor });
+      }
     } else {
       // No matching registered debtor — log a warning.  We deliberately do NOT
       // create a ghost debtor here; the UI enforces selection of a registered
@@ -832,6 +883,20 @@ class DataService {
             ...item.data,
             createdAt: serverTimestamp(),
             date: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by updateDebtor have { type: 'debtor', data: debtor }
+        if (item.type === 'debtor' && item.data) {
+          const { deposits: _d, ...debtorForFirestore } = item.data;
+          const depositsForFirestore = (item.data.deposits || []).map(dep => {
+            const { photo: _p, ...rest } = dep;
+            return rest;
+          });
+          await setDoc(doc(db, 'debtors', item.data.id.toString()), {
+            ...debtorForFirestore,
+            deposits: depositsForFirestore,
+            updatedAt: serverTimestamp(),
           }, { merge: true });
           synced++;
         }
