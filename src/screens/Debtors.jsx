@@ -101,21 +101,97 @@ function Debtors() {
     } catch (e) { console.error(e); alert('Failed to update debtor.'); }
   };
 
-  const handleNotify = (method) => {
+  // ── Build smart notification message based on due date status ──────────────
+  const buildNotifyMessage = () => {
     const debtor  = selectedDebtor;
-    const balance = debtor.balance || debtor.totalDue || 0;
-    const message = `Hello ${debtor.name || debtor.customerName}, this is a reminder that you have an outstanding balance of $${balance.toFixed(2)} with Kadaele Services. Please make payment at your earliest convenience. Thank you!`;
+    const name    = debtor.name || debtor.customerName || 'Valued Customer';
+    const gender  = debtor.gender || '';
+    const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+    const salutation = prefix ? `${prefix} ${name}` : name;
+    const balance = historyRows.length > 0
+      ? historyRows[0].runningBalance
+      : (debtor.balance || debtor.totalDue || 0);
+    const balanceStr = `$${Math.abs(balance).toFixed(2)}`;
+
+    const repaymentDate = debtor.repaymentDate || '';
+    const today  = new Date(); today.setHours(0,0,0,0);
+    const dueDate = repaymentDate ? new Date(repaymentDate) : null;
+    if (dueDate) dueDate.setHours(0,0,0,0);
+
+    const daysDiff = dueDate ? Math.round((dueDate - today) / (1000 * 60 * 60 * 24)) : null;
+
+    // Format due date as readable string e.g. "15 March 2026"
+    const dueDateStr = dueDate
+      ? dueDate.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
+      : 'the agreed date';
+
+    let subject, body;
+
+    if (daysDiff === null || daysDiff > 0) {
+      // ── Due date is still to come ──────────────────────────────────────────
+      let duePhrasing;
+      if (daysDiff === 1) {
+        duePhrasing = 'tomorrow is the due date of your debt';
+      } else if (daysDiff !== null) {
+        duePhrasing = `you have ${daysDiff} day${daysDiff !== 1 ? 's' : ''} before your debt is due`;
+      } else {
+        duePhrasing = `the due date is ${dueDateStr}`;
+      }
+      const dueDateDisplay = daysDiff === 1 ? 'tomorrow' : dueDateStr;
+
+      subject = 'Friendly Reminder: Outstanding Debt Due ' + (daysDiff === 1 ? 'Tomorrow' : `on ${dueDateStr}`);
+      body =
+`Dear ${salutation},
+
+This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+
+Please find attached a PDF of the statement with full details of your debt for your reference.
+
+We kindly remind you that ${duePhrasing}, as you had promised to pay by. We appreciate if you could settle it not later than ${dueDateDisplay}.
+
+Thank you for your attention and prompt payment.
+
+Best regards,
+Kadaele Services`;
+
+    } else {
+      // ── Due date has passed ────────────────────────────────────────────────
+      const daysOverdue = Math.abs(daysDiff);
+      subject = `Polite Reminder: Overdue Debt of ${balanceStr}`;
+      body =
+`Dear ${salutation},
+
+This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+
+Please find attached a PDF of the statement with full details of your debt for your reference.
+
+We kindly remind you that the due date was ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} ago, as you had promised to pay by.
+
+We appreciate if you could settle it as soon as possible. Thank you for your attention and prompt payment.
+
+Best regards,
+Kadaele Services`;
+    }
+
+    return { subject, body };
+  };
+
+  const handleNotify = (method) => {
+    const debtor = selectedDebtor;
+    const { subject, body } = buildNotifyMessage();
+
     if (method === 'whatsapp') {
       const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
-      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(message)}`, '_blank');
+      // WhatsApp doesn't support subjects, just send the body
+      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(body)}`, '_blank');
     } else if (method === 'email') {
       if (!debtor.email) { alert('No email available'); return; }
-      window.location.href = `mailto:${debtor.email}?subject=${encodeURIComponent('Payment Reminder - Kadaele Services')}&body=${encodeURIComponent(message)}`;
+      window.location.href = `mailto:${debtor.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
-      window.location.href = `sms:${phone}?body=${encodeURIComponent(message)}`;
+      window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
     }
     setShowNotifyModal(false);
   };
@@ -288,7 +364,7 @@ function Debtors() {
                     ))}
                     <div className="d-debt-summary">
                       <span className="d-detail-label">Outstanding Balance</span>
-                      <span className="d-debt-amount">${(selectedDebtor.balance || selectedDebtor.totalDue || 0).toFixed(2)}</span>
+                      <span className="d-debt-amount">${(historyRows.length > 0 ? historyRows[0].runningBalance : (selectedDebtor.balance || selectedDebtor.totalDue || 0)).toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -467,9 +543,9 @@ function Debtors() {
             </div>
             <div className="d-notify-preview">
               <p className="d-notify-preview-label">Message Preview</p>
-              <p className="d-notify-preview-text">
-                Hello {selectedDebtor?.name || selectedDebtor?.customerName}, this is a reminder that you have an outstanding balance of ${(selectedDebtor?.balance || selectedDebtor?.totalDue || 0).toFixed(2)} with Kadaele Services. Please make payment at your earliest convenience. Thank you!
-              </p>
+              <pre className="d-notify-preview-text" style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'inherit',margin:0}}>
+                {selectedDebtor ? buildNotifyMessage().body : ''}
+              </pre>
             </div>
           </div>
         </div>
