@@ -147,8 +147,8 @@ function SalesJournal() {
   return (
     <div className="sales-record">
 
-      {/* Filter panel */}
-      {showFilters && (
+      {/* ── placeholder — filter panel moved inside sticky bar below ── */}
+      {false && (
         <div className="filters-section">
           <div className="filter-group">
             <label>Payment Type</label>
@@ -200,8 +200,60 @@ function SalesJournal() {
         </div>
       )}
 
-      {/* ── Sticky bar ── */}
+      {/* ── Sticky bar — contains filter panel, button, title and cards ── */}
       <div className="sj-sticky-bar">
+        {/* Filter panel — inside sticky bar so it scrolls with the bar */}
+        {showFilters && (
+          <div className="filters-section">
+            <div className="filter-group">
+              <label>Payment Type</label>
+              <div className="filter-buttons">
+                {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                  <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                    onClick={() => setPaymentFilter(val)}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div className="filter-group">
+              <label>Date Filter</label>
+              <div className="filter-buttons">
+                {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
+                  <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                    onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {dateFilter === 'single' && (
+              <div className="filter-group">
+                <label>Select Date</label>
+                <input type="date" value={selectedDate} max={getTodayStr()}
+                  onChange={e => setSelectedDate(e.target.value)} className="date-input" />
+              </div>
+            )}
+            {dateFilter === 'range' && (
+              <div className="filter-group">
+                <label>Date Range</label>
+                <div className="date-range-inputs">
+                  <div className="date-range-field">
+                    <label className="date-range-label">From:</label>
+                    <input type="date" value={startDate} max={getTodayStr()}
+                      onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
+                      className="date-input" />
+                  </div>
+                  <div className="date-range-field">
+                    <label className="date-range-label">To:</label>
+                    <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
+                      disabled={!startDate} onChange={e => setEndDate(e.target.value)}
+                      className={`date-input${!startDate ? ' date-input-disabled' : ''}`} />
+                  </div>
+                </div>
+                {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
+              </div>
+            )}
+          </div>
+        )}
         <div className="filter-btn-wrapper">
           <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
         </div>
