@@ -494,7 +494,7 @@ class DataService {
   }
 
   async setDebtors(debtors) {
-    // Save locally first
+    // Save locally first — full data including any receipt photos
     await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
     
     // Sync to Firebase if online
@@ -503,8 +503,16 @@ class DataService {
         const batch = writeBatch(db);
         debtors.forEach(debtor => {
           const debtorRef = doc(db, 'debtors', debtor.id.toString());
+          // Strip base64 photo data from deposits before sending to Firestore
+          // (Firestore has a 1 MB document limit; photos would exceed it).
+          // Photos remain in localforage for offline access.
+          const depositsForFirestore = (debtor.deposits || []).map(dep => {
+            const { photo: _photo, ...rest } = dep; // eslint-disable-line no-unused-vars
+            return rest;
+          });
           batch.set(debtorRef, {
             ...debtor,
+            deposits: depositsForFirestore,
             updatedAt: serverTimestamp()
           }, { merge: true });
         });
@@ -563,7 +571,7 @@ class DataService {
     }
   }
 
-  async recordPayment(debtorId, amount, purchaseIds = []) {
+  async recordPayment(debtorId, amount, purchaseIds = [], photo = null) {
     const debtors = await this.getDebtors();
     const debtor = debtors.find(d => d.id === debtorId);
     
@@ -580,6 +588,7 @@ class DataService {
         type: 'deposit',
         amount: paymentAmount,
         date: debtor.lastPayment,
+        ...(photo ? { photo } : {}),
       };
       debtor.deposits = debtor.deposits || [];
       debtor.deposits.push(depositEntry);
