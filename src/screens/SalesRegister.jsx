@@ -86,15 +86,29 @@ function SalesRegister() {
   };
 
   // ── Debtor search ──────────────────────────────────────────────────────
+  const smartSearchDebtors = (items, term) => {
+    if (!term.trim()) return items;
+    const t = term.toLowerCase();
+    const firstMatches = [], secondMatches = [];
+    for (const d of items) {
+      const words = (d.name || d.customerName || '').toLowerCase().split(/\s+/);
+      if (words[0] && words[0].startsWith(t)) firstMatches.push(d);
+      else if (words.length > 1 && words[1] && words[1].startsWith(t)) secondMatches.push(d);
+    }
+    const sortBy2nd = (arr, wi) => [...arr].sort((a, b) => {
+      const wa = ((a.name||a.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
+      const wb = ((b.name||b.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
+      return (wa[1]||'').localeCompare(wb[1]||'');
+    });
+    return [...sortBy2nd(firstMatches, 0), ...sortBy2nd(secondMatches, 1)];
+  };
   const handleDebtorSearchChange = (value) => {
     setCustomerName(value);
     if (value.length === 0) {
       setFilteredDebtors(existingDebtors);
       setShowDebtorSuggestions(existingDebtors.length > 0);
     } else {
-      const f = existingDebtors.filter(d =>
-        (d.name || d.customerName || '').toLowerCase().includes(value.toLowerCase())
-      );
+      const f = smartSearchDebtors(existingDebtors, value);
       setFilteredDebtors(f);
       setShowDebtorSuggestions(f.length > 0);
     }
@@ -114,9 +128,25 @@ function SalesRegister() {
   };
 
   // ── Catalogue ──────────────────────────────────────────────────────────
-  const filteredGoods = goods.filter(good =>
-    good.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ).slice(0, 5);
+  // Smart search: first-word matches first (sorted by 2nd letter),
+  // then second-word matches (sorted by 2nd letter of 2nd word)
+  const smartSearchGoods = (items, term) => {
+    if (!term.trim()) return [];
+    const t = term.toLowerCase();
+    const firstMatches = [], secondMatches = [];
+    for (const item of items) {
+      const words = (item.name || '').toLowerCase().split(/\s+/);
+      if (words[0] && words[0].startsWith(t)) firstMatches.push(item);
+      else if (words.length > 1 && words[1] && words[1].startsWith(t)) secondMatches.push(item);
+    }
+    const sortBy2nd = (arr, wi) => [...arr].sort((a, b) => {
+      const wa = ((a.name||'').toLowerCase().split(/\s+/)[wi]||'');
+      const wb = ((b.name||'').toLowerCase().split(/\s+/)[wi]||'');
+      return (wa[1]||'').localeCompare(wb[1]||'');
+    });
+    return [...sortBy2nd(firstMatches, 0), ...sortBy2nd(secondMatches, 1)].slice(0, 8);
+  };
+  const filteredGoods = smartSearchGoods(goods, searchTerm);
 
   const addToCart = (good, qty = 1) => {
     const existing = catalogue.find(item => item.id === good.id);
