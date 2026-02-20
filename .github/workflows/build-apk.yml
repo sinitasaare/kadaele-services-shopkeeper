@@ -48,6 +48,12 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
+    - name: Inject AndroidManifest with camera permission
+      run: |
+        cp src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+        echo "AndroidManifest.xml injected:"
+        cat android/app/src/main/AndroidManifest.xml
+
     - name: Sync Capacitor
       run: npx cap sync android
     
