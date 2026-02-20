@@ -5,6 +5,7 @@ import SalesJournal from './screens/SalesJournal';
 import CashJournal from './screens/CashJournal';
 import Debtors from './screens/Debtors';
 import Inventory from './screens/Inventory';
+import Settings from './screens/Settings';
 import Login from './components/Login';
 import dataService from './services/dataService';
 import './App.css';
@@ -15,6 +16,7 @@ const PAGES = [
   { name: 'CASH JOURNAL',   component: CashJournal   },
   { name: 'DEBTORS',        component: Debtors       },
   { name: 'INVENTORY',      component: Inventory     },
+  { name: 'SETTINGS',       component: Settings      },
 ];
 
 function App() {
