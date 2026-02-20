@@ -82,17 +82,29 @@
 }
 
 .sales-filter-action-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white; border: none; padding: 10px 20px; border-radius: 8px;
   font-size: 14px; font-weight: 600; cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   white-space: nowrap; display: inline-block;
 }
-.sales-filter-action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+/* Filter Sales — greenish purple */
+.sales-filter-action-btn.sfab-open {
+  background: linear-gradient(135deg, #5b4fcf 0%, #3d9970 100%);
+  box-shadow: 0 2px 8px rgba(91,79,207,0.35);
 }
+.sales-filter-action-btn.sfab-open:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(91,79,207,0.45); }
+/* Apply Filter — bluish purple */
+.sales-filter-action-btn.sfab-apply {
+  background: linear-gradient(135deg, #667eea 0%, #3b82f6 100%);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.35);
+}
+.sales-filter-action-btn.sfab-apply:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59,130,246,0.45); }
+/* Close Filter — reddish purple */
+.sales-filter-action-btn.sfab-close {
+  background: linear-gradient(135deg, #9b3fbf 0%, #e05252 100%);
+  box-shadow: 0 2px 8px rgba(155,63,191,0.35);
+}
+.sales-filter-action-btn.sfab-close:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(155,63,191,0.45); }
 
 .table-title {
   font-size: 1.125rem; font-weight: 600; color: #764ba2;
@@ -112,11 +124,12 @@
 }
 .stat-box-purple {
   width: calc(32.5% * 0.65);   /* 35% narrower, float left */
-  float: left;
   flex-shrink: 0;
 }
-.stat-box-green  {
-  flex: 1;
+.stat-box-green {
+  width: calc(32.5% * 0.65);   /* 35% narrower, float right */
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .stat-box-purple { background: linear-gradient(135deg, #4c3a8f 0%, #2d1b5e 100%); }
 .stat-box-green  { background: linear-gradient(135deg, #0f6b50 0%, #064d38 100%); }
