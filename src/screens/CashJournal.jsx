@@ -89,11 +89,12 @@ function CashJournal() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newType, setNewType] = useState(TYPE_IN);
   const [newAmount, setNewAmount] = useState('');
-  // descriptionKey: 'float' | 'cash_from' | 'withdrawal' | 'paid_to' | null
+  // descriptionKey: null | 'float' | 'cash_from' | 'withdrawal' | 'paid_to'
   const [descriptionKey, setDescriptionKey] = useState(null);
   const [resolvedNote, setResolvedNote] = useState('');
-  // sub-modal: 'cash_from' | 'withdrawal' | 'paid_to' | null
+  // subModal: null | 'cash_from' | 'withdrawal' | 'paid_to'
   const [subModal, setSubModal] = useState(null);
+  const [descDropdownOpen, setDescDropdownOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -186,7 +187,7 @@ function CashJournal() {
   // ── Add Entry ─────────────────────────────────────────────────────────────
   const resetAddModal = () => {
     setNewAmount(''); setDescriptionKey(null); setResolvedNote('');
-    setSubModal(null); setNewType(TYPE_IN);
+    setSubModal(null); setNewType(TYPE_IN); setDescDropdownOpen(false);
   };
   const openAddModal = () => { resetAddModal(); setShowAddModal(true); };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
@@ -415,12 +416,12 @@ function CashJournal() {
               <div className="cj-modal-type-btns">
                 <button
                   className={`cj-modal-type-btn${newType === TYPE_IN ? ' active-in' : ''}`}
-                  onClick={() => { setNewType(TYPE_IN); setDescriptionKey(null); setResolvedNote(''); }}>
+                  onClick={() => { setNewType(TYPE_IN); setDescriptionKey(null); setResolvedNote(''); setDescDropdownOpen(false); }}>
                   Cash In
                 </button>
                 <button
                   className={`cj-modal-type-btn${newType === TYPE_OUT ? ' active-out' : ''}`}
-                  onClick={() => { setNewType(TYPE_OUT); setDescriptionKey(null); setResolvedNote(''); }}>
+                  onClick={() => { setNewType(TYPE_OUT); setDescriptionKey(null); setResolvedNote(''); setDescDropdownOpen(false); }}>
                   Cash Out
                 </button>
               </div>
@@ -433,24 +434,46 @@ function CashJournal() {
                 value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01" />
             </div>
 
-            {/* Description — dropdown options, not free text */}
+            {/* Description — click '...' to open dropdown */}
             <div className="cj-modal-field">
               <label>Description</label>
-              <div className="cj-desc-options">
-                {currentOptions.map(opt => (
-                  <button
-                    key={opt.key}
-                    className={`cj-desc-option${descriptionKey === opt.key ? ' cj-desc-selected' : ''}`}
-                    onClick={() => handleDescriptionSelect(opt.key)}
-                  >
-                    {opt.label}
-                    {descriptionKey === opt.key && resolvedNote && opt.key !== 'float' && (
-                      <span className="cj-desc-resolved"> ✓</span>
-                    )}
-                  </button>
-                ))}
+              <div className="cj-desc-field-wrapper">
+                {/* The '...' trigger / selected value display */}
+                <button
+                  className={`cj-desc-trigger${descDropdownOpen ? ' open' : ''}${resolvedNote ? ' has-value' : ''}`}
+                  onClick={() => setDescDropdownOpen(o => !o)}
+                >
+                  <span className="cj-desc-trigger-text">
+                    {resolvedNote
+                      ? resolvedNote
+                      : descriptionKey && !resolvedNote
+                        ? currentOptions.find(o => o.key === descriptionKey)?.label || '…'
+                        : '…'}
+                  </span>
+                  <span className="cj-desc-chevron">{descDropdownOpen ? '▲' : '▼'}</span>
+                </button>
+
+                {/* Dropdown list — only shows when open */}
+                {descDropdownOpen && (
+                  <div className="cj-desc-dropdown">
+                    {currentOptions.map(opt => (
+                      <button
+                        key={opt.key}
+                        className={`cj-desc-dropdown-item${descriptionKey === opt.key ? ' selected' : ''}`}
+                        onClick={() => {
+                          setDescDropdownOpen(false);
+                          handleDescriptionSelect(opt.key);
+                        }}
+                      >
+                        {opt.label}
+                        {descriptionKey === opt.key && resolvedNote && ' ✓'}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              {/* Show resolved description preview */}
+
+              {/* Preview of resolved description */}
               {resolvedNote && (
                 <div className="cj-desc-preview">{resolvedNote}</div>
               )}
