@@ -56,6 +56,13 @@ jobs:
 
     - name: Sync Capacitor
       run: npx cap sync android
+
+    - name: Remove duplicate ic_launcher_background resource
+      run: |
+        # Capacitor generates ic_launcher_background.xml which defines the color.
+        # generate-icons.sh also writes it into colors.xml, causing a duplicate build error.
+        # We remove the standalone file so colors.xml is the single source of truth.
+        rm -f android/app/src/main/res/values/ic_launcher_background.xml
     
     - name: Install ImageMagick
       run: sudo apt-get update && sudo apt-get install -y imagemagick
