@@ -20,27 +20,8 @@ function SalesJournal() {
 
   const [showFilters, setShowFilters] = useState(false);
 
-  // Refs for sticky bar height → thead top sync
-  const barRef   = useRef(null);
-  const theadRef = useRef(null);
-
-  // ResizeObserver: whenever the sticky bar changes height (filter opens/closes),
-  // write the new height as --bar-height on the root element so .sj-thead sticks
-  // flush beneath it. Works even when the filter panel expands the bar.
-  useEffect(() => {
-    const bar = barRef.current;
-    if (!bar) return;
-    const updateTheadTop = () => {
-      if (theadRef.current) {
-        theadRef.current.style.top = `${bar.offsetHeight}px`;
-      }
-    };
-    const obs = new ResizeObserver(updateTheadTop);
-    obs.observe(bar);
-    // Fire once immediately so the thead top is set before the first paint
-    updateTheadTop();
-    return () => obs.disconnect();
-  }, []);
+  // No refs needed — sticky bar is now outside the scroll container,
+  // so thead sticks at top:0 naturally within .sj-scroll-body.
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
@@ -223,7 +204,7 @@ function SalesJournal() {
       )}
 
       {/* ── Sticky bar — contains filter panel, button, title and cards ── */}
-      <div className="sj-sticky-bar" ref={barRef}>
+      <div className="sj-sticky-bar">
         {/* Filter panel — inside sticky bar so it scrolls with the bar */}
         {showFilters && (
           <div className="filters-section">
@@ -292,51 +273,53 @@ function SalesJournal() {
         </div>
       </div>
 
-      {/* ── Table ── */}
-      <div className="table-wrapper">
-        <table className="sales-table">
+      {/* ── Scroll body — the ONLY scroll container; thead sticks at top:0 inside it ── */}
+      <div className="sj-scroll-body">
+        <div className="table-wrapper">
+          <table className="sales-table">
 
-          <thead className="sj-thead" ref={theadRef}>
-            <tr>
-              {HEADERS.map((h, i) => (
-                <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
-              ))}
-            </tr>
-          </thead>
+            <thead className="sj-thead">
+              <tr>
+                {HEADERS.map((h, i) => (
+                  <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
+                ))}
+              </tr>
+            </thead>
 
-          <tbody>
-            {filteredSales.length === 0 ? (
-              <tr><td colSpan="7" className="empty-cell">No sales records found</td></tr>
-            ) : (
-              filteredSales.map(sale => {
-                const { date, time } = formatDateTime(sale);
-                const total    = getSaleTotal(sale);
-                const payType  = getSalePayType(sale);
-                const customer = getSaleCustomer(sale);
-                const items    = sale.items && sale.items.length > 0 ? sale.items : [null];
-                const rowSpan  = items.length;
+            <tbody>
+              {filteredSales.length === 0 ? (
+                <tr><td colSpan="7" className="empty-cell">No sales records found</td></tr>
+              ) : (
+                filteredSales.map(sale => {
+                  const { date, time } = formatDateTime(sale);
+                  const total    = getSaleTotal(sale);
+                  const payType  = getSalePayType(sale);
+                  const customer = getSaleCustomer(sale);
+                  const items    = sale.items && sale.items.length > 0 ? sale.items : [null];
+                  const rowSpan  = items.length;
 
-                return items.map((item, idx) => (
-                  <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}>
-                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{date}</td>}
-                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
-                    <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
-                    <td className="col-qty">{item ? getItemQty(item) : '—'}</td>
-                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">${total.toFixed(2)}</td>}
-                    {idx === 0 && (
-                      <td rowSpan={rowSpan} className="merged-cell">
-                        <span className={`payment-badge payment-${payType}`}>
-                          {payType ? payType.toUpperCase() : 'N/A'}
-                        </span>
-                      </td>
-                    )}
-                    {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{customer || '—'}</td>}
-                  </tr>
-                ));
-              })
-            )}
-          </tbody>
-        </table>
+                  return items.map((item, idx) => (
+                    <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}>
+                      {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{date}</td>}
+                      {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
+                      <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
+                      <td className="col-qty">{item ? getItemQty(item) : '—'}</td>
+                      {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">${total.toFixed(2)}</td>}
+                      {idx === 0 && (
+                        <td rowSpan={rowSpan} className="merged-cell">
+                          <span className={`payment-badge payment-${payType}`}>
+                            {payType ? payType.toUpperCase() : 'N/A'}
+                          </span>
+                        </td>
+                      )}
+                      {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{customer || '—'}</td>}
+                    </tr>
+                  ));
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </div>
