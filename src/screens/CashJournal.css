@@ -5,8 +5,8 @@
 .cj-record {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* ── Filter panel ── */
@@ -57,8 +57,7 @@
 
 /* ── Sticky bar ── */
 .cj-sticky-bar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 50;
   background-color: var(--background, #f5f5f5);
   display: flex;
@@ -127,13 +126,21 @@
 .cj-stat-value  { font-size: 1.05rem; font-weight: 700; color: white; }
 
 /* ── Table wrapper ── */
+/* ── Scroll body — the ONLY scroll container; thead sticks at top:0 inside it ── */
+.cj-scroll-body {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .cj-table-wrapper {
-  overflow-x: auto;
   margin: 0 20px 20px;
   background-color: var(--surface, white);
   border-radius: 0.75rem;
   border: 1px solid var(--border, #e0e0e0);
   box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  min-width: max-content;
+  width: calc(100% - 40px);
 }
 
 .cj-table {
@@ -142,6 +149,12 @@
   border-collapse: collapse;
   font-size: 0.875rem;
   table-layout: auto;
+}
+
+.cj-thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .cj-thead th {
@@ -252,7 +265,7 @@
   .cj-top-row         { padding: 0 15px; }
   .cj-table-title     { margin: 0 15px; }
   .cj-stats-boxes     { margin: 0 15px; }
-  .cj-table-wrapper   { margin: 0 15px 15px; }
+  .cj-table-wrapper   { margin: 0 15px 15px; width: calc(100% - 30px); }
   .cj-thead th, .cj-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .cj-date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
