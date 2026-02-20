@@ -40,6 +40,7 @@ function SalesRegister() {
   const [filteredDebtors, setFilteredDebtors] = useState([]);
   const [selectedDebtorId, setSelectedDebtorId] = useState(null);
   const [selectedDebtorObj, setSelectedDebtorObj] = useState(null);
+  const [overdueModal, setOverdueModal] = useState(null); // { name, gender, daysOverdue, dueDate }
 
   // Quantity modal states
   const [showQuantityModal, setShowQuantityModal] = useState(false);
@@ -76,52 +77,73 @@ function SalesRegister() {
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const getTomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return dateStr(d); };
   const getMax14DaysStr = () => { const d = new Date(); d.setDate(d.getDate() + 14); return dateStr(d); };
-  // If the selected debtor already has an outstanding debt with a due date,
-  // the new repayment date cannot go beyond that existing promise date.
+
+  // Returns { blocked: bool, daysOverdue: number, existingDueDate: string } for selected debtor
+  const getDebtorStatus = () => {
+    if (!selectedDebtorObj) return { blocked: false, daysOverdue: 0, existingDueDate: null };
+    const balance = selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0;
+    const repDate = selectedDebtorObj.repaymentDate;
+    if (!repDate || balance <= 0) return { blocked: false, daysOverdue: 0, existingDueDate: repDate || null };
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const due = new Date(repDate); due.setHours(0, 0, 0, 0);
+    const daysOverdue = Math.floor((today - due) / (1000 * 60 * 60 * 24));
+    return { blocked: daysOverdue > 0, daysOverdue, existingDueDate: repDate };
+  };
+
+  // Repayment date picker max:
+  // - If debtor has unpaid debt with a due date → locked to that exact due date (min=tomorrow, max=due date)
+  // - Otherwise → up to 14 days from today
   const getRepaymentMaxStr = () => {
-    if (selectedDebtorObj && selectedDebtorObj.repaymentDate && (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) > 0) {
-      return selectedDebtorObj.repaymentDate; // locked to their existing due date
+    const { blocked, existingDueDate } = getDebtorStatus();
+    const balance = selectedDebtorObj ? (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) : 0;
+    if (!blocked && existingDueDate && balance > 0) {
+      return existingDueDate; // unpaid but not yet overdue — lock to existing due date
     }
-    return getMax14DaysStr(); // no outstanding debt — allow up to 14 days
+    return getMax14DaysStr();
   };
 
   // ── Debtor search ──────────────────────────────────────────────────────
-  const smartSearchDebtors = (items, term) => {
-    if (!term.trim()) return items;
-    const t = term.toLowerCase();
-    const firstMatches = [], secondMatches = [];
-    for (const d of items) {
-      const words = (d.name || d.customerName || '').toLowerCase().split(/\s+/);
-      if (words[0] && words[0].startsWith(t)) firstMatches.push(d);
-      else if (words.length > 1 && words[1] && words[1].startsWith(t)) secondMatches.push(d);
-    }
-    const sortBy2nd = (arr, wi) => [...arr].sort((a, b) => {
-      const wa = ((a.name||a.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
-      const wb = ((b.name||b.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
-      return (wa[1]||'').localeCompare(wb[1]||'');
-    });
-    return [...sortBy2nd(firstMatches, 0), ...sortBy2nd(secondMatches, 1)];
-  };
-  const handleDebtorSearchChange = (value) => {
-    setCustomerName(value);
-    if (value.length === 0) {
+  // Debtor field is DROPDOWN-ONLY — no typing allowed.
+  // Opening the field shows all debtors; typing is blocked.
+  const openDebtorDropdown = () => {
+    if (!selectedDebtorId) {
       setFilteredDebtors(existingDebtors);
       setShowDebtorSuggestions(existingDebtors.length > 0);
-    } else {
-      const f = smartSearchDebtors(existingDebtors, value);
-      setFilteredDebtors(f);
-      setShowDebtorSuggestions(f.length > 0);
     }
   };
+
   const selectDebtor = (debtor) => {
+    setShowDebtorSuggestions(false);
+
+    const balance   = debtor.balance || debtor.totalDue || 0;
+    const repDate   = debtor.repaymentDate;
+
+    // Check if debt is overdue
+    if (repDate && balance > 0) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const due   = new Date(repDate); due.setHours(0, 0, 0, 0);
+      const daysOverdue = Math.floor((today - due) / (1000 * 60 * 60 * 24));
+
+      if (daysOverdue > 0) {
+        // Show blocking modal — do NOT select the debtor
+        setOverdueModal({
+          name: debtor.name || debtor.customerName || 'Customer',
+          gender: debtor.gender || '',
+          daysOverdue,
+          dueDate: repDate,
+        });
+        return;
+      }
+    }
+
+    // Safe to select
     setCustomerName(debtor.name || debtor.customerName || '');
     setCustomerPhone(debtor.phone || debtor.customerPhone || '');
     setSelectedDebtorId(debtor.id);
-    // Store the debtor's existing due date so we can cap the repayment date picker
     setSelectedDebtorObj(debtor);
-    setRepaymentDate(''); // reset so user must pick within allowed range
-    setShowDebtorSuggestions(false);
+    setRepaymentDate(''); // reset so user picks within allowed range
   };
+
   const clearDebtorSelection = () => {
     setCustomerName(''); setCustomerPhone(''); setSelectedDebtorId(null);
     setSelectedDebtorObj(null); setRepaymentDate(''); setShowDebtorSuggestions(false);
@@ -529,7 +551,35 @@ function SalesRegister() {
         </div>
       )}
 
-      {/* ── Quantity modal ── */}
+      {/* ── Overdue Debt Blocking Modal ── */}
+      {overdueModal && (() => {
+        const { name, gender, daysOverdue } = overdueModal;
+        const pronoun = gender === 'Male' ? 'his' : gender === 'Female' ? 'her' : 'their';
+        return (
+          <div className="sr-modal-overlay">
+            <div className="sr-modal-content" style={{ textAlign:'center' }}>
+              <div style={{ fontSize:'40px', marginBottom:'12px' }}>⛔</div>
+              <h2 style={{ color:'#dc2626', marginBottom:'12px' }}>Debt Overdue</h2>
+              <p style={{ fontSize:'14px', lineHeight:'1.6', color:'#374151', marginBottom:'20px' }}>
+                <strong>{name}</strong> needs to pay up {pronoun} previous debts which{' '}
+                {daysOverdue === 1 ? 'is' : 'are'} already due{' '}
+                <strong style={{ color:'#dc2626' }}>{daysOverdue} day{daysOverdue !== 1 ? 's' : ''}</strong> ago.
+                <br/><br/>
+                No new credit can be given until outstanding debts are settled.
+              </p>
+              <button
+                onClick={() => setOverdueModal(null)}
+                style={{
+                  padding:'10px 28px', background:'#dc2626', color:'white',
+                  border:'none', borderRadius:'8px', fontSize:'15px',
+                  fontWeight:600, cursor:'pointer',
+                }}>
+                OK
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {showQuantityModal && selectedItem && (
         <div className="sr-modal-overlay">
           <div className="sr-modal-content">
@@ -570,59 +620,87 @@ function SalesRegister() {
           <div className="sr-modal-content">
             <h2>Buy on Credit</h2>
             <form className="sr-credit-form" onSubmit={confirmCreditSale}>
+              {/* ── Debtor Name — dropdown-only, no typing ── */}
               <div style={{ position: 'relative', marginBottom: '12px' }}>
-                <label htmlFor="debtor-name" style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}>
                   Debtor Name:
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <input type="text" id="debtor-name" value={customerName}
-                    readOnly={!!selectedDebtorId}
-                    onChange={(e) => { if (!selectedDebtorId) handleDebtorSearchChange(e.target.value); }}
-                    onFocus={() => {
-                      if (!selectedDebtorId) {
-                        setFilteredDebtors(existingDebtors);
-                        setShowDebtorSuggestions(existingDebtors.length > 0);
-                      }
-                    }}
-                    onBlur={() => setTimeout(() => setShowDebtorSuggestions(false), 200)}
-                    placeholder={existingDebtors.length === 0 ? 'No registered debtors yet' : 'Search debtor name…'}
-                    disabled={existingDebtors.length === 0}
-                    required
+                  {/* Read-only display button — opens dropdown on tap/click */}
+                  <div
+                    onClick={selectedDebtorId ? undefined : openDebtorDropdown}
                     style={{
-                      width: '100%', padding: '8px 32px 8px 10px',
-                      border: '1.5px solid #ccc', borderRadius: '6px',
-                      backgroundColor: selectedDebtorId ? '#f0f0f0' : 'white',
-                      cursor: selectedDebtorId ? 'default' : 'text',
+                      width: '100%', padding: '8px 36px 8px 10px',
+                      border: `1.5px solid ${selectedDebtorId ? '#667eea' : '#ccc'}`,
+                      borderRadius: '6px', minHeight: '36px',
+                      backgroundColor: selectedDebtorId ? '#f0f7ff' : 'white',
+                      cursor: selectedDebtorId ? 'default' : 'pointer',
+                      userSelect: 'none', boxSizing: 'border-box',
+                      fontSize: '14px', lineHeight: '20px',
+                      color: customerName ? '#1f2937' : '#9ca3af',
+                      display: 'flex', alignItems: 'center',
                     }}
-                  />
-                  {selectedDebtorId && (
+                  >
+                    {customerName || (existingDebtors.length === 0
+                      ? 'No registered debtors yet'
+                      : 'Tap to select debtor…')}
+                  </div>
+                  {/* Chevron / clear button */}
+                  {selectedDebtorId ? (
                     <button type="button" onClick={clearDebtorSelection}
                       style={{ position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)',
                         background:'none', border:'none', cursor:'pointer', fontSize:'18px', color:'#999', lineHeight:1 }}>
                       ×
                     </button>
+                  ) : (
+                    <span style={{ position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)',
+                      color:'#9ca3af', pointerEvents:'none', fontSize:'12px' }}>▼</span>
                   )}
                 </div>
+
+                {/* Dropdown list */}
                 {showDebtorSuggestions && filteredDebtors.length > 0 && (
                   <div style={{
                     position:'absolute', top:'100%', left:0, right:0, zIndex:1000,
                     background:'white', border:'1px solid #ccc', borderRadius:'6px',
-                    maxHeight:'160px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)',
+                    maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)',
                   }}>
-                    {filteredDebtors.map((debtor) => (
-                      <div key={debtor.id}
-                        onMouseDown={(e) => { e.preventDefault(); selectDebtor(debtor); }}
-                        style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee' }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                      >
-                        <div style={{ fontWeight:600 }}>{debtor.name || debtor.customerName}</div>
-                        <div style={{ fontSize:'12px', color:'#888' }}>
-                          Balance: ${(debtor.balance || debtor.totalDue || 0).toFixed(2)}
+                    {filteredDebtors.map((debtor) => {
+                      const bal = debtor.balance || debtor.totalDue || 0;
+                      const rep = debtor.repaymentDate;
+                      let isOverdue = false;
+                      let daysOD = 0;
+                      if (rep && bal > 0) {
+                        const today = new Date(); today.setHours(0,0,0,0);
+                        const due = new Date(rep); due.setHours(0,0,0,0);
+                        daysOD = Math.floor((today - due) / 86400000);
+                        isOverdue = daysOD > 0;
+                      }
+                      return (
+                        <div key={debtor.id}
+                          onMouseDown={(e) => { e.preventDefault(); selectDebtor(debtor); }}
+                          style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee',
+                            backgroundColor: isOverdue ? '#fff5f5' : 'white' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = isOverdue ? '#ffe8e8' : '#f5f5f5'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = isOverdue ? '#fff5f5' : 'white'}
+                        >
+                          <div style={{ fontWeight:600, color: isOverdue ? '#dc2626' : '#1f2937' }}>
+                            {debtor.name || debtor.customerName}
+                            {isOverdue && <span style={{ fontSize:'11px', marginLeft:'6px', fontWeight:400 }}>⚠️ overdue</span>}
+                          </div>
+                          <div style={{ fontSize:'12px', color:'#888' }}>
+                            Balance: ${bal.toFixed(2)}
+                            {rep && <span style={{ marginLeft:'8px' }}>· Due: {rep}</span>}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+                )}
+                {/* Backdrop to close dropdown */}
+                {showDebtorSuggestions && (
+                  <div style={{ position:'fixed', inset:0, zIndex:999 }}
+                    onClick={() => setShowDebtorSuggestions(false)} />
                 )}
                 {existingDebtors.length === 0 && (
                   <p style={{ fontSize:'12px', color:'#c00', marginTop:'4px' }}>
@@ -631,19 +709,34 @@ function SalesRegister() {
                 )}
               </div>
 
+              {/* ── Repayment Date ── */}
               <div style={{ marginBottom:'12px' }}>
                 <label htmlFor="repayment-date" style={{ display:'block', marginBottom:'4px', fontWeight:600 }}>
                   Repayment Date:
                 </label>
-                <input type="date" id="repayment-date" value={repaymentDate}
-                  min={getTomorrowStr()} max={getRepaymentMaxStr()}
-                  onChange={(e) => setRepaymentDate(e.target.value)} required
-                  style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #ccc', borderRadius:'6px' }} />
-                <p style={{ fontSize:'11px', color: selectedDebtorObj?.repaymentDate && (selectedDebtorObj?.balance||0) > 0 ? '#c00' : '#888', marginTop:'3px' }}>
-                  {selectedDebtorObj?.repaymentDate && (selectedDebtorObj?.balance||0) > 0
-                    ? `⚠️ Locked to existing due date: ${selectedDebtorObj.repaymentDate}. Debt must be cleared before a later date can be set.`
-                    : 'Select a date within the next 14 days.'}
-                </p>
+                {(() => {
+                  const { existingDueDate } = getDebtorStatus();
+                  const balance = selectedDebtorObj ? (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) : 0;
+                  const isLocked = !!existingDueDate && balance > 0;
+                  const hint = isLocked
+                    ? `⚠️ Locked to existing due date: ${existingDueDate}. Debt must be fully cleared before a new date can be set.`
+                    : 'Select a date up to 14 days from today.';
+                  return (
+                    <>
+                      <input type="date" id="repayment-date" value={repaymentDate}
+                        min={getTomorrowStr()}
+                        max={getRepaymentMaxStr()}
+                        onChange={(e) => setRepaymentDate(e.target.value)}
+                        disabled={!selectedDebtorId}
+                        required
+                        style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #ccc', borderRadius:'6px',
+                          backgroundColor: !selectedDebtorId ? '#f3f4f6' : 'white' }} />
+                      <p style={{ fontSize:'11px', color: isLocked ? '#c00' : '#888', marginTop:'3px' }}>
+                        {selectedDebtorId ? hint : 'Select a debtor first.'}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="sr-photo-section">
