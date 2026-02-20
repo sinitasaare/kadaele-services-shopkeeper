@@ -8,8 +8,8 @@
 .sales-record {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 0;
+  height: 100%;
+  overflow: hidden;
   --bar-height: 0px;
 }
 
@@ -60,15 +60,12 @@
 .date-range-hint { font-size: 0.75rem; color: #a07ec0; font-style: italic; margin-top: 0.25rem; }
 
 /* ── Sticky bar ─────────────────────────────────────────────────────────────
-   position:sticky + top:0 locks this bar to the top of .app-main (the
-   scroll container). Its rendered height is measured by ResizeObserver in JS
-   and written as --bar-height on .sales-record so the thead below can use
-   top: var(--bar-height) to always sit flush under this bar's bottom edge.
+   This bar is NO LONGER position:sticky. Instead it sits in a flex column
+   above .sj-scroll-body. It never scrolls because only .sj-scroll-body
+   is the scroll container. This is 100% reliable on Android WebView.
 ────────────────────────────────────────────────────────────────────────── */
 .sj-sticky-bar {
-  position: sticky;
-  
-  top: 0;
+  flex-shrink: 0;           /* never grow or shrink — always its natural height */
   z-index: 50;
   background-color: var(--background, #f5f5f5);
   display: flex;
@@ -120,20 +117,26 @@
 }
 .stat-value { font-size: 1.05rem; font-weight: 700; color: #ffffff; text-align: center; }
 
-/* ── Table wrapper ──────────────────────────────────────────────────────────
-   overflow-x:auto is the horizontal scroll container. thead and tbody both
-   live inside it so they scroll left/right as one unit.
-   overflow-y must remain unset — setting it would create a new stacking
-   context and break position:sticky on the thead inside.
+/* ── Scroll body ─────────────────────────────────────────────────────────────
+   THE ONLY scroll container in SalesJournal. Scrolls both x and y.
+   thead is sticky at top:0 within THIS container — 100% reliable on
+   Android WebView because there is no intermediate overflow container.
 ────────────────────────────────────────────────────────────────────────── */
+.sj-scroll-body {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Table wrapper — visual chrome only, no overflow ── */
 .table-wrapper {
-  overflow-x: auto;
-  overflow-y: clip; /* prevents implicit overflow-y:auto which would break position:sticky on thead */
   margin: 0 20px 20px;
   background-color: var(--surface);
   border-radius: 0.75rem;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  min-width: max-content;
+  width: calc(100% - 40px);
 }
 
 /* ── Sales table ── */
@@ -146,16 +149,12 @@
 }
 
 /* ── Sticky thead ────────────────────────────────────────────────────────────
-   top: var(--bar-height) — this CSS custom property is updated in JS every
-   time the sticky bar changes height, ensuring the header row always locks
-   flush against the bottom edge of .sj-sticky-bar inside the same scroll
-   container (.app-main). No JS viewport math needed.
+   top:0 — sticks to the top of .sj-scroll-body (its scroll container).
+   No JS needed to compute the top value anymore.
 ────────────────────────────────────────────────────────────────────────── */
 .sj-thead {
   position: sticky;
-  top: var(--bar-height, 0px);
-  
-  
+  top: 0;
   z-index: 10;
 }
 
@@ -214,7 +213,7 @@
   .stats-boxes { margin: 0 15px; }
   .stat-box { width: 32.5%; padding: 0.55rem 0.6rem; }
   .stat-value { font-size: 0.9rem; }
-  .table-wrapper { margin: 0 15px 15px; }
+  .table-wrapper { margin: 0 15px 15px; width: calc(100% - 30px); }
   .sj-thead th, .sales-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
