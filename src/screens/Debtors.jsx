@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
 import dataService from '../services/dataService';
 import './Debtors.css';
 
@@ -18,8 +18,18 @@ function Debtors() {
   const [isEditMode, setIsEditMode]     = useState(false);
   const [editedDebtor, setEditedDebtor] = useState(null);
   const [activeTab, setActiveTab]       = useState('details');
+  const [sortOrder, setSortOrder]       = useState(null);
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef                     = useRef(null);
 
   useEffect(() => { loadDebtors(); }, []);
+
+  // Close sort menu when clicking outside
+  useEffect(() => {
+    const handler = (e) => { if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) setShowSortMenu(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const loadDebtors = async () => {
     try {
@@ -29,9 +39,57 @@ function Debtors() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const filteredDebtors = debtors.filter(d =>
-    (d.name || d.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // ── Smart search ──────────────────────────────────────────────────────────
+  const smartSearch = (items, term) => {
+    if (!term.trim()) return items;
+    const t = term.toLowerCase();
+    const firstMatches = [], secondMatches = [];
+    for (const d of items) {
+      const words = (d.name || d.customerName || '').toLowerCase().split(/\s+/);
+      if (words[0] && words[0].startsWith(t)) firstMatches.push(d);
+      else if (words.length > 1 && words[1] && words[1].startsWith(t)) secondMatches.push(d);
+    }
+    const sortBy2nd = (arr, wi) => [...arr].sort((a, b) => {
+      const wa = ((a.name||a.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
+      const wb = ((b.name||b.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
+      return (wa[1]||'').localeCompare(wb[1]||'');
+    });
+    return [...sortBy2nd(firstMatches, 0), ...sortBy2nd(secondMatches, 1)];
+  };
+
+  // ── Sort ──────────────────────────────────────────────────────────────────
+  const SORT_OPTIONS = [
+    { key: 'balance_desc', label: 'Balance: High to Low' },
+    { key: 'balance_asc',  label: 'Balance: Low to High' },
+    { key: 'modified_desc', label: 'Recently Modified' },
+    { key: 'modified_asc',  label: 'Oldest Modified' },
+    { key: 'due_asc',  label: 'Due Date: Soonest First' },
+    { key: 'due_desc', label: 'Due Date: Latest First' },
+  ];
+
+  const applySortAndSearch = (items) => {
+    let result = smartSearch(items, searchTerm);
+    if (!sortOrder) return result;
+    return [...result].sort((a, b) => {
+      const balA = a.balance || a.totalDue || 0;
+      const balB = b.balance || b.totalDue || 0;
+      const modA = new Date(a.updatedAt || a.lastSale || a.createdAt || 0);
+      const modB = new Date(b.updatedAt || b.lastSale || b.createdAt || 0);
+      const dueA = a.repaymentDate ? new Date(a.repaymentDate) : new Date('9999-12-31');
+      const dueB = b.repaymentDate ? new Date(b.repaymentDate) : new Date('9999-12-31');
+      switch (sortOrder) {
+        case 'balance_desc': return balB - balA;
+        case 'balance_asc':  return balA - balB;
+        case 'modified_desc': return modB - modA;
+        case 'modified_asc':  return modA - modB;
+        case 'due_asc':  return dueA - dueB;
+        case 'due_desc': return dueB - dueA;
+        default: return 0;
+      }
+    });
+  };
+
+  const filteredDebtors = applySortAndSearch(debtors);
 
   const handleDebtorClick = async (debtor) => {
     setSelectedDebtor(debtor);
@@ -277,6 +335,27 @@ Kadaele Services`;
       <div className="d-header">
         <input type="text" className="d-search" placeholder="Search debtor name…"
           value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <div className="d-sort-wrapper" ref={sortMenuRef}>
+          <button className={`d-sort-btn${sortOrder ? ' d-sort-active' : ''}`} onClick={() => setShowSortMenu(v => !v)} title="Sort">
+            <ArrowUpDown size={16} />
+          </button>
+          {showSortMenu && (
+            <div className="d-sort-menu">
+              {SORT_OPTIONS.map(opt => (
+                <button key={opt.key}
+                  className={`d-sort-option${sortOrder === opt.key ? ' d-sort-option-active' : ''}`}
+                  onClick={() => { setSortOrder(sortOrder === opt.key ? null : opt.key); setShowSortMenu(false); }}>
+                  {opt.label}
+                </button>
+              ))}
+              {sortOrder && (
+                <button className="d-sort-option d-sort-clear" onClick={() => { setSortOrder(null); setShowSortMenu(false); }}>
+                  ✕ Clear Sort
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <button className="d-add-btn" onClick={openAddDebtorModal}>+ Add Debtor</button>
       </div>
 
