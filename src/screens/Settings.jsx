@@ -604,11 +604,12 @@ function Section({ icon, title, children }) {
 // ─────────────────────────────────────────────────────────────
 function Settings({ onSettingsChange }) {
   const [lang, setLang]             = useState(() => localStorage.getItem('ks_lang') || 'en');
-  const [darkMode, setDarkMode]     = useState(() => localStorage.getItem('ks_dark') === 'true');
+  const [darkMode, setDarkMode]     = useState(() => localStorage.getItem('ks_darkMode') === 'true');
   const [currency, setCurrency]     = useState(() => localStorage.getItem('ks_currency') || '$');
-  const [notifDebtReminder, setNotifDebtReminder] = useState(() => localStorage.getItem('ks_notif_debt_reminder') !== 'false');
-  const [notifLowStock, setNotifLowStock]         = useState(() => localStorage.getItem('ks_notif_low_stock') !== 'false');
-  const [notifDailySales, setNotifDailySales]     = useState(() => localStorage.getItem('ks_notif_daily_sales') !== 'false');
+  const [notifDebtReminder, setNotifDebtReminder] = useState(true);
+  const [notifLowStock, setNotifLowStock]         = useState(true);
+  const [notifDailySales, setNotifDailySales]     = useState(true);
+  const [loaded, setLoaded]         = useState(false);
   const [showSavedMsg, setShowSavedMsg] = useState(false);
   const [showForgotSale, setShowForgotSale]     = useState(false);
   const [showForgotCredit, setShowForgotCredit] = useState(false);
@@ -617,18 +618,27 @@ function Settings({ onSettingsChange }) {
 
   const t = T[lang] || T.en;
 
+  // Load settings from localforage on mount
+  useEffect(() => {
+    dataService.getSettings().then(s => {
+      setLang(s.lang || 'en');
+      setDarkMode(!!s.darkMode);
+      setCurrency(s.currency || '$');
+      setNotifDebtReminder(s.notifDebtReminder !== false);
+      setNotifLowStock(s.notifLowStock !== false);
+      setNotifDailySales(s.notifDailySales !== false);
+      setLoaded(true);
+    });
+  }, []);
+
   // Apply dark mode to document
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  const handleSave = () => {
-    localStorage.setItem('ks_lang', lang);
-    localStorage.setItem('ks_dark', darkMode);
-    localStorage.setItem('ks_currency', currency);
-    localStorage.setItem('ks_notif_debt_reminder', notifDebtReminder);
-    localStorage.setItem('ks_notif_low_stock', notifLowStock);
-    localStorage.setItem('ks_notif_daily_sales', notifDailySales);
+  const handleSave = async () => {
+    const settings = { lang, darkMode, currency, notifDebtReminder, notifLowStock, notifDailySales };
+    await dataService.saveSettings(settings);
     setShowSavedMsg(true);
     setTimeout(() => setShowSavedMsg(false), 2500);
     if (onSettingsChange) onSettingsChange({ lang, darkMode, currency });
@@ -637,6 +647,15 @@ function Settings({ onSettingsChange }) {
   const selectedCurrencyLabel = CURRENCY_SYMBOLS.indexOf(currency) >= 0
     ? t.currencies[CURRENCY_SYMBOLS.indexOf(currency)]
     : currency;
+
+  // Don't render until localforage settings are loaded — prevents flash of wrong values
+  if (!loaded) {
+    return (
+      <div className="st-screen" style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
+        <div style={{ color:'#888', fontSize:'14px' }}>Loading settings…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="st-screen">
