@@ -12,8 +12,8 @@ import './App.css';
 
 const PAGES = [
   { name: 'SALES REGISTER', component: SalesRegister },
-  { name: 'SALES JOURNAL',  component: SalesJournal  },
-  { name: 'CASH JOURNAL',   component: CashJournal   },
+  { name: 'SALES RECORD',   component: SalesJournal  },
+  { name: 'CASH RECORD',    component: CashJournal   },
   { name: 'DEBTORS',        component: Debtors       },
   { name: 'INVENTORY',      component: Inventory     },
   { name: 'SETTINGS',       component: Settings      },
