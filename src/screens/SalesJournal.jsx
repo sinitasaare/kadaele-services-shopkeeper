@@ -258,7 +258,9 @@ function SalesJournal() {
           </div>
         )}
         <div className="filter-btn-wrapper">
-          <button className="sales-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
+          <button
+            className={`sales-filter-action-btn${!showFilters ? ' sfab-open' : showApply ? ' sfab-apply' : ' sfab-close'}`}
+            onClick={handleFilterButtonClick}>{btnLabel}</button>
         </div>
         <h3 className="table-title">{getTableTitle()}</h3>
         <div className="stats-boxes">
