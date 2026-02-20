@@ -257,27 +257,79 @@
   .cj-date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
 
-/* ── Description option buttons ── */
-.cj-desc-options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ── Description field: '...' trigger + dropdown ── */
+.cj-desc-field-wrapper {
+  position: relative;
 }
-.cj-desc-option {
-  text-align: left;
-  padding: 0.55rem 0.875rem;
+
+.cj-desc-trigger {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.875rem;
   border: 1.5px solid var(--border, #e0e0e0);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
   background: var(--background, #f9fafb);
+  color: #9ca3af;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s, color 0.2s;
+}
+.cj-desc-trigger.open        { border-color: #10b981; }
+.cj-desc-trigger.has-value   { color: var(--text-primary, #333); background: white; }
+
+.cj-desc-trigger-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+}
+.cj-desc-trigger:not(.has-value) .cj-desc-trigger-text {
+  font-style: italic;
+  letter-spacing: 0.08em;
+}
+
+.cj-desc-chevron {
+  font-size: 0.65rem;
+  margin-left: 8px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.cj-desc-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1.5px solid #10b981;
+  border-radius: 0.5rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.cj-desc-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.875rem;
+  border: none;
+  background: white;
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--text-primary, #333);
   cursor: pointer;
-  transition: all 0.18s;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.15s;
 }
-.cj-desc-option:hover { border-color: #10b981; color: #10b981; }
-.cj-desc-selected { background: #d1fae5; border-color: #10b981; color: #065f46; font-weight: 600; }
-.cj-desc-resolved { font-size: 0.75rem; }
+.cj-desc-dropdown-item:last-child { border-bottom: none; }
+.cj-desc-dropdown-item:hover  { background: #f0fdf4; color: #065f46; }
+.cj-desc-dropdown-item.selected { background: #d1fae5; color: #065f46; font-weight: 600; }
 
 .cj-desc-preview {
   margin-top: 8px;
