@@ -314,22 +314,28 @@
 
 /* ── Deposit row ── */
 .d-deposit-row td {
-  background-color: #f1f3f5;
-  border-top: 2px solid #dee2e6;
-  border-bottom: 2px solid #dee2e6;
+  background-color: #f8f9fa;
+  border-top: 1.5px solid #e9ecef;
+  border-bottom: 1.5px solid #e9ecef;
 }
 
-/* Merged grey cell with spaced-letter text */
+/* Merged cell with spaced-letter text — very light grey, not dark */
 .d-deposit-merged-cell {
   text-align: center;
-  color: #6b7280;
+  color: #9ca3af;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
   font-style: italic;
   vertical-align: middle;
-  background: #e9ecef !important;
+  background: #f1f3f5 !important;
   padding: 10px 8px !important;
+}
+
+/* All regular sale rows — force white background so nothing leaks */
+.d-hist-first td,
+.d-hist-cont td {
+  background-color: #ffffff;
 }
 
 .d-deposited-amount {
