@@ -467,17 +467,21 @@ function SalesRegister() {
               <span className="sr-scanner-title">Scanner Unavailable</span>
               <button className="sr-scanner-close" onClick={() => setScannerError('')}>✕</button>
             </div>
-            <p className="sr-scanner-error-msg">{scannerError}</p>
-            {(scannerError.includes('denied') || scannerError.includes('permission')) && Capacitor.isNativePlatform() && (
-              <button
-                className="sr-btn-confirm"
-                style={{marginTop:'0.5rem',width:'100%',background:'#4c3a8f'}}
-                onClick={() => {
-                  alert('Camera permission is required.\n\nPlease go to:\nSettings → Apps → Shopkeeper → Permissions → Camera\nand enable it, then return to the app.');
-                }}
-              >Open App Settings</button>
-            )}
-            <button className="sr-btn-confirm" style={{marginTop:'0.5rem',width:'100%'}} onClick={() => setScannerError('')}>OK</button>
+            <div className="sr-scanner-error-body">
+              <div className="sr-scanner-error-icon">⚠️</div>
+              <p className="sr-scanner-error-msg">{scannerError}</p>
+            </div>
+            <div className="sr-scanner-error-actions">
+              {(scannerError.includes('denied') || scannerError.includes('permission')) && Capacitor.isNativePlatform() && (
+                <button
+                  className="sr-scanner-settings-btn"
+                  onClick={() => {
+                    alert('To enable camera:\n\nSettings → Apps → Kadaele Shopkeeper → Permissions → Camera → Allow');
+                  }}
+                >Open App Settings</button>
+              )}
+              <button className="sr-scanner-ok-btn" onClick={() => setScannerError('')}>OK</button>
+            </div>
           </div>
         </div>
       )}
