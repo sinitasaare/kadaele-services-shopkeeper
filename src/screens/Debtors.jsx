@@ -132,7 +132,7 @@ function Debtors() {
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
     try {
-      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount));
+      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount), [], paymentPhoto || null);
       alert(`Payment of $${parseFloat(paymentAmount).toFixed(2)} recorded`);
       await loadDebtors();
       const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
