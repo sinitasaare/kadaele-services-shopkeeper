@@ -68,7 +68,7 @@ function Debtors() {
         id: dataService.generateId(), customerName: newDebtor.fullName, name: newDebtor.fullName,
         phone: newDebtor.phone, customerPhone: newDebtor.phone, gender: newDebtor.gender,
         whatsapp: newDebtor.whatsapp, email: newDebtor.email, address: newDebtor.address,
-        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [],
+        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
         createdAt: new Date().toISOString(), lastSale: null
       };
       const current = await dataService.getDebtors();
@@ -136,7 +136,12 @@ function Debtors() {
       alert(`Payment of $${parseFloat(paymentAmount).toFixed(2)} recorded`);
       await loadDebtors();
       const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
-      if (updated) setSelectedDebtor(updated);
+      if (updated) {
+        setSelectedDebtor(updated);
+        // Refresh debt history to show new deposit row
+        const allSales = await dataService.getSales();
+        setDebtorSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
+      }
       setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null);
     } catch (e) { console.error(e); alert('Failed to record payment'); }
   };
@@ -152,24 +157,54 @@ function Debtors() {
     return isNaN(d) ? 'Invalid' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
   };
 
+  // ── Build merged history rows: interleave sales + deposit rows, then compute
+  //    running balance after each event. Sorted oldest → newest.
+  const buildHistoryRows = () => {
+    if (!selectedDebtor) return [];
+
+    // Sales events
+    const saleEvents = debtorSales.map(sale => ({
+      kind: 'sale',
+      date: new Date(sale.date || sale.timestamp || sale.createdAt || 0),
+      sale,
+    }));
+
+    // Deposit events
+    const depositEvents = (selectedDebtor.deposits || []).map(dep => ({
+      kind: 'deposit',
+      date: new Date(dep.date || 0),
+      deposit: dep,
+    }));
+
+    const all = [...saleEvents, ...depositEvents].sort((a, b) => a.date - b.date);
+
+    // Compute running balance after each event
+    let balance = 0;
+    return all.map(event => {
+      if (event.kind === 'sale') {
+        balance += parseFloat(event.sale.total || event.sale.total_amount || 0);
+      } else {
+        balance -= parseFloat(event.deposit.amount || 0);
+      }
+      return { ...event, runningBalance: balance };
+    }).reverse(); // newest first for display
+  };
+
   if (loading) return <div className="d-screen"><div className="d-loading">Loading debtors...</div></div>;
+
+  const historyRows = selectedDebtor ? buildHistoryRows() : [];
 
   return (
     <div className="d-screen">
 
-      {/* ── Header: search + add button ── */}
+      {/* ── Header ── */}
       <div className="d-header">
-        <input
-          type="text"
-          className="d-search"
-          placeholder="Search debtor name…"
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
+        <input type="text" className="d-search" placeholder="Search debtor name…"
+          value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         <button className="d-add-btn" onClick={openAddDebtorModal}>+ Add Debtor</button>
       </div>
 
-      {/* ── Debtor cards grid: 3 per row ── */}
+      {/* ── Debtor cards ── */}
       <div className="d-grid">
         {filteredDebtors.length === 0 ? (
           <div className="d-empty">
@@ -190,11 +225,9 @@ function Debtors() {
         <div className="d-overlay" onClick={closeDebtorModal}>
           <div className="d-modal" onClick={e => e.stopPropagation()}>
 
-            {/* Modal header */}
             <div className="d-modal-header">
               <h2 className="d-modal-title">{selectedDebtor.name || selectedDebtor.customerName}</h2>
               <div className="d-modal-actions">
-                {/* Edit button only on Details tab */}
                 {activeTab === 'details' && !isEditMode && (
                   <button className="d-edit-btn" onClick={enableEditMode} title="Edit"><Edit2 size={18} /></button>
                 )}
@@ -202,7 +235,6 @@ function Debtors() {
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="d-tabs">
               <button className={`d-tab${activeTab==='details'?' d-tab-active':''}`} onClick={() => setActiveTab('details')}>Details</button>
               <button className={`d-tab${activeTab==='history'?' d-tab-active':''}`} onClick={() => setActiveTab('history')}>Debt History</button>
@@ -266,7 +298,6 @@ function Debtors() {
             {/* ── Debt History tab ── */}
             {activeTab === 'history' && (
               <div className="d-history-wrapper">
-                {/* Sticky action bar: Notify (left) + Deposit (right) */}
                 <div className="d-history-actions">
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
@@ -276,7 +307,6 @@ function Debtors() {
                   </button>
                 </div>
 
-                {/* Scrollable table area — header scrolls horizontally with body */}
                 <div className="d-history-scroll">
                   <table className="d-history-table">
                     <thead>
@@ -288,16 +318,43 @@ function Debtors() {
                         <th>Price</th>
                         <th>Subtotal</th>
                         <th>Sale Total</th>
+                        <th>Deposited</th>
+                        <th>Balance</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {debtorSales.length === 0 ? (
-                        <tr><td colSpan="7" className="d-empty-cell">No sales history</td></tr>
+                      {historyRows.length === 0 ? (
+                        <tr><td colSpan="9" className="d-empty-cell">No history yet</td></tr>
                       ) : (
-                        debtorSales.map(sale => {
+                        historyRows.map((row, rowIdx) => {
+                          if (row.kind === 'deposit') {
+                            // ── Deposit row ─────────────────────────────────
+                            const dep = row.deposit;
+                            return (
+                              <tr key={`dep-${dep.id}`} className="d-deposit-row">
+                                <td className="d-merged">{formatDate(dep.date)}</td>
+                                <td className="d-merged">{formatTime(dep.date)}</td>
+                                {/* Merged grey cell spanning item/qty/price/subtotal/sale-total */}
+                                <td colSpan="5" className="d-deposit-merged-cell">
+                                  D&nbsp;e&nbsp;p&nbsp;o&nbsp;s&nbsp;i&nbsp;t&nbsp;e&nbsp;d&nbsp;&nbsp;&nbsp;
+                                  C&nbsp;a&nbsp;s&nbsp;h&nbsp;&nbsp;&nbsp;t&nbsp;o&nbsp;&nbsp;&nbsp;
+                                  r&nbsp;e&nbsp;p&nbsp;a&nbsp;y&nbsp;&nbsp;&nbsp;
+                                  D&nbsp;e&nbsp;b&nbsp;t
+                                </td>
+                                <td className="d-deposited-amount">${parseFloat(dep.amount).toFixed(2)}</td>
+                                <td className={`d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
+                                  ${Math.abs(row.runningBalance).toFixed(2)}
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          // ── Sale row(s) ──────────────────────────────────
+                          const sale = row.sale;
                           const items = sale.items && sale.items.length > 0 ? sale.items : [null];
                           const rowSpan = items.length;
                           const rawTs = sale.date || sale.timestamp || sale.createdAt;
+
                           return items.map((item, idx) => (
                             <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
@@ -307,6 +364,12 @@ function Debtors() {
                               <td>${item ? (item.price || 0).toFixed(2) : '0.00'}</td>
                               <td>${item ? (item.subtotal || (item.price||0)*(item.quantity||item.qty||0)).toFixed(2) : '0.00'}</td>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">${(sale.total || sale.total_amount || 0).toFixed(2)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">—</td>}
+                              {idx === 0 && (
+                                <td rowSpan={rowSpan} className={`d-merged d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
+                                  ${Math.abs(row.runningBalance).toFixed(2)}
+                                </td>
+                              )}
                             </tr>
                           ));
                         })
@@ -362,17 +425,17 @@ function Debtors() {
         </div>
       )}
 
-      {/* ── Payment Modal ── */}
+      {/* ── Payment / Deposit Modal ── */}
       {showPaymentModal && (
         <div className="d-overlay" onClick={() => setShowPaymentModal(false)}>
           <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
             <div className="d-modal-header">
-              <h2 className="d-modal-title">Record Payment</h2>
+              <h2 className="d-modal-title">Record Deposit</h2>
               <button className="d-close-btn" onClick={() => setShowPaymentModal(false)}><X size={22} /></button>
             </div>
             <div className="d-payment-form">
               <div className="d-form-group">
-                <label>Payment Amount</label>
+                <label>Deposit Amount</label>
                 <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
                   onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
               </div>
