@@ -361,8 +361,9 @@ function CashJournal() {
         </div>
       </div>
 
-      {/* ── Table ── */}
-      <div className="cj-table-wrapper">
+      {/* ── Scroll body — the ONLY scroll container; thead sticks at top:0 inside it ── */}
+      <div className="cj-scroll-body">
+        <div className="cj-table-wrapper">
         <table className="cj-table">
           <thead className="cj-thead">
             <tr>
@@ -402,6 +403,7 @@ function CashJournal() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* ── Add Entry modal ── */}
