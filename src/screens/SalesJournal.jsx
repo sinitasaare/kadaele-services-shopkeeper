@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dataService from '../services/dataService';
 import './SalesJournal.css';
 
@@ -19,6 +19,25 @@ function SalesJournal() {
   const [appliedEndDate, setAppliedEndDate] = useState('');
 
   const [showFilters, setShowFilters] = useState(false);
+
+  // Refs for sticky bar height → thead top sync
+  const barRef   = useRef(null);
+  const theadRef = useRef(null);
+
+  // ResizeObserver: whenever the sticky bar changes height (filter opens/closes),
+  // write the new height as --bar-height on the root element so .sj-thead sticks
+  // flush beneath it. Works even when the filter panel expands the bar.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const obs = new ResizeObserver(() => {
+      if (theadRef.current) {
+        theadRef.current.style.top = `${bar.offsetHeight}px`;
+      }
+    });
+    obs.observe(bar);
+    return () => obs.disconnect();
+  }, []);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
@@ -201,7 +220,7 @@ function SalesJournal() {
       )}
 
       {/* ── Sticky bar — contains filter panel, button, title and cards ── */}
-      <div className="sj-sticky-bar">
+      <div className="sj-sticky-bar" ref={barRef}>
         {/* Filter panel — inside sticky bar so it scrolls with the bar */}
         {showFilters && (
           <div className="filters-section">
@@ -274,7 +293,7 @@ function SalesJournal() {
       <div className="table-wrapper">
         <table className="sales-table">
 
-          <thead className="sj-thead">
+          <thead className="sj-thead" ref={theadRef}>
             <tr>
               {HEADERS.map((h, i) => (
                 <th key={i} className={h === 'Qty' ? 'col-qty' : ''}>{h}</th>
