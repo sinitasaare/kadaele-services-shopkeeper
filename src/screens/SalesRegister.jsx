@@ -161,6 +161,17 @@ function SalesRegister() {
       return;
     }
 
+    // Request camera permission explicitly on Capacitor / Android
+    try {
+      if (navigator.permissions) {
+        const result = await navigator.permissions.query({ name: 'camera' });
+        if (result.state === 'denied') {
+          setScannerError('Camera permission is denied. Please enable it in your device Settings → Apps → Kadaele Shopkeeper → Permissions.');
+          return;
+        }
+      }
+    } catch (_) { /* permissions API not available — proceed anyway */ }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
