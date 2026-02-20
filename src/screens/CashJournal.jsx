@@ -99,20 +99,27 @@ function CashJournal() {
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadEntries(); }, []);
+  // Reload when tab becomes visible again (after switching from SalesRegister)
+  useEffect(() => {
+    const handleVisibility = () => { if (!document.hidden) loadEntries(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { applyFilters(); }, [entries, appliedTypeFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadEntries = async () => {
-    // Cash sales are now automatically recorded in cashEntries by dataService.addSale()
-    // with note "CASH Sale: …" so we only need to read from getCashEntries().
-    // This avoids the previous double-counting that came from merging getSales() + getCashEntries().
-    const manualEntries = await dataService.getCashEntries();
+    // All cash entries (sales, deposits, manual) are stored in localforage
+    // via dataService.addCashEntry(). We simply read them all here.
+    // Sales Register writes "CASH Sale" entries automatically.
+    // Debtors deposit payments write "[Name] paid cash to repay debt" entries.
+    const allEntries = await dataService.getCashEntries();
 
-    const all = (manualEntries || [])
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sorted = (allEntries || [])
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
     let running = 0;
-    const withBalance = all.map(entry => {
+    const withBalance = sorted.map(entry => {
       running += entry.type === TYPE_IN ? entry.amount : -entry.amount;
       return { ...entry, balance: running };
     });
