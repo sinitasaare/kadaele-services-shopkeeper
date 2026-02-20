@@ -2,9 +2,70 @@ import React, { useState, useEffect } from 'react';
 import dataService from '../services/dataService';
 import './CashJournal.css';
 
-// ── Entry type constants ────────────────────────────────────────────────────
 const TYPE_IN  = 'in';
 const TYPE_OUT = 'out';
+
+// ── Sub-modal for "Cash from" (Cash IN) ─────────────────────────────────────
+function CashFromModal({ onSave, onCancel }) {
+  const [from, setFrom] = useState('');
+  const [reason, setReason] = useState('');
+  return (
+    <div className="cj-sub-overlay">
+      <div className="cj-sub-modal">
+        <h3 className="cj-sub-title">Cash From</h3>
+        <div className="cj-modal-field">
+          <label>Cash from</label>
+          <input className="cj-modal-input" value={from} onChange={e => setFrom(e.target.value)} placeholder="Person or company name…" />
+        </div>
+        <div className="cj-modal-field">
+          <label>Being for (reason)</label>
+          <input className="cj-modal-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for cash coming in…" />
+        </div>
+        <div className="cj-modal-buttons">
+          <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="cj-modal-save" onClick={() => {
+            if (!from.trim()) { alert('Please enter who the cash is from.'); return; }
+            if (!reason.trim()) { alert('Please enter the reason.'); return; }
+            onSave(`Received Cash from ${from.trim()} for ${reason.trim()}`);
+          }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-modal for "Withdrawals" or "Paid to" (Cash OUT) ─────────────────────
+function CashOutSubModal({ mode, onSave, onCancel }) {
+  const [name, setName] = useState('');
+  const [reason, setReason] = useState(mode === 'withdrawal' ? 'Personal use' : '');
+  const title = mode === 'withdrawal' ? 'Withdrawal' : 'Paid To';
+  const nameLbl = mode === 'withdrawal' ? 'Person / Company withdrawing' : 'Person / Company to pay';
+
+  return (
+    <div className="cj-sub-overlay">
+      <div className="cj-sub-modal">
+        <h3 className="cj-sub-title">{title}</h3>
+        <div className="cj-modal-field">
+          <label>{nameLbl}</label>
+          <input className="cj-modal-input" value={name} onChange={e => setName(e.target.value)} placeholder="Enter name…" />
+        </div>
+        <div className="cj-modal-field">
+          <label>Being for</label>
+          <input className="cj-modal-input" value={reason} onChange={e => setReason(e.target.value)}
+            placeholder={mode === 'withdrawal' ? 'Personal use' : 'Reason for payment…'}
+            readOnly={mode === 'withdrawal'} style={mode === 'withdrawal' ? {background:'#f3f4f6',color:'#6b7280'} : {}} />
+        </div>
+        <div className="cj-modal-buttons">
+          <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="cj-modal-save" onClick={() => {
+            if (!name.trim()) { alert('Please enter a name.'); return; }
+            onSave(`Paid Cash to ${name.trim()} for ${reason.trim() || 'Personal use'}`);
+          }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CashJournal() {
   const [entries, setEntries] = useState([]);
@@ -24,50 +85,44 @@ function CashJournal() {
 
   const [showFilters, setShowFilters] = useState(false);
 
-  // ── Add Entry modal ─────────────────────────────────────────────────────
+  // Add Entry modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [newType, setNewType] = useState(TYPE_IN);
   const [newAmount, setNewAmount] = useState('');
-  const [newNote, setNewNote] = useState('');
+  // descriptionKey: 'float' | 'cash_from' | 'withdrawal' | 'paid_to' | null
+  const [descriptionKey, setDescriptionKey] = useState(null);
+  const [resolvedNote, setResolvedNote] = useState('');
+  // sub-modal: 'cash_from' | 'withdrawal' | 'paid_to' | null
+  const [subModal, setSubModal] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadEntries(); }, []);
-  useEffect(() => { applyFilters(); },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entries, appliedTypeFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { applyFilters(); }, [entries, appliedTypeFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
   const loadEntries = async () => {
-    // Pull cash sales from Sales Register (cash payment type only)
     const sales = await dataService.getSales();
     const cashSaleEntries = (sales || [])
       .filter(s => (s.paymentType === 'cash' || s.payment_type === 'cash') && s.status !== 'voided')
       .map(s => ({
-        id: s.id,
-        source: 'sale',
-        type: TYPE_IN,
+        id: s.id, source: 'sale', type: TYPE_IN,
         amount: parseFloat(s.total_amount ?? s.total ?? 0),
-        note: s.items && s.items.length > 0
-          ? s.items.map(i => i.name).join(', ')
-          : 'Cash Sale',
+        note: s.items?.length > 0 ? s.items.map(i => i.name).join(', ') : 'Cash Sale',
         date: s.date || s.timestamp || s.createdAt,
       }));
 
-    // Pull manual cash journal entries from local storage
     const manualEntries = await dataService.getCashEntries();
 
-    // Merge and sort oldest → newest (for running balance calculation)
     const all = [...cashSaleEntries, ...(manualEntries || [])]
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // Compute cumulative running balance
     let running = 0;
     const withBalance = all.map(entry => {
       running += entry.type === TYPE_IN ? entry.amount : -entry.amount;
       return { ...entry, balance: running };
     });
 
-    // Reverse so newest is at top for display
     setEntries([...withBalance].reverse());
   };
 
@@ -79,31 +134,24 @@ function CashJournal() {
     return isNaN(d.getTime()) ? null : d;
   };
 
-  const toMidnight = (d) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c; };
+  const toMidnight = (d) => { const c = new Date(d); c.setHours(0,0,0,0); return c; };
 
   const applyFilters = () => {
     let filtered = [...entries];
-
-    if (appliedTypeFilter !== 'all')
-      filtered = filtered.filter(e => e.type === appliedTypeFilter);
-
-    const today    = toMidnight(new Date());
+    if (appliedTypeFilter !== 'all') filtered = filtered.filter(e => e.type === appliedTypeFilter);
+    const today = toMidnight(new Date());
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-
     if (appliedDateFilter === 'today')
       filtered = filtered.filter(e => { const d = resolveDate(e); return d && d >= today && d < tomorrow; });
-
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
-      const s = toMidnight(new Date(appliedSelectedDate)), e = new Date(s); e.setDate(e.getDate() + 1);
-      filtered = filtered.filter(entry => { const d = resolveDate(entry); return d && d >= s && d < e; });
+      const s = toMidnight(new Date(appliedSelectedDate)), e2 = new Date(s); e2.setDate(e2.getDate() + 1);
+      filtered = filtered.filter(e => { const d = resolveDate(e); return d && d >= s && d < e2; });
     }
-
     if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
       const s = toMidnight(new Date(appliedStartDate));
-      const e = new Date(toMidnight(new Date(appliedEndDate))); e.setDate(e.getDate() + 1);
-      filtered = filtered.filter(entry => { const d = resolveDate(entry); return d && d >= s && d < e; });
+      const e2 = new Date(toMidnight(new Date(appliedEndDate))); e2.setDate(e2.getDate() + 1);
+      filtered = filtered.filter(e => { const d = resolveDate(e); return d && d >= s && d < e2; });
     }
-
     setFilteredEntries(filtered);
   };
 
@@ -135,49 +183,67 @@ function CashJournal() {
     else                 handleClose();
   };
 
-  // ── Add manual entry ──────────────────────────────────────────────────────
+  // ── Add Entry ─────────────────────────────────────────────────────────────
+  const resetAddModal = () => {
+    setNewAmount(''); setDescriptionKey(null); setResolvedNote('');
+    setSubModal(null); setNewType(TYPE_IN);
+  };
+  const openAddModal = () => { resetAddModal(); setShowAddModal(true); };
+  const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
+
+  // When user picks a description option
+  const handleDescriptionSelect = (key) => {
+    setDescriptionKey(key);
+    setResolvedNote('');
+    if (key === 'float') {
+      // Float is immediate — no sub-modal needed
+      setResolvedNote('Float (notes and coins for change)');
+    } else if (key === 'cash_from') {
+      setSubModal('cash_from');
+    } else if (key === 'withdrawal') {
+      setSubModal('withdrawal');
+    } else if (key === 'paid_to') {
+      setSubModal('paid_to');
+    }
+  };
+
+  const handleSubModalSave = (note) => {
+    setResolvedNote(note);
+    setSubModal(null);
+  };
+
   const handleSaveEntry = async () => {
     const amount = parseFloat(newAmount);
     if (isNaN(amount) || amount <= 0) { alert('Please enter a valid amount.'); return; }
-    if (!newNote.trim()) { alert('Please enter a description.'); return; }
-
+    if (!resolvedNote) { alert('Please select and complete a description.'); return; }
     setIsProcessing(true);
     try {
       await dataService.addCashEntry({
-        type: newType,
-        amount,
-        note: newNote.trim(),
-        date: new Date().toISOString(),
-        source: 'manual',
+        type: newType, amount, note: resolvedNote,
+        date: new Date().toISOString(), source: 'manual',
       });
-      setShowAddModal(false);
-      setNewAmount('');
-      setNewNote('');
-      setNewType(TYPE_IN);
+      closeAddModal();
       await loadEntries();
     } catch (err) {
       console.error('Error saving cash entry:', err);
       alert('Failed to save entry. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
+    } finally { setIsProcessing(false); }
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const getTodayStr = () => {
     const t = new Date();
-    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   };
   const formatDisplayDate = (dateStr) =>
-    new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    new Date(dateStr).toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
   const isYesterday = (dateStr) => {
     if (!dateStr) return false;
-    const y = new Date(); y.setDate(y.getDate() - 1);
+    const y = new Date(); y.setDate(y.getDate()-1);
     return toMidnight(new Date(dateStr)).getTime() === toMidnight(y).getTime();
   };
-
   const getTableTitle = () => {
-    const typeMap = { all: 'All Entries', in: 'Cash In', out: 'Cash Out' };
+    const typeMap = { all:'All Entries', in:'Cash In', out:'Cash Out' };
     const label = typeMap[appliedTypeFilter] || 'All Entries';
     if (appliedDateFilter === 'today') return `${label} Today`;
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
@@ -188,85 +254,98 @@ function CashJournal() {
       return `${label} from ${formatDisplayDate(appliedStartDate)} to ${formatDisplayDate(appliedEndDate)}`;
     return `${label} Today`;
   };
-
   const formatDateTime = (entry) => {
     const d = resolveDate(entry);
-    if (!d) return { date: 'N/A', time: 'N/A' };
+    if (!d) return { date:'N/A', time:'N/A' };
     return {
-      date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
+      time: d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
     };
   };
 
   const totalRecords = filteredEntries.length;
-  // Net balance = sum of filtered entries with their signed amounts
   const netBalance = filteredEntries.reduce(
     (sum, e) => sum + (e.type === TYPE_IN ? e.amount : -e.amount), 0
   );
   const btnLabel = !showFilters ? 'Filter Entries' : showApply ? 'Apply Filter' : 'Close Filter';
 
+  // IN description options
+  const IN_OPTIONS = [
+    { key: 'float',     label: 'Float (change money)' },
+    { key: 'cash_from', label: 'Cash from…'           },
+  ];
+  // OUT description options
+  const OUT_OPTIONS = [
+    { key: 'withdrawal', label: 'Withdrawal'   },
+    { key: 'paid_to',    label: 'Paid to…'     },
+  ];
+  const currentOptions = newType === TYPE_IN ? IN_OPTIONS : OUT_OPTIONS;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="cj-record">
 
-      {/* ── Filter panel ── */}
-      {showFilters && (
-        <div className="cj-filters-section">
-          <div className="cj-filter-group">
-            <label>Entry Type</label>
-            <div className="cj-filter-buttons">
-              {[['all', 'All Entries'], [TYPE_IN, 'Cash In'], [TYPE_OUT, 'Cash Out']].map(([val, lbl]) => (
-                <button key={val} className={`cj-filter-btn${typeFilter === val ? ' active' : ''}`}
-                  onClick={() => setTypeFilter(val)}>{lbl}</button>
-              ))}
-            </div>
-          </div>
-          <div className="cj-filter-group">
-            <label>Date Filter</label>
-            <div className="cj-filter-buttons">
-              {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
-                <button key={val} className={`cj-filter-btn${dateFilter === val ? ' active' : ''}`}
-                  onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-          {dateFilter === 'single' && (
-            <div className="cj-filter-group">
-              <label>Select Date</label>
-              <input type="date" value={selectedDate} max={getTodayStr()}
-                onChange={e => setSelectedDate(e.target.value)} className="cj-date-input" />
-            </div>
-          )}
-          {dateFilter === 'range' && (
-            <div className="cj-filter-group">
-              <label>Date Range</label>
-              <div className="cj-date-range-inputs">
-                <div className="cj-date-range-field">
-                  <label className="cj-date-range-label">From:</label>
-                  <input type="date" value={startDate} max={getTodayStr()}
-                    onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
-                    className="cj-date-input" />
-                </div>
-                <div className="cj-date-range-field">
-                  <label className="cj-date-range-label">To:</label>
-                  <input type="date" value={endDate} min={startDate || undefined} max={getTodayStr()}
-                    disabled={!startDate} onChange={e => setEndDate(e.target.value)}
-                    className={`cj-date-input${!startDate ? ' cj-date-input-disabled' : ''}`} />
-                </div>
-              </div>
-              {!startDate && <span className="cj-date-range-hint">Select a "From" date first</span>}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Sticky bar ── */}
       <div className="cj-sticky-bar">
+        {/* Filter panel — inside sticky bar */}
+        {showFilters && (
+          <div className="cj-filters-section">
+            <div className="cj-filter-group">
+              <label>Entry Type</label>
+              <div className="cj-filter-buttons">
+                {[['all','All Entries'],[TYPE_IN,'Cash In'],[TYPE_OUT,'Cash Out']].map(([val,lbl]) => (
+                  <button key={val} className={`cj-filter-btn${typeFilter===val?' active':''}`}
+                    onClick={() => setTypeFilter(val)}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div className="cj-filter-group">
+              <label>Date Filter</label>
+              <div className="cj-filter-buttons">
+                {[['today','Today'],['single','Single Date'],['range','Date Range']].map(([val,lbl]) => (
+                  <button key={val} className={`cj-filter-btn${dateFilter===val?' active':''}`}
+                    onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {dateFilter === 'single' && (
+              <div className="cj-filter-group">
+                <label>Select Date</label>
+                <input type="date" value={selectedDate} max={getTodayStr()}
+                  onChange={e => setSelectedDate(e.target.value)} className="cj-date-input" />
+              </div>
+            )}
+            {dateFilter === 'range' && (
+              <div className="cj-filter-group">
+                <label>Date Range</label>
+                <div className="cj-date-range-inputs">
+                  <div className="cj-date-range-field">
+                    <label className="cj-date-range-label">From:</label>
+                    <input type="date" value={startDate} max={getTodayStr()}
+                      onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
+                      className="cj-date-input" />
+                  </div>
+                  <div className="cj-date-range-field">
+                    <label className="cj-date-range-label">To:</label>
+                    <input type="date" value={endDate} min={startDate||undefined} max={getTodayStr()}
+                      disabled={!startDate} onChange={e => setEndDate(e.target.value)}
+                      className={`cj-date-input${!startDate?' cj-date-input-disabled':''}`} />
+                  </div>
+                </div>
+                {!startDate && <span className="cj-date-range-hint">Select a "From" date first</span>}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="cj-top-row">
           <button className="cj-filter-action-btn" onClick={handleFilterButtonClick}>{btnLabel}</button>
-          <button className="cj-add-btn" onClick={() => setShowAddModal(true)}>+ Add Entry</button>
+          {/* Hide + Add Entry while filter panel is open */}
+          {!showFilters && (
+            <button className="cj-add-btn" onClick={openAddModal}>+ Add Entry</button>
+          )}
         </div>
         <h3 className="cj-table-title">{getTableTitle()}</h3>
         <div className="cj-stats-boxes">
@@ -330,50 +409,75 @@ function CashJournal() {
           <div className="cj-modal-content">
             <h2 className="cj-modal-title">Add Cash Entry</h2>
 
+            {/* Type selector */}
             <div className="cj-modal-field">
               <label>Type</label>
               <div className="cj-modal-type-btns">
                 <button
                   className={`cj-modal-type-btn${newType === TYPE_IN ? ' active-in' : ''}`}
-                  onClick={() => setNewType(TYPE_IN)}>Cash In</button>
+                  onClick={() => { setNewType(TYPE_IN); setDescriptionKey(null); setResolvedNote(''); }}>
+                  Cash In
+                </button>
                 <button
                   className={`cj-modal-type-btn${newType === TYPE_OUT ? ' active-out' : ''}`}
-                  onClick={() => setNewType(TYPE_OUT)}>Cash Out</button>
+                  onClick={() => { setNewType(TYPE_OUT); setDescriptionKey(null); setResolvedNote(''); }}>
+                  Cash Out
+                </button>
               </div>
             </div>
 
+            {/* Amount */}
             <div className="cj-modal-field">
               <label>Amount</label>
-              <input
-                type="number"
-                className="cj-modal-input"
-                placeholder="0.00"
-                value={newAmount}
-                onChange={e => setNewAmount(e.target.value)}
-                min="0.01"
-                step="0.01"
-              />
+              <input type="number" className="cj-modal-input" placeholder="0.00"
+                value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01" />
             </div>
 
+            {/* Description — dropdown options, not free text */}
             <div className="cj-modal-field">
-              <label>Description / Note</label>
-              <input
-                type="text"
-                className="cj-modal-input"
-                placeholder="e.g. Opening balance, Expense…"
-                value={newNote}
-                onChange={e => setNewNote(e.target.value)}
-              />
+              <label>Description</label>
+              <div className="cj-desc-options">
+                {currentOptions.map(opt => (
+                  <button
+                    key={opt.key}
+                    className={`cj-desc-option${descriptionKey === opt.key ? ' cj-desc-selected' : ''}`}
+                    onClick={() => handleDescriptionSelect(opt.key)}
+                  >
+                    {opt.label}
+                    {descriptionKey === opt.key && resolvedNote && opt.key !== 'float' && (
+                      <span className="cj-desc-resolved"> ✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* Show resolved description preview */}
+              {resolvedNote && (
+                <div className="cj-desc-preview">{resolvedNote}</div>
+              )}
             </div>
 
             <div className="cj-modal-buttons">
-              <button className="cj-modal-cancel" onClick={() => { setShowAddModal(false); setNewAmount(''); setNewNote(''); setNewType(TYPE_IN); }}>
-                Cancel
-              </button>
-              <button className="cj-modal-save" onClick={handleSaveEntry} disabled={isProcessing}>
+              <button className="cj-modal-cancel" onClick={closeAddModal}>Cancel</button>
+              <button className="cj-modal-save" onClick={handleSaveEntry}
+                disabled={isProcessing || !resolvedNote || !newAmount}>
                 Save
               </button>
             </div>
+
+            {/* Sub-modals rendered inside the overlay stack */}
+            {subModal === 'cash_from' && (
+              <CashFromModal
+                onSave={handleSubModalSave}
+                onCancel={() => { setSubModal(null); setDescriptionKey(null); }}
+              />
+            )}
+            {(subModal === 'withdrawal' || subModal === 'paid_to') && (
+              <CashOutSubModal
+                mode={subModal === 'withdrawal' ? 'withdrawal' : 'paid_to'}
+                onSave={handleSubModalSave}
+                onCancel={() => { setSubModal(null); setDescriptionKey(null); }}
+              />
+            )}
           </div>
         </div>
       )}
