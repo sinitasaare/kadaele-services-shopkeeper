@@ -30,12 +30,15 @@ function SalesJournal() {
   useEffect(() => {
     const bar = barRef.current;
     if (!bar) return;
-    const obs = new ResizeObserver(() => {
+    const updateTheadTop = () => {
       if (theadRef.current) {
         theadRef.current.style.top = `${bar.offsetHeight}px`;
       }
-    });
+    };
+    const obs = new ResizeObserver(updateTheadTop);
     obs.observe(bar);
+    // Fire once immediately so the thead top is set before the first paint
+    updateTheadTop();
     return () => obs.disconnect();
   }, []);
 
