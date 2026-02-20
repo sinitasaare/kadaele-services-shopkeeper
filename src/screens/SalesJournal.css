@@ -127,7 +127,7 @@
   flex-shrink: 0;
 }
 .stat-box-green {
-  width: calc(32.5% * 0.65);   /* 35% narrower, float right */
+  width: calc(32.5% * 0.65 * 1.2);   /* Grand Total: 20% wider */
   flex-shrink: 0;
   margin-left: auto;
 }
