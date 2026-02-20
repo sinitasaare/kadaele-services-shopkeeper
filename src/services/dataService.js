@@ -36,6 +36,7 @@ const DATA_KEYS = {
   CASH_ENTRIES: 'cash_entries',
   SYNC_QUEUE: 'sync_queue',
   LAST_SYNC: 'last_sync',
+  SETTINGS: 'app_settings',
 };
 
 class DataService {
@@ -48,6 +49,8 @@ class DataService {
     // so that writes made moments ago are never overwritten by a stale read.
     this._debtorsFetchedFromFirebase = false;
     this._goodsFetchedFromFirebase = false;
+    this._cashEntriesFetched = false;
+    this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     
     // Listen for online/offline events
     window.addEventListener('online', () => {
@@ -60,6 +63,68 @@ class DataService {
     });
   }
 
+  // ── Start real-time Firebase listener for Debtors collection ─────────────
+  // Called after login. Watches for:
+  //   • New debtors added in Firebase → saved to localforage
+  //   • Debtors deleted from Firebase → if balance=0 in forage, delete forage record too
+  startDebtorsListener() {
+    if (this._debtorsUnsubscribe) return; // already listening
+    try {
+      this._debtorsUnsubscribe = onSnapshot(
+        collection(db, 'debtors'),
+        async (snapshot) => {
+          const localDebtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+          const localMap = new Map(localDebtors.map(d => [d.id, d]));
+
+          snapshot.docChanges().forEach((change) => {
+            const fbId = change.doc.id;
+            const fbData = { id: fbId, ...change.doc.data() };
+
+            if (change.type === 'removed') {
+              // Debtor was deleted from Firebase
+              const local = localMap.get(fbId);
+              if (local && (local.balance || local.totalDue || 0) <= 0) {
+                // Balance is 0 (cleared) — safe to delete local record too
+                localMap.delete(fbId);
+              }
+              // If balance > 0, we keep the local record (never lose debt data)
+            } else if (change.type === 'added') {
+              // New debtor from Firebase — add if not already in local
+              if (!localMap.has(fbId)) {
+                localMap.set(fbId, fbData);
+              }
+            } else if (change.type === 'modified') {
+              // Remote update — merge carefully, prefer local if it's newer
+              const local = localMap.get(fbId);
+              const fbTime  = fbData.updatedAt?.seconds
+                ? fbData.updatedAt.seconds * 1000
+                : new Date(fbData.updatedAt || 0).getTime();
+              const locTime = new Date(local?.updatedAt || 0).getTime();
+              if (!local || fbTime > locTime) {
+                localMap.set(fbId, { ...fbData, updatedAt: new Date(fbTime).toISOString() });
+              }
+            }
+          });
+
+          const merged = Array.from(localMap.values());
+          await localforage.setItem(DATA_KEYS.DEBTORS, merged);
+        },
+        (error) => {
+          console.error('Debtors Firebase listener error:', error);
+        }
+      );
+    } catch (err) {
+      console.error('Could not start debtors listener:', err);
+    }
+  }
+
+  stopDebtorsListener() {
+    if (this._debtorsUnsubscribe) {
+      this._debtorsUnsubscribe();
+      this._debtorsUnsubscribe = null;
+    }
+  }
+
   // Authentication methods
   async login(email, password) {
     try {
@@ -67,7 +132,11 @@ class DataService {
       this.currentUser = userCredential.user;
       // Reset so the next getDebtors() call pulls a fresh copy from Firebase
       this._debtorsFetchedFromFirebase = false;
-    this._goodsFetchedFromFirebase = false;
+      this._goodsFetchedFromFirebase = false;
+      this._cashEntriesFetched = false;
+      
+      // Start real-time listener for debtors (handles remote adds/deletes)
+      this.startDebtorsListener();
       
       // Store login state persistently
       await localforage.setItem('auth_user', {
@@ -99,6 +168,7 @@ class DataService {
 
   async logout() {
     try {
+      this.stopDebtorsListener();
       await signOut(auth);
       this.currentUser = null;
       // Clear persistent login state
@@ -130,6 +200,8 @@ class DataService {
               email: user.email,
               loggedInAt: new Date().toISOString()
             }).catch(err => console.error('Error storing auth state:', err));
+            // Start real-time listener for debtors
+            this.startDebtorsListener();
             resolve(user);
           } else {
             // Check if we have backup auth state
@@ -649,7 +721,8 @@ class DataService {
   }
 
   async recordPayment(debtorId, amount, purchaseIds = [], photo = null) {
-    const debtors = await this.getDebtors();
+    // Read directly from localforage so we always have the latest local state
+    const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
     const debtor = debtors.find(d => d.id === debtorId);
     
     if (debtor) {
@@ -657,9 +730,15 @@ class DataService {
       debtor.totalPaid = (debtor.totalPaid || 0) + paymentAmount;
       debtor.balance = (debtor.totalDue || 0) - debtor.totalPaid;
       debtor.lastPayment = new Date().toISOString();
+      debtor.updatedAt = debtor.lastPayment;
+
+      // If debt is now fully cleared, remove the repayment date lock
+      if (debtor.balance <= 0) {
+        debtor.balance = 0;
+        debtor.repaymentDate = '';   // cleared — new due date can be set
+      }
 
       // Record the deposit as a line item in the debtor's history
-      // so the Debt History table can render it as a special deposit row.
       const depositEntry = {
         id: this.generateId(),
         type: 'deposit',
@@ -670,7 +749,10 @@ class DataService {
       debtor.deposits = debtor.deposits || [];
       debtor.deposits.push(depositEntry);
 
-      // Wire to Cash Journal — deposit counts as Cash IN
+      // ── Save to localforage FIRST ──────────────────────────────────────
+      await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+
+      // ── Wire to Cash Journal with correct description ──────────────────
       const debtorName = debtor.name || debtor.customerName || 'Unknown';
       const gender = debtor.gender || '';
       const prefix = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
@@ -678,7 +760,7 @@ class DataService {
       await this.addCashEntry({
         type: 'in',
         amount: paymentAmount,
-        note: `Debt repayment by ${displayName}`,
+        note: `${displayName} paid cash to repay debt`,
         date: debtor.lastPayment,
         source: 'deposit',
         debtorId,
@@ -686,7 +768,7 @@ class DataService {
       
       // Mark specific sales as paid if provided
       if (purchaseIds.length > 0) {
-        const sales = await this.getSales();
+        const sales = await localforage.getItem(DATA_KEYS.SALES) || [];
         purchaseIds.forEach(pid => {
           const sale = sales.find(s => s.id === pid);
           if (sale) {
@@ -694,23 +776,28 @@ class DataService {
             sale.paidDate = debtor.lastPayment;
           }
         });
-        await this.setSales(sales);
+        await localforage.setItem(DATA_KEYS.SALES, sales);
       }
       
-      await this.setDebtors(debtors);
-      
-      // Sync to Firebase
+      // ── Sync full debtor record to Firebase ───────────────────────────
       if (this.isOnline && auth.currentUser) {
         try {
-          await updateDoc(doc(db, 'debtors', debtorId.toString()), {
-            totalPaid: debtor.totalPaid,
-            balance: debtor.balance,
-            lastPayment: serverTimestamp(),
-            updatedAt: serverTimestamp()
+          const depositsForFirestore = (debtor.deposits || []).map(dep => {
+            const { photo: _p, ...rest } = dep;
+            return rest;
           });
+          await setDoc(doc(db, 'debtors', debtorId.toString()), {
+            ...debtor,
+            deposits: depositsForFirestore,
+            lastPayment: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
         } catch (error) {
           console.error('Error syncing payment to Firebase:', error);
+          await this.addToSyncQueue({ type: 'debtor', data: debtor });
         }
+      } else {
+        await this.addToSyncQueue({ type: 'debtor', data: debtor });
       }
       
       return debtor;
@@ -900,6 +987,14 @@ class DataService {
           }, { merge: true });
           synced++;
         }
+        // Queue items added by addCashEntry have { type: 'cash_entry', data: entry }
+        if (item.type === 'cash_entry' && item.data) {
+          await setDoc(doc(db, 'cash_entries', item.data.id), {
+            ...item.data,
+            createdAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
         // Queue items added by the generic set() path have { key, value }
         // These are bulk array writes — skip (they sync via dedicated methods)
       } catch (error) {
@@ -1033,6 +1128,24 @@ class DataService {
   // ── Cash Journal entries ──────────────────────────────────────────────────
   async getCashEntries() {
     try {
+      // On first call of session, try to pull from Firebase
+      if (this.isOnline && auth.currentUser && !this._cashEntriesFetched) {
+        this._cashEntriesFetched = true;
+        try {
+          const snap = await getDocs(collection(db, 'cash_entries'));
+          const fbEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const local = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+          // Merge: keep local entries not in Firebase (created offline)
+          const fbIds = new Set(fbEntries.map(e => e.id));
+          const localOnly = local.filter(e => !fbIds.has(e.id));
+          const merged = [...fbEntries, ...localOnly]
+            .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+          await localforage.setItem(DATA_KEYS.CASH_ENTRIES, merged);
+          return merged;
+        } catch (err) {
+          console.error('Error fetching cash entries from Firebase:', err);
+        }
+      }
       return await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
     } catch (error) {
       console.error('Error getting cash entries:', error);
@@ -1042,7 +1155,7 @@ class DataService {
 
   async addCashEntry(entry) {
     try {
-      const entries = await this.getCashEntries();
+      const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
       const newEntry = {
         id: this.generateId(),
         type: entry.type,         // 'in' | 'out'
@@ -1051,13 +1164,66 @@ class DataService {
         date: entry.date || new Date().toISOString(),
         source: entry.source || 'manual',
         createdAt: new Date().toISOString(),
+        ...(entry.saleId   ? { saleId:   entry.saleId   } : {}),
+        ...(entry.debtorId ? { debtorId: entry.debtorId } : {}),
       };
       entries.push(newEntry);
+      // Save to localforage first
       await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+
+      // Sync to Firebase cash_entries collection
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'cash_entries', newEntry.id), {
+            ...newEntry,
+            createdAt: serverTimestamp(),
+          }, { merge: true });
+        } catch (err) {
+          console.error('Error syncing cash entry to Firebase:', err);
+          await this.addToSyncQueue({ type: 'cash_entry', data: newEntry });
+        }
+      } else {
+        await this.addToSyncQueue({ type: 'cash_entry', data: newEntry });
+      }
+
       return newEntry;
     } catch (error) {
       console.error('Error adding cash entry:', error);
       throw error;
+    }
+  }
+
+  // ── App Settings (stored in localforage for persistence across app restarts) ──
+  async getSettings() {
+    try {
+      const saved = await localforage.getItem(DATA_KEYS.SETTINGS);
+      // Defaults
+      return {
+        lang: 'en',
+        darkMode: false,
+        currency: '$',
+        notifDebtReminder: true,
+        notifLowStock: true,
+        notifDailySales: true,
+        ...(saved || {}),
+      };
+    } catch (err) {
+      console.error('Error getting settings:', err);
+      return { lang: 'en', darkMode: false, currency: '$', notifDebtReminder: true, notifLowStock: true, notifDailySales: true };
+    }
+  }
+
+  async saveSettings(settings) {
+    try {
+      await localforage.setItem(DATA_KEYS.SETTINGS, settings);
+      // Mirror to localStorage for synchronous reads (dark mode, currency symbol)
+      Object.entries(settings).forEach(([k, v]) => {
+        localStorage.setItem(`ks_${k}`, String(v));
+      });
+      return true;
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      return false;
     }
   }
 
