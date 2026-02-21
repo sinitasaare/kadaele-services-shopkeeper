@@ -237,115 +237,212 @@ Kadaele Services`;
     return { subject, body };
   };
 
-  // ── Generate statement as PNG image data URL ──────────────────────────────
-  const generateStatementImage = async () => {
+  // ── Generate A4 PDF of the debt statement ────────────────────────────────
+  // Uses jsPDF (loaded from CDN via index.html) + html2canvas.
+  // The PDF is A4 portrait, with the business logo at the top, debtor info,
+  // then the full debt history table rendered at full width.
+  const generateA4PDF = async () => {
     const el = historyRef.current;
     if (!el) return null;
+
     try {
+      // 1. Capture the history section as a high-res canvas
       const canvas = await html2canvas(el, {
         backgroundColor: '#ffffff',
-        scale: 2,          // retina-quality
+        scale: 3,          // high DPI so text is sharp in the PDF
         useCORS: true,
         logging: false,
+        // Expand to full scrollWidth so the wide table is not clipped
+        windowWidth: el.scrollWidth,
+        width: el.scrollWidth,
       });
-      return canvas.toDataURL('image/png');
+
+      const { jsPDF } = window.jspdf;
+      if (!jsPDF) throw new Error('jsPDF not loaded');
+
+      // A4 dimensions in mm
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 12;
+      const contentW = pageW - margin * 2;
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // ── Header: purple bar with business name ──────────────────────────
+      pdf.setFillColor(102, 126, 234);          // brand purple
+      pdf.rect(0, 0, pageW, 22, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Kadaele Services', margin, 10);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Debt Statement', margin, 16);
+
+      // Date generated (right side of header)
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      pdf.setFontSize(8);
+      pdf.text(`Generated: ${today}`, pageW - margin, 14, { align: 'right' });
+
+      // ── Debtor info block ──────────────────────────────────────────────
+      let y = 30;
+      const debtor = selectedDebtor;
+      const debtorName = debtor.name || debtor.customerName || 'N/A';
+      const gender  = debtor.gender || '';
+      const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+      const balance = historyRows.length > 0
+        ? historyRows[0].runningBalance
+        : (debtor.balance || debtor.totalDue || 0);
+
+      pdf.setTextColor(30, 30, 30);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${prefix ? prefix + ' ' : ''}${debtorName}`, margin, y);
+
+      y += 6;
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(80, 80, 80);
+      if (debtor.phone || debtor.customerPhone) pdf.text(`Phone: ${debtor.phone || debtor.customerPhone}`, margin, y); y += 5;
+      if (debtor.whatsapp) { pdf.text(`WhatsApp: ${debtor.whatsapp}`, margin, y); y += 5; }
+      if (debtor.email)    { pdf.text(`Email: ${debtor.email}`, margin, y); y += 5; }
+      if (debtor.repaymentDate) { pdf.text(`Due Date: ${debtor.repaymentDate}`, margin, y); y += 5; }
+
+      // Outstanding balance box
+      pdf.setFillColor(balance > 0 ? 255 : 220, balance > 0 ? 235 : 252, balance > 0 ? 220 : 231);
+      pdf.roundedRect(pageW - margin - 55, 28, 55, 18, 2, 2, 'F');
+      pdf.setTextColor(balance > 0 ? 22 : 3, balance > 0 ? 101 : 105, balance > 0 ? 52 : 81);
+      pdf.setFontSize(7);
+      pdf.text('OUTSTANDING BALANCE', pageW - margin - 27.5, 34, { align: 'center' });
+      pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`$${Math.abs(balance).toFixed(2)}`, pageW - margin - 27.5, 42, { align: 'center' });
+
+      // Divider
+      y = Math.max(y, 50) + 4;
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(margin, y, pageW - margin, y);
+      y += 5;
+
+      // ── Debt History table (rendered via html2canvas → image) ─────────
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(50, 50, 50);
+      pdf.text('Debt History', margin, y);
+      y += 4;
+
+      // Convert canvas to PNG data URL and embed as image
+      const imgData  = canvas.toDataURL('image/png');
+      const imgW     = contentW;
+      const imgH     = (canvas.height / canvas.width) * imgW;
+
+      // If the table is taller than what fits on one page, scale it
+      const maxH = pageH - y - margin;
+      const finalH = imgH > maxH ? maxH : imgH;
+
+      pdf.addImage(imgData, 'PNG', margin, y, imgW, finalH);
+
+      // ── Footer ────────────────────────────────────────────────────────
+      const footerY = pageH - 8;
+      pdf.setFontSize(7);
+      pdf.setTextColor(150, 150, 150);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, footerY, { align: 'center' });
+
+      return pdf;
     } catch (err) {
-      console.error('html2canvas error:', err);
+      console.error('PDF generation error:', err);
       return null;
     }
   };
 
-  // ── Share / save the generated image via Capacitor (Android) ─────────────
-  const shareImageViaCapacitor = async (dataUrl, fileName) => {
-    try {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      const { Share }                 = await import('@capacitor/share');
+  // ── Save PDF and return a Blob URL or Capacitor URI ───────────────────────
+  const savePDFAndGetURI = async (pdf, debtorName) => {
+    const fileName = `statement_${debtorName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+    const pdfBlob  = pdf.output('blob');
 
-      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-      await Filesystem.writeFile({
-        path:      fileName,
-        data:      base64,
-        directory: Directory.Cache,
-      });
-      const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
-      return uri;
-    } catch (err) {
-      console.error('Capacitor share error:', err);
-      return null;
+    // On native Android, write to cache directory via Capacitor Filesystem
+    const isNative = window.Capacitor?.isNativePlatform?.();
+    if (isNative) {
+      try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const reader = new FileReader();
+        const base64 = await new Promise((res, rej) => {
+          reader.onload  = () => res(reader.result.split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(pdfBlob);
+        });
+        await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+        const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
+        return { uri, fileName, blob: pdfBlob };
+      } catch (err) {
+        console.error('Capacitor Filesystem error:', err);
+      }
     }
+
+    // On web: create an object URL so we can trigger a download
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    return { uri: blobUrl, fileName, blob: pdfBlob, isWeb: true };
   };
 
   const handleNotify = async (method) => {
     const debtor = selectedDebtor;
     const { subject, body } = buildNotifyMessage();
+    const debtorName = debtor.name || debtor.customerName || 'debtor';
 
-    // ── Step 1: Generate the debt-statement image ─────────────────────────
+    // ── Step 1: Generate A4 PDF ───────────────────────────────────────────
     setPdfGenerating(true);
-    let fileUri = null;
+    let pdfInfo = null;
     try {
-      const imgDataUrl = await generateStatementImage();
-      if (imgDataUrl) {
-        const debtorName = (debtor.name || debtor.customerName || 'debtor').replace(/\s+/g, '_');
-        const fileName   = `statement_${debtorName}_${Date.now()}.png`;
-
-        // On native Android (Capacitor), save to cache and share
-        const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
-        if (isNative) {
-          fileUri = await shareImageViaCapacitor(imgDataUrl, fileName);
-        } else {
-          // On web/PWA: trigger a download so the user has the image ready to attach
+      const pdf = await generateA4PDF();
+      if (pdf) {
+        pdfInfo = await savePDFAndGetURI(pdf, debtorName);
+        // On web, also trigger a download so the user has the PDF to attach manually
+        if (pdfInfo?.isWeb) {
           const link = document.createElement('a');
-          link.href = imgDataUrl;
-          link.download = fileName;
+          link.href = pdfInfo.uri;
+          link.download = pdfInfo.fileName;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          // Don't revoke immediately — let the download complete
+          setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
         }
       }
+    } catch (err) {
+      console.error('PDF error:', err);
     } finally {
       setPdfGenerating(false);
     }
 
-    // ── Step 2: Open the messaging app with the pre-composed message ───────
+    // ── Step 2: Open messaging app (with PDF attached if native) ──────────
+    const isNative = window.Capacitor?.isNativePlatform?.();
+
     if (method === 'whatsapp') {
       const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
-      // If native and we have a fileUri, use Capacitor Share (attaches image)
-      if (fileUri) {
+      if (isNative && pdfInfo?.uri) {
         try {
           const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject,
-            text:  body,
-            url:   fileUri,
-            dialogTitle: `Send to ${debtor.name || debtor.customerName}`,
-          });
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Send to ${debtorName}` });
           setShowNotifyModal(false);
           return;
-        } catch (err) {
-          console.error('Share API error:', err);
-        }
+        } catch (err) { console.error('Share error:', err); }
       }
       window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(body)}`, '_blank');
+
     } else if (method === 'email') {
       if (!debtor.email) { alert('No email available'); return; }
-      // Email: if native and file was saved, use Share to let user pick mail client with attachment
-      if (fileUri) {
+      if (isNative && pdfInfo?.uri) {
         try {
           const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject,
-            text:  body,
-            url:   fileUri,
-            dialogTitle: `Email to ${debtor.name || debtor.customerName}`,
-          });
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Email to ${debtorName}` });
           setShowNotifyModal(false);
           return;
-        } catch (err) {
-          console.error('Share API error:', err);
-        }
+        } catch (err) { console.error('Share error:', err); }
       }
       window.location.href = `mailto:${debtor.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
@@ -385,7 +482,9 @@ Kadaele Services`;
     const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
     return isNaN(d) ? 'Invalid' : d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
   };
-  const formatTime = (ts) => {
+  // formatTime: pass the full sale/deposit object so we can check isUnrecorded
+  const formatTime = (ts, record) => {
+    if (record?.isUnrecorded) return 'FORGOTTEN';
     if (!ts) return 'N/A';
     const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
     return isNaN(d) ? 'Invalid' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
@@ -588,7 +687,7 @@ Kadaele Services`;
                             return (
                               <tr key={`dep-${dep.id}`} className="d-deposit-row">
                                 <td className="d-merged">{formatDate(dep.date)}</td>
-                                <td className="d-merged">{formatTime(dep.date)}</td>
+                                <td className="d-merged">{formatTime(dep.date, dep)}</td>
                                 {/* Merged grey cell spanning item/qty/price/subtotal/sale-total */}
                                 <td colSpan="5" className="d-deposit-merged-cell">
                                   D&nbsp;e&nbsp;p&nbsp;o&nbsp;s&nbsp;i&nbsp;t&nbsp;e&nbsp;d&nbsp;&nbsp;&nbsp;
@@ -613,7 +712,7 @@ Kadaele Services`;
                           return items.map((item, idx) => (
                             <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs, sale)}</td>}
                               <td>{item ? (item.name || 'N/A') : 'N/A'}</td>
                               <td className="d-qty">{item ? (item.quantity || item.qty || 0) : '—'}</td>
                               <td>${item ? (item.price || 0).toFixed(2) : '0.00'}</td>
