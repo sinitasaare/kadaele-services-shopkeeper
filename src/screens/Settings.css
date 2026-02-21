@@ -498,3 +498,16 @@
   font-style: italic;
   margin-top: 2px;
 }
+
+/* ── Kiribati coming-soon notice ── */
+.st-ki-notice {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1d4ed8;
+  line-height: 1.5;
+  animation: st-toast-in 0.3s ease;
+}
