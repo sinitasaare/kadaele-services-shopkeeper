@@ -775,3 +775,188 @@
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
 }
 .sr-scanner-ok-btn:active { opacity: 0.85; transform: scale(0.98); }
+
+/* ═══════════════════════════════════════════════════════════════
+   Cash Confirm Modal — enhanced with calculator
+   ═══════════════════════════════════════════════════════════════ */
+
+.sr-cash-confirm-modal {
+  position: relative;
+  text-align: center;
+}
+
+/* Calculator icon row — sits above the "Confirm Payment" heading */
+.sr-calc-icon-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.sr-calc-icon-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 14px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.18s, box-shadow 0.18s;
+  box-shadow: 0 4px 14px rgba(102,126,234,0.4);
+}
+.sr-calc-icon-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102,126,234,0.45); }
+.sr-calc-icon-btn:active { transform: scale(0.95); }
+
+.sr-calc-icon-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Total reminder inside confirm modal */
+.sr-confirm-total {
+  font-size: 15px;
+  color: #374151;
+  margin: 0 0 4px 0;
+}
+.sr-confirm-total strong {
+  color: #667eea;
+  font-size: 18px;
+}
+
+/* ── Change Calculator child modal ── */
+/* Overlay sits INSIDE the parent .sr-modal-content so it renders in front */
+.sr-change-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 16px;
+}
+
+.sr-change-modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 22px 20px 16px;
+  width: 100%;
+  max-width: 320px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Change result — top section */
+.sr-change-result {
+  background: #f0fdf4;
+  border: 2px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.sr-change-result:has(.sr-change-short) {
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+.sr-change-result:has(.sr-change-empty) {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+
+.sr-change-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sr-change-amount {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.sr-change-ok    { color: #16a34a; }
+.sr-change-short { color: #dc2626; font-size: 22px; }
+.sr-change-empty { color: #9ca3af; }
+
+/* Customer's Money input */
+.sr-change-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sr-change-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.sr-change-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #e5e7eb;
+  border-radius: 9px;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  color: #1f2937;
+  background: #f9fafb;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  box-sizing: border-box;
+}
+.sr-change-input:focus {
+  border-color: #667eea;
+  background: #fff;
+}
+.sr-change-input::placeholder { color: #d1d5db; font-weight: 400; font-size: 16px; }
+
+/* Cart total row */
+.sr-change-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #6b7280;
+}
+.sr-change-total-val {
+  font-weight: 700;
+  color: #374151;
+  font-size: 15px;
+}
+
+/* Close button — right aligned */
+.sr-change-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sr-change-close-btn {
+  padding: 9px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sr-change-close-btn:hover { background: #d1d5db; }
