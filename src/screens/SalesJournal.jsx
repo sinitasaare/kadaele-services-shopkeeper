@@ -130,7 +130,8 @@ function SalesJournal() {
     if (!d) return { date: 'N/A', time: 'N/A' };
     return {
       date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      // Show FORGOTTEN instead of time for pre-system entries entered via Settings
+      time: sale.isUnrecorded ? 'FORGOTTEN' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     };
   };
 
