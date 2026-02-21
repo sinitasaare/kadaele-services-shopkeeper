@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Globe, Moon, Sun, DollarSign, Bell,
-  ClipboardList, Wallet, ChevronDown, ChevronUp, X, Check,
-  CreditCard,  // kept for future use
+  Globe, Moon, Sun, Bell,
+  ClipboardList, Wallet, X, Check,
 } from 'lucide-react';
 import dataService from '../services/dataService';
 import './Settings.css';
 
 // ─────────────────────────────────────────────────────────────
-// Translations
+// Translations (English + Kiribati only)
 // ─────────────────────────────────────────────────────────────
 const T = {
   en: {
@@ -17,7 +16,6 @@ const T = {
     appearance: 'Appearance & Display',
     darkMode: 'Dark Mode',
     lightMode: 'Light Mode',
-    currency: 'Currency Symbol',
     notifications: 'Notification Preferences',
     notifDebtReminder: 'Debt reminder',
     notifDebtReminderDesc: 'Remind debtor a day before due date of debt repayment',
@@ -31,10 +29,7 @@ const T = {
     forgottenSaleDesc: 'Record past sales (cash or credit) with a manual date',
     forgottenCash: 'Unrecorded Cash Entry',
     forgottenCashDesc: 'Record a past cash in/out with a manual date',
-    save: 'Save',
     cancel: 'Cancel',
-    saved: 'Settings saved!',
-    currencies: ['$ — Dollar', '£ — Pound', '€ — Euro', 'A$ — Aust. Dollar', 'KES — Kenyan Shilling', '¥ — Yen / Yuan', 'AUD — Aust. Dollar'],
     saleDate: 'Sale Date',
     cashDate: 'Entry Date',
     addItem: 'Add Item',
@@ -49,15 +44,14 @@ const T = {
     cashIn: 'Cash In',
     cashOut: 'Cash Out',
     recordSale: 'Record Sale',
+    recordCredit: 'Record Credit',
     recordCash: 'Record Entry',
-    itemName: 'Item Name',
-    price: 'Price',
     qty: 'Qty',
-    remove: 'Remove',
     searchItem: 'Search item…',
     debtorName: 'Debtor Name',
     repayDate: 'Repayment Date',
     selectDebtor: 'Select debtor…',
+    systemStartHint: 'Only dates before this system was first used are selectable.',
   },
   ki: {
     title: 'Rongorongo',
@@ -65,7 +59,6 @@ const T = {
     appearance: 'Aonteaba ma Karaoan',
     darkMode: 'Rotinaki',
     lightMode: 'Karaoan',
-    currency: 'Te Mwakuri n Amwarake',
     notifications: 'Rongorongo ni Kaungaaki',
     notifDebtReminder: 'Kaungaaki n Otinaomata',
     notifDebtReminderDesc: 'Kaungaaki te aomata i mwain bong ni uota',
@@ -79,10 +72,7 @@ const T = {
     forgottenSaleDesc: 'Katikui boraoi are e nakoraoi ma bong ni makuri',
     forgottenCash: 'Katinanikaki n Amwarake',
     forgottenCashDesc: 'Katikui amwarake are e nakoraoi ma bong ni makuri',
-    save: 'Katikui',
     cancel: 'Tabekuna',
-    saved: 'A katikuaki!',
-    currencies: ['$ — Taara', '£ — Baun', '€ — Euro', 'A$ — Taara n Aotaretia', 'KES — Kenya', '¥ — Yen', 'AUD — Taara n Aotaretia'],
     saleDate: 'Bong ni Boraoi',
     cashDate: 'Bong ni Katibu',
     addItem: 'Kamanoia Bwai',
@@ -97,89 +87,87 @@ const T = {
     cashIn: 'Amwarake Roko',
     cashOut: 'Amwarake Nako',
     recordSale: 'Katikui Boraoi',
+    recordCredit: 'Katikui Otinaomata',
     recordCash: 'Katikui Katibu',
-    itemName: 'Aran te Bwai',
-    price: 'Uaia',
     qty: 'Ootan',
-    remove: 'Kabwaia',
     searchItem: 'Ukoukoa bwai…',
     debtorName: 'Aran te Aomata',
     repayDate: 'Bong ni Uota',
     selectDebtor: 'Rinea te aomata…',
-  },
-  zh: {
-    title: '设置',
-    language: '语言',
-    appearance: '外观与显示',
-    darkMode: '深色模式',
-    lightMode: '浅色模式',
-    currency: '货币符号',
-    notifications: '通知偏好',
-    notifDebtReminder: '债务提醒',
-    notifDebtReminderDesc: '在还款到期日前一天提醒债务人',
-    notifLowStock: '库存不足提醒',
-    notifLowStockDesc: '当商品库存达到5件时通知',
-    notifDailySales: '每日销售里程碑',
-    notifDailySalesDesc: '当日销售额每增加500美元时通知',
-    forgottenEntries: '补录遗漏记录',
-    forgottenEntriesNote: '如有需要，可在此处输入使用本系统之前的记录。',
-    forgottenSale: '未记录销售',
-    forgottenSaleDesc: '手动输入日期记录过去的销售',
-    forgottenCash: '未记录现金记录',
-    forgottenCashDesc: '手动输入日期记录过去的现金收支',
-    forgottenCashDesc: '手动输入日期记录过去的现金收支',
-    save: '保存',
-    cancel: '取消',
-    saved: '设置已保存！',
-    currencies: ['$ — 美元', '£ — 英镑', '€ — 欧元', 'A$ — 澳元', 'KES — 肯尼亚先令', '¥ — 日元/人民币', 'AUD — 澳大利亚元'],
-    saleDate: '销售日期',
-    cashDate: '记录日期',
-    addItem: '添加商品',
-    items: '商品',
-    total: '合计',
-    paymentType: '支付方式',
-    cash: '现金',
-    credit: '赊账',
-    description: '描述',
-    amount: '金额',
-    type: '类型',
-    cashIn: '现金收入',
-    cashOut: '现金支出',
-    recordSale: '记录销售',
-    recordCash: '记录现金',
-    itemName: '商品名称',
-    price: '价格',
-    qty: '数量',
-    remove: '删除',
-    searchItem: '搜索商品…',
-    debtorName: '债务人姓名',
-    repayDate: '还款日期',
-    selectDebtor: '选择债务人…',
+    systemStartHint: 'Bong ni mwakuri n am taibora naba.',
   },
 };
 
-const LANG_NAMES = { en: 'English', ki: 'Kiribati', zh: '中文' };
-const CURRENCY_SYMBOLS = ['$', '£', '€', 'A$', 'KES', '¥', 'AUD'];
+const LANG_NAMES = { en: 'English', ki: 'Kiribati' };
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+const dateStr = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+// Gets yesterday's date string (the latest selectable date for forgotten records)
+const yesterdayStr = () => {
+  const d = new Date(); d.setDate(d.getDate() - 1); return dateStr(d);
+};
+
+// Gets the system start date from localforage (the date the app was first used).
+// First use = the date the earliest sale or cash entry was recorded.
+// Falls back to yesterday if no records exist.
+const getSystemStartDate = async () => {
+  const stored = localStorage.getItem('ks_system_start_date');
+  if (stored) return stored;
+
+  try {
+    const [sales, entries] = await Promise.all([
+      dataService.getSales(),
+      dataService.getCashEntries(),
+    ]);
+    const allDates = [
+      ...(sales || []).map(s => s.date || s.createdAt),
+      ...(entries || []).map(e => e.date || e.createdAt),
+    ]
+      .filter(Boolean)
+      .map(d => new Date(d).getTime())
+      .filter(t => !isNaN(t));
+
+    if (allDates.length === 0) return yesterdayStr();
+
+    const earliest = new Date(Math.min(...allDates));
+    const result = dateStr(earliest);
+    localStorage.setItem('ks_system_start_date', result);
+    return result;
+  } catch {
+    return yesterdayStr();
+  }
+};
 
 // ─────────────────────────────────────────────────────────────
-// Unrecorded Sales Modal (cash OR credit, pre-system records)
+// Unrecorded Sales Modal
+// Only dates BEFORE system start date are selectable.
+// Cash view → 'Record Sale' button; Credit view → 'Record Credit' button.
 // ─────────────────────────────────────────────────────────────
 function ForgottenSaleModal({ t, onClose, onSaved }) {
-  const [goods, setGoods]           = useState([]);
-  const [debtors, setDebtors]       = useState([]);
-  const [saleDate, setSaleDate]     = useState('');
-  const [payType, setPayType]       = useState('cash');
-  const [cart, setCart]             = useState([]);
+  const [goods, setGoods]         = useState([]);
+  const [debtors, setDebtors]     = useState([]);
+  const [saleDate, setSaleDate]   = useState('');
+  const [payType, setPayType]     = useState('cash');
+  const [cart, setCart]           = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [debtorId, setDebtorId]     = useState('');
-  const [repayDate, setRepayDate]   = useState('');
-  const [saving, setSaving]         = useState(false);
+  const [debtorId, setDebtorId]   = useState('');
+  const [repayDate, setRepayDate] = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [maxDate, setMaxDate]     = useState(yesterdayStr()); // latest selectable date
 
   useEffect(() => {
     dataService.getGoods().then(g => setGoods(g || []));
     dataService.getDebtors().then(d => setDebtors(d || []));
+    // Compute system start date → yesterday before that is the max selectable
+    getSystemStartDate().then(startDate => {
+      // Max date is one day BEFORE the system start date
+      const d = new Date(startDate);
+      d.setDate(d.getDate() - 1);
+      setMaxDate(dateStr(d));
+    });
   }, []);
 
   const smartSearch = (term) => {
@@ -195,7 +183,6 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const addToCart = (good) => {
     setCart(prev => {
       const ex = prev.find(i => i.id === good.id);
-      // Default quantity is 1
       return ex ? prev.map(i => i.id === good.id ? { ...i, qty: i.qty + 1 } : i)
                 : [...prev, { ...good, qty: 1 }];
     });
@@ -210,13 +197,16 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const total = cart.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
 
   const handleSave = async () => {
-    if (!saleDate) { alert('Please enter the sale date.'); return; }
+    if (!saleDate) { alert('Please select a sale date.'); return; }
     if (cart.length === 0) { alert('Please add at least one item.'); return; }
     if (payType === 'credit' && !debtorId) { alert('Please select a debtor.'); return; }
     if (payType === 'credit' && !repayDate) { alert('Please enter a repayment date.'); return; }
     setSaving(true);
     try {
       const debtor = debtors.find(d => d.id === debtorId);
+
+      // For cash sales: store in sales record + auto-adds FORGOTTEN cash entry via addSale
+      // For credit sales: store in sales record + updates debtor record
       await dataService.addSale({
         items: cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.qty, subtotal: i.price * i.qty })),
         total,
@@ -226,18 +216,12 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
         debtorId: payType === 'credit' ? debtorId : null,
         repaymentDate: payType === 'credit' ? repayDate : '',
         isDebt: payType === 'credit',
-        manualDate: saleDate,
         date: new Date(saleDate).toISOString(),
-        isUnrecorded: true,
+        isUnrecorded: true,  // ← TIME column shows 'FORGOTTEN' in tables
       });
       onSaved();
     } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
     finally { setSaving(false); }
-  };
-
-  const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
   return (
@@ -248,22 +232,29 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
           <button className="st-modal-close" onClick={onClose}><X size={20}/></button>
         </div>
         <div className="st-modal-body">
+
+          {/* Date — only before system start date */}
           <div className="st-field">
             <label>{t.saleDate} *</label>
-            <input type="date" max={todayStr()} value={saleDate}
+            <input type="date" max={maxDate} value={saleDate}
               onChange={e => setSaleDate(e.target.value)} className="st-input" />
+            <span className="st-field-hint">{t.systemStartHint}</span>
           </div>
+
+          {/* Payment type toggle */}
           <div className="st-field">
             <label>{t.paymentType}</label>
             <div className="st-toggle-row">
               {['cash','credit'].map(p => (
                 <button key={p} className={`st-toggle-btn${payType===p?' st-active':''}`}
-                  onClick={() => setPayType(p)}>
+                  onClick={() => { setPayType(p); }}>
                   {p === 'cash' ? t.cash : t.credit}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Debtor fields (credit only) */}
           {payType === 'credit' && (
             <>
               <div className="st-field">
@@ -282,6 +273,8 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
               </div>
             </>
           )}
+
+          {/* Item search */}
           <div className="st-field" style={{ position: 'relative' }}>
             <label>{t.addItem}</label>
             <input type="text" className="st-input" placeholder={t.searchItem}
@@ -292,8 +285,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
             {showSearch && searchResults.length > 0 && (
               <div className="st-search-dropdown">
                 {searchResults.map(g => (
-                  <div key={g.id} className="st-search-item"
-                    onMouseDown={() => addToCart(g)}>
+                  <div key={g.id} className="st-search-item" onMouseDown={() => addToCart(g)}>
                     <span>{g.name}</span>
                     <span className="st-search-price">${(g.price||0).toFixed(2)}</span>
                   </div>
@@ -301,11 +293,12 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
               </div>
             )}
           </div>
+
+          {/* Cart */}
           {cart.length > 0 && (
             <div className="st-cart">
               <div className="st-cart-header">
-                <span>{t.items}</span><span>{t.qty}</span>
-                <span>{t.price}</span><span></span>
+                <span>{t.items}</span><span>{t.qty}</span><span>Price</span><span></span>
               </div>
               {cart.map(item => (
                 <div key={item.id} className="st-cart-row">
@@ -325,10 +318,11 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
             </div>
           )}
         </div>
+
         <div className="st-modal-footer">
           <button className="st-btn-cancel" onClick={onClose}>{t.cancel}</button>
           <button className="st-btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? '…' : t.recordSale}
+            {saving ? '…' : payType === 'credit' ? t.recordCredit : t.recordSale}
           </button>
         </div>
       </div>
@@ -338,6 +332,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
 
 // ─────────────────────────────────────────────────────────────
 // Unrecorded Cash Entry Modal
+// Only dates BEFORE system start date are selectable.
 // ─────────────────────────────────────────────────────────────
 function ForgottenCashModal({ t, onClose, onSaved }) {
   const [cashDate, setCashDate]       = useState('');
@@ -345,23 +340,30 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
   const [amount, setAmount]           = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving]           = useState(false);
+  const [maxDate, setMaxDate]         = useState(yesterdayStr());
 
-  const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  };
+  useEffect(() => {
+    getSystemStartDate().then(startDate => {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() - 1);
+      setMaxDate(dateStr(d));
+    });
+  }, []);
 
   const handleSave = async () => {
-    if (!cashDate) { alert('Please enter the entry date.'); return; }
+    if (!cashDate) { alert('Please select an entry date.'); return; }
     const amt = parseFloat(amount);
     if (isNaN(amt) || amt <= 0) { alert('Please enter a valid amount.'); return; }
     if (!description.trim()) { alert('Please enter a description.'); return; }
     setSaving(true);
     try {
       await dataService.addCashEntry({
-        type: cashType, amount: amt, note: description.trim(),
-        date: new Date(cashDate).toISOString(), source: 'manual_backdated',
-        isUnrecorded: true,
+        type: cashType,
+        amount: amt,
+        note: description.trim(),
+        date: new Date(cashDate).toISOString(),
+        source: 'manual_backdated',
+        isUnrecorded: true,  // ← TIME column shows 'FORGOTTEN' in Cash Record
       });
       onSaved();
     } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
@@ -378,8 +380,9 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
         <div className="st-modal-body">
           <div className="st-field">
             <label>{t.cashDate} *</label>
-            <input type="date" max={todayStr()} value={cashDate}
+            <input type="date" max={maxDate} value={cashDate}
               onChange={e => setCashDate(e.target.value)} className="st-input" />
+            <span className="st-field-hint">{t.systemStartHint}</span>
           </div>
           <div className="st-field">
             <label>{t.type}</label>
@@ -415,6 +418,20 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Android-style Setting Row (for Language + Appearance)
+// ─────────────────────────────────────────────────────────────
+function SettingRow({ label, desc, children }) {
+  return (
+    <div className="st-android-row">
+      <div className="st-android-text">
+        <span className="st-android-label">{label}</span>
+        {desc && <span className="st-android-desc">{desc}</span>}
+      </div>
+      <div className="st-android-control">{children}</div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // Section wrapper
@@ -435,17 +452,15 @@ function Section({ icon, title, children }) {
 // Main Settings component
 // ─────────────────────────────────────────────────────────────
 function Settings({ onSettingsChange }) {
-  const [lang, setLang]             = useState(() => localStorage.getItem('ks_lang') || 'en');
-  const [darkMode, setDarkMode]     = useState(() => localStorage.getItem('ks_darkMode') === 'true');
-  const [currency, setCurrency]     = useState(() => localStorage.getItem('ks_currency') || '$');
+  const [lang, setLang]         = useState(() => localStorage.getItem('ks_lang') || 'en');
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('ks_darkMode') === 'true');
   const [notifDebtReminder, setNotifDebtReminder] = useState(true);
   const [notifLowStock, setNotifLowStock]         = useState(true);
   const [notifDailySales, setNotifDailySales]     = useState(true);
-  const [loaded, setLoaded]         = useState(false);
-  const [showSavedMsg, setShowSavedMsg] = useState(false);
-  const [showForgotSale, setShowForgotSale]     = useState(false);
-  const [showForgotCash, setShowForgotCash]     = useState(false);
-  const [currencyOpen, setCurrencyOpen] = useState(false);
+  const [loaded, setLoaded]     = useState(false);
+  const [showForgotSale, setShowForgotSale] = useState(false);
+  const [showForgotCash, setShowForgotCash] = useState(false);
+  const [savedToast, setSavedToast]         = useState('');  // flash message
 
   const t = T[lang] || T.en;
 
@@ -454,7 +469,6 @@ function Settings({ onSettingsChange }) {
     dataService.getSettings().then(s => {
       setLang(s.lang || 'en');
       setDarkMode(!!s.darkMode);
-      setCurrency(s.currency || '$');
       setNotifDebtReminder(s.notifDebtReminder !== false);
       setNotifLowStock(s.notifLowStock !== false);
       setNotifDailySales(s.notifDailySales !== false);
@@ -462,24 +476,40 @@ function Settings({ onSettingsChange }) {
     });
   }, []);
 
-  // Apply dark mode to document
+  // Apply dark mode immediately when it changes
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  const handleSave = async () => {
-    const settings = { lang, darkMode, currency, notifDebtReminder, notifLowStock, notifDailySales };
-    await dataService.saveSettings(settings);
-    setShowSavedMsg(true);
-    setTimeout(() => setShowSavedMsg(false), 2500);
-    if (onSettingsChange) onSettingsChange({ lang, darkMode, currency });
+  // Auto-save any setting change to localforage (NOT to Firebase)
+  const autoSave = async (updates) => {
+    const current = await dataService.getSettings();
+    const merged = { ...current, ...updates };
+    await dataService.saveSettings(merged);
+    if (onSettingsChange) onSettingsChange(merged);
   };
 
-  const selectedCurrencyLabel = CURRENCY_SYMBOLS.indexOf(currency) >= 0
-    ? t.currencies[CURRENCY_SYMBOLS.indexOf(currency)]
-    : currency;
+  const handleLang = (code) => {
+    setLang(code);
+    autoSave({ lang: code });
+  };
 
-  // Don't render until localforage settings are loaded — prevents flash of wrong values
+  const handleDarkMode = (val) => {
+    setDarkMode(val);
+    autoSave({ darkMode: val });
+  };
+
+  const handleToggle = (key, setter, current) => {
+    const next = !current;
+    setter(next);
+    autoSave({ [key]: next });
+  };
+
+  const flashSaved = (msg = 'Saved!') => {
+    setSavedToast(msg);
+    setTimeout(() => setSavedToast(''), 2000);
+  };
+
   if (!loaded) {
     return (
       <div className="st-screen" style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
@@ -491,100 +521,62 @@ function Settings({ onSettingsChange }) {
   return (
     <div className="st-screen">
 
-      {/* Saved toast */}
-      {showSavedMsg && (
-        <div className="st-toast">
-          <Check size={16}/> {t.saved}
-        </div>
+      {/* Auto-save toast */}
+      {savedToast && (
+        <div className="st-toast"><Check size={16}/> {savedToast}</div>
       )}
 
-      {/* ── Language ── */}
+      {/* ── Language — Android-style list ── */}
       <Section icon={<Globe size={18}/>} title={t.language}>
-        <div className="st-lang-row">
-          {Object.entries(LANG_NAMES).map(([code, name]) => (
-            <button key={code}
-              className={`st-lang-btn${lang === code ? ' st-lang-active' : ''}`}
-              onClick={() => setLang(code)}>
-              {name}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      {/* ── Appearance ── */}
-      <Section icon={darkMode ? <Moon size={18}/> : <Sun size={18}/>} title={t.appearance}>
-        <div className="st-toggle-row">
-          <button className={`st-toggle-btn${!darkMode ? ' st-active' : ''}`}
-            onClick={() => setDarkMode(false)}>
-            <Sun size={14}/> {t.lightMode}
-          </button>
-          <button className={`st-toggle-btn${darkMode ? ' st-active' : ''}`}
-            onClick={() => setDarkMode(true)}>
-            <Moon size={14}/> {t.darkMode}
-          </button>
-        </div>
-      </Section>
-
-      {/* ── Currency ── */}
-      <Section icon={<DollarSign size={18}/>} title={t.currency}>
-        <div className="st-currency-wrapper">
-          <button className="st-currency-trigger" onClick={() => setCurrencyOpen(o => !o)}>
-            <span className="st-currency-symbol">{currency}</span>
-            <span className="st-currency-label">{selectedCurrencyLabel}</span>
-            {currencyOpen ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-          </button>
-          {currencyOpen && (
-            <div className="st-currency-dropdown">
-              {CURRENCY_SYMBOLS.map((sym, i) => (
-                <button key={sym} className={`st-currency-option${currency===sym?' st-currency-selected':''}`}
-                  onClick={() => { setCurrency(sym); setCurrencyOpen(false); }}>
-                  <span className="st-currency-sym">{sym}</span>
-                  <span>{t.currencies[i]}</span>
-                  {currency === sym && <Check size={14} className="st-currency-check"/>}
-                </button>
-              ))}
+        {Object.entries(LANG_NAMES).map(([code, name]) => (
+          <SettingRow key={code} label={name}>
+            <div
+              className={`st-android-radio${lang === code ? ' st-radio-on' : ''}`}
+              onClick={() => handleLang(code)}
+            >
+              <div className="st-radio-dot"/>
             </div>
-          )}
-        </div>
+          </SettingRow>
+        ))}
+      </Section>
+
+      {/* ── Appearance — Android-style toggle ── */}
+      <Section icon={darkMode ? <Moon size={18}/> : <Sun size={18}/>} title={t.appearance}>
+        <SettingRow
+          label={darkMode ? t.darkMode : t.lightMode}
+          desc={darkMode ? 'Dark background, light text' : 'Light background, dark text'}
+        >
+          <div
+            className={`st-switch${darkMode ? ' st-switch-on' : ''}`}
+            onClick={() => handleDarkMode(!darkMode)}
+          >
+            <div className="st-switch-thumb"/>
+          </div>
+        </SettingRow>
       </Section>
 
       {/* ── Notifications ── */}
       <Section icon={<Bell size={18}/>} title={t.notifications}>
-        <div className="st-notif-row" onClick={() => setNotifDebtReminder(v => !v)}>
-          <div className="st-notif-text">
-            <span className="st-notif-label">{t.notifDebtReminder}</span>
-            <span className="st-notif-desc">{t.notifDebtReminderDesc}</span>
-          </div>
-          <div className={`st-switch${notifDebtReminder ? ' st-switch-on' : ''}`}>
-            <div className="st-switch-thumb"/>
-          </div>
-        </div>
-        <div className="st-notif-row" onClick={() => setNotifLowStock(v => !v)}>
-          <div className="st-notif-text">
-            <span className="st-notif-label">{t.notifLowStock}</span>
-            <span className="st-notif-desc">{t.notifLowStockDesc}</span>
-          </div>
-          <div className={`st-switch${notifLowStock ? ' st-switch-on' : ''}`}>
-            <div className="st-switch-thumb"/>
-          </div>
-        </div>
-        <div className="st-notif-row" onClick={() => setNotifDailySales(v => !v)}>
-          <div className="st-notif-text">
-            <span className="st-notif-label">{t.notifDailySales}</span>
-            <span className="st-notif-desc">{t.notifDailySalesDesc}</span>
-          </div>
-          <div className={`st-switch${notifDailySales ? ' st-switch-on' : ''}`}>
-            <div className="st-switch-thumb"/>
-          </div>
-        </div>
+        {[
+          { key: 'notifDebtReminder', val: notifDebtReminder, set: setNotifDebtReminder, label: t.notifDebtReminder, desc: t.notifDebtReminderDesc },
+          { key: 'notifLowStock',     val: notifLowStock,     set: setNotifLowStock,     label: t.notifLowStock,     desc: t.notifLowStockDesc    },
+          { key: 'notifDailySales',   val: notifDailySales,   set: setNotifDailySales,   label: t.notifDailySales,   desc: t.notifDailySalesDesc  },
+        ].map(({ key, val, set, label, desc }) => (
+          <SettingRow key={key} label={label} desc={desc}>
+            <div
+              className={`st-switch${val ? ' st-switch-on' : ''}`}
+              onClick={() => handleToggle(key, set, val)}
+            >
+              <div className="st-switch-thumb"/>
+            </div>
+          </SettingRow>
+        ))}
       </Section>
 
-      {/* ── Forgotten Entries ── */}
+      {/* ── Forgotten Entries — saves to forage + Firebase ── */}
       <Section icon={<ClipboardList size={18}/>} title={t.forgottenEntries}>
-        {/* Explanatory note */}
-        <p style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic', margin: '0 0 12px 0', lineHeight: '1.5' }}>
-          {t.forgottenEntriesNote}
-        </p>
+        <p className="st-forgotten-note">{t.forgottenEntriesNote}</p>
+
         <div className="st-forgotten-row">
           <div className="st-forgotten-info">
             <span className="st-notif-label">{t.forgottenSale}</span>
@@ -595,6 +587,7 @@ function Settings({ onSettingsChange }) {
             <ClipboardList size={16}/> {t.forgottenSale}
           </button>
         </div>
+
         <div className="st-forgotten-row" style={{ marginTop: 12 }}>
           <div className="st-forgotten-info">
             <span className="st-notif-label">{t.forgottenCash}</span>
@@ -607,24 +600,17 @@ function Settings({ onSettingsChange }) {
         </div>
       </Section>
 
-      {/* Save button */}
-      <div className="st-save-row">
-        <button className="st-save-btn" onClick={handleSave}>
-          <Check size={18}/> {t.save}
-        </button>
-      </div>
-
       {/* Modals */}
       {showForgotSale && (
         <ForgottenSaleModal t={t}
           onClose={() => setShowForgotSale(false)}
-          onSaved={() => { setShowForgotSale(false); setShowSavedMsg(true); setTimeout(() => setShowSavedMsg(false), 2500); }}
+          onSaved={() => { setShowForgotSale(false); flashSaved('Entry saved!'); }}
         />
       )}
       {showForgotCash && (
         <ForgottenCashModal t={t}
           onClose={() => setShowForgotCash(false)}
-          onSaved={() => { setShowForgotCash(false); setShowSavedMsg(true); setTimeout(() => setShowSavedMsg(false), 2500); }}
+          onSaved={() => { setShowForgotCash(false); flashSaved('Entry saved!'); }}
         />
       )}
 
@@ -633,4 +619,3 @@ function Settings({ onSettingsChange }) {
 }
 
 export default Settings;
-
