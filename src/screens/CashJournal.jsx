@@ -261,7 +261,7 @@ function CashJournal() {
     return {
       date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
       // Show FORGOTTEN for entries entered via the Settings "Unrecorded Cash Entry" modal
-      time: entry.isUnrecorded ? 'FORGOTTEN' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
+      time: entry.isUnrecorded ? 'UNRECORDED' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
     };
   };
 
