@@ -484,7 +484,7 @@ Kadaele Services`;
   };
   // formatTime: pass the full sale/deposit object so we can check isUnrecorded
   const formatTime = (ts, record) => {
-    if (record?.isUnrecorded) return 'FORGOTTEN';
+    if (record?.isUnrecorded) return 'UNRECORDED';
     if (!ts) return 'N/A';
     const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
     return isNaN(d) ? 'Invalid' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
