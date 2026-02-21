@@ -58,12 +58,13 @@ cp android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png  android/app/src/main/
 cp android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 
 echo "Generating adaptive icon foreground layers (Android 8+)..."
-# Foreground: icon centered on transparent canvas (108dp safe zone = 66% of 162dp canvas at xxhdpi)
-convert "$SOURCE_ICON" -resize 81x81   -background none -gravity center -extent 108x108 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
-convert "$SOURCE_ICON" -resize 122x122 -background none -gravity center -extent 162x162 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
-convert "$SOURCE_ICON" -resize 162x162 -background none -gravity center -extent 216x216 android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
-convert "$SOURCE_ICON" -resize 243x243 -background none -gravity center -extent 324x324 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
-convert "$SOURCE_ICON" -resize 324x324 -background none -gravity center -extent 432x432 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+# Foreground: icon fills ~92% of canvas so it appears larger on the launcher home screen
+# Android clips adaptive icons to a shape (circle/squircle), so a bigger fill = bigger visible icon
+convert "$SOURCE_ICON" -resize 100x100  -background none -gravity center -extent 108x108 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
+convert "$SOURCE_ICON" -resize 149x149  -background none -gravity center -extent 162x162 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
+convert "$SOURCE_ICON" -resize 199x199  -background none -gravity center -extent 216x216 android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
+convert "$SOURCE_ICON" -resize 298x298  -background none -gravity center -extent 324x324 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
+convert "$SOURCE_ICON" -resize 397x397  -background none -gravity center -extent 432x432 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
 
 echo "Writing adaptive icon XMLs..."
 cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
