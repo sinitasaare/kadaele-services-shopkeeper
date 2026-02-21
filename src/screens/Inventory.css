@@ -242,3 +242,98 @@
 .inv-barcode-save:hover  { background: #d1fae5; }
 .inv-barcode-cancel { color: #ef4444; }
 .inv-barcode-cancel:hover { background: #fee2e2; }
+
+/* ── Barcode icon button (replaces edit inline) ── */
+.inv-barcode-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #667eea;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+.inv-barcode-icon-btn:hover { background: rgba(102,126,234,0.1); }
+.inv-barcode-none { color: #d1d5db; font-size: 14px; }
+
+/* ── Barcode Image Viewer Modal ── */
+.inv-barcode-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.inv-barcode-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 340px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.inv-barcode-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.inv-barcode-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.inv-barcode-modal-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #9ca3af;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+.inv-barcode-modal-img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+  max-height: 280px;
+  background: #f9fafb;
+}
+.inv-barcode-modal-text-only {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px 20px;
+  gap: 10px;
+  background: #f9fafb;
+}
+.inv-barcode-modal-code {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: 2px;
+  margin: 0;
+}
+.inv-barcode-modal-note {
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  margin: 0;
+  line-height: 1.5;
+}
+.inv-barcode-modal-code-below {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  letter-spacing: 1.5px;
+  padding: 8px 16px 14px;
+  margin: 0;
+  border-top: 1px solid #f3f4f6;
+}
