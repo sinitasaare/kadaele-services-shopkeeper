@@ -410,3 +410,91 @@
   .st-forgotten-btn { width: 100%; justify-content: center; }
 }
 
+
+/* ── Android-style Setting Row ── */
+.st-android-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  gap: 16px;
+  transition: background 0.15s;
+}
+.st-android-row:last-child { border-bottom: none; }
+.st-android-row:active { background: #f9fafb; }
+.st-android-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.st-android-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2937;
+  line-height: 1.3;
+}
+.st-android-desc {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+.st-android-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Android-style radio button */
+.st-android-radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  background: #fff;
+}
+.st-android-radio.st-radio-on {
+  border-color: #667eea;
+  background: #fff;
+}
+.st-radio-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background 0.2s, transform 0.2s;
+  transform: scale(0);
+}
+.st-radio-on .st-radio-dot {
+  background: #667eea;
+  transform: scale(1);
+}
+
+/* Forgotten records note */
+.st-forgotten-note {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border-left: 3px solid #667eea;
+}
+
+/* Date field hint text */
+.st-field-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 2px;
+}
