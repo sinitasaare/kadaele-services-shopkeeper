@@ -10,6 +10,14 @@ import Login from './components/Login';
 import dataService from './services/dataService';
 import './App.css';
 
+// ── Apply dark/light mode immediately on load (before React renders) ──────────
+// Reads from localStorage so the theme is set even before Settings mounts.
+// Settings.jsx keeps this in sync whenever the user toggles the switch.
+(function applyInitialTheme() {
+  const dark = localStorage.getItem('ks_darkMode') === 'true';
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+})();
+
 const PAGES = [
   { name: 'SALES REGISTER', component: SalesRegister },
   { name: 'SALES RECORD',   component: SalesJournal  },
