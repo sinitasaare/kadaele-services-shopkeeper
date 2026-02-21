@@ -398,25 +398,55 @@ class DataService {
   // Purchases operations
   async getSales() {
     try {
-      // Try to get from Firebase first if online
-      if (this.isOnline && auth.currentUser) {
+      // Only pull from Firebase on the FIRST call of the session.
+      // After that, localforage is the source of truth — this prevents a
+      // stale Firebase read from overwriting a write that just happened
+      // (e.g. addSale with a manual backdated date).
+      if (this.isOnline && auth.currentUser && !this._salesFetchedFromFirebase) {
+        this._salesFetchedFromFirebase = true;
         const salesSnapshot = await getDocs(collection(db, 'sales'));
-        const firebaseSales = salesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          date: doc.data().date?.toDate?.() || doc.data().date,
-          createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
-        }));
-        
-        // Save to local storage
-        await localforage.setItem(DATA_KEYS.SALES, firebaseSales);
-        return firebaseSales;
+        const firebaseSales = salesSnapshot.docs.map(doc => {
+          const data = doc.data();
+          // Convert Firestore Timestamps to ISO strings.
+          // For date: prefer the stored ISO string (which preserves the manual
+          // date for backdated entries). Only fall back to Timestamp if no
+          // ISO string is present.
+          const dateVal = typeof data.date === 'string'
+            ? data.date
+            : (data.date?.toDate?.()?.toISOString?.() || null);
+          return {
+            id: doc.id,
+            ...data,
+            date: dateVal,
+            createdAt: data.createdAt?.toDate?.()?.toISOString?.() || data.createdAt,
+          };
+        });
+
+        // Merge: keep the local version if it's newer (covers the case where
+        // a sale was just saved locally but Firebase still has stale data).
+        const localSales = await localforage.getItem(DATA_KEYS.SALES) || [];
+        const localMap = new Map(localSales.map(s => [s.id, s]));
+        const merged = firebaseSales.map(fbSale => {
+          const local = localMap.get(fbSale.id);
+          if (!local) return fbSale;
+          // If local has a more recent createdAt, keep local
+          const fbTime  = new Date(fbSale.createdAt || 0).getTime();
+          const locTime = new Date(local.createdAt || 0).getTime();
+          return locTime >= fbTime ? local : fbSale;
+        });
+        // Add any sales that exist only locally (created offline)
+        for (const local of localSales) {
+          if (!merged.find(s => s.id === local.id)) merged.push(local);
+        }
+
+        await localforage.setItem(DATA_KEYS.SALES, merged);
+        return merged;
       }
     } catch (error) {
       console.error('Error fetching sales from Firebase:', error);
     }
-    
-    // Fallback to local storage
+
+    // All subsequent calls within the same session use localforage
     return await this.get(DATA_KEYS.SALES);
   }
 
@@ -477,8 +507,10 @@ class DataService {
       try {
         await setDoc(doc(db, 'sales', newSale.id), {
           ...newSale,
+          // Keep the manually entered date (saleDate) — do NOT overwrite with
+          // serverTimestamp() as that would corrupt forgotten/backdated entries.
+          // Only createdAt uses server time so we know when it was recorded.
           createdAt: serverTimestamp(),
-          date: serverTimestamp()
         });
       } catch (error) {
         console.error('Error adding sale to Firebase:', error);
@@ -614,6 +646,7 @@ class DataService {
   resetDebtorsFetchFlag() {
     this._debtorsFetchedFromFirebase = false;
     this._goodsFetchedFromFirebase = false;
+    this._salesFetchedFromFirebase = false;
   }
 
   async setDebtors(debtors) {
