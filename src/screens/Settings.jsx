@@ -53,52 +53,12 @@ const T = {
     selectDebtor: 'Select debtor…',
     systemStartHint: 'Only dates before this system was first used are selectable.',
   },
-  ki: {
-    title: 'Rongorongo',
-    language: 'Te Taetae',
-    appearance: 'Aonteaba ma Karaoan',
-    darkMode: 'Rotinaki',
-    lightMode: 'Karaoan',
-    notifications: 'Rongorongo ni Kaungaaki',
-    notifDebtReminder: 'Kaungaaki n Otinaomata',
-    notifDebtReminderDesc: 'Kaungaaki te aomata i mwain bong ni uota',
-    notifLowStock: 'Kaungaaki ni Bwai',
-    notifLowStockDesc: 'Kaungaaki ngkana 5 te bwai i nanon te ruu',
-    notifDailySales: 'Kaungaaki ni Boraoi',
-    notifDailySalesDesc: 'Kaungaaki ngkana e roko $500 ni boraoi',
-    forgottenEntries: 'Katinanikaki ni Boraoi',
-    forgottenEntriesNote: 'Katinanikaki ni Boraoi ao e kona n reke ikai.',
-    forgottenSale: 'Boraoi ae Makuri (Akawa)',
-    forgottenSaleDesc: 'Katikui boraoi are e nakoraoi ma bong ni makuri',
-    forgottenCash: 'Katinanikaki n Amwarake',
-    forgottenCashDesc: 'Katikui amwarake are e nakoraoi ma bong ni makuri',
-    cancel: 'Tabekuna',
-    saleDate: 'Bong ni Boraoi',
-    cashDate: 'Bong ni Katibu',
-    addItem: 'Kamanoia Bwai',
-    items: 'Bwai',
-    total: 'Katoa',
-    paymentType: 'Mwakuri ni Uota',
-    cash: 'Amwarake',
-    credit: 'Otinaomata',
-    description: 'Rongorongo',
-    amount: 'Tataro',
-    type: 'Mwakuri',
-    cashIn: 'Amwarake Roko',
-    cashOut: 'Amwarake Nako',
-    recordSale: 'Katikui Boraoi',
-    recordCredit: 'Katikui Otinaomata',
-    recordCash: 'Katikui Katibu',
-    qty: 'Ootan',
-    searchItem: 'Ukoukoa bwai…',
-    debtorName: 'Aran te Aomata',
-    repayDate: 'Bong ni Uota',
-    selectDebtor: 'Rinea te aomata…',
-    systemStartHint: 'Bong ni mwakuri n am taibora naba.',
-  },
 };
 
 const LANG_NAMES = { en: 'English', ki: 'Kiribati' };
+// Kiribati translation is under development — the UI shows it as an option
+// but selecting it shows a notice rather than switching the interface language.
+const KIRIBATI_COMING_SOON = 'This language setting is still under development and will be available online soon.';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const dateStr = (d) =>
@@ -151,23 +111,21 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const [saleDate, setSaleDate]   = useState('');
   const [payType, setPayType]     = useState('cash');
   const [cart, setCart]           = useState([]);
+  const [qtyInputs, setQtyInputs] = useState({}); // raw string values for qty inputs
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [debtorId, setDebtorId]   = useState('');
   const [repayDate, setRepayDate] = useState('');
   const [saving, setSaving]       = useState(false);
-  const [maxDate, setMaxDate]     = useState(yesterdayStr()); // latest selectable date
+  const [maxDate, setMaxDate]     = useState('2026-02-22');
 
   useEffect(() => {
     dataService.getGoods().then(g => setGoods(g || []));
     dataService.getDebtors().then(d => setDebtors(d || []));
-    // Compute system start date → yesterday before that is the max selectable
-    getSystemStartDate().then(startDate => {
-      // Max date is one day BEFORE the system start date
-      const d = new Date(startDate);
-      d.setDate(d.getDate() - 1);
-      setMaxDate(dateStr(d));
-    });
+    // Max selectable date = Feb 22, 2026 (day before system first went live)
+    // This is hardcoded as requested; the date field calendar will not allow
+    // any date later than this.
+    setMaxDate('2026-02-22');
   }, []);
 
   const smartSearch = (term) => {
@@ -183,17 +141,40 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const addToCart = (good) => {
     setCart(prev => {
       const ex = prev.find(i => i.id === good.id);
-      return ex ? prev.map(i => i.id === good.id ? { ...i, qty: i.qty + 1 } : i)
-                : [...prev, { ...good, qty: 1 }];
+      if (ex) {
+        const newQty = ex.qty + 1;
+        setQtyInputs(q => ({ ...q, [good.id]: String(newQty) }));
+        return prev.map(i => i.id === good.id ? { ...i, qty: newQty } : i);
+      }
+      setQtyInputs(q => ({ ...q, [good.id]: '1' }));
+      return [...prev, { ...good, qty: 1 }];
     });
     setSearchTerm(''); setShowSearch(false);
   };
-  const updateQty = (id, qty) => {
-    const q = parseInt(qty, 10);
-    if (isNaN(q) || q < 1) return;
-    setCart(prev => prev.map(i => i.id === id ? { ...i, qty: q } : i));
+
+  const handleQtyChange = (id, raw) => {
+    // Allow empty string while typing — don't force a number yet
+    setQtyInputs(q => ({ ...q, [id]: raw }));
+    const q = parseInt(raw, 10);
+    if (!isNaN(q) && q >= 1) {
+      setCart(prev => prev.map(i => i.id === id ? { ...i, qty: q } : i));
+    }
   };
-  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
+
+  const handleQtyBlur = (id) => {
+    // On blur: if field is empty or 0, reset to 1
+    const raw = qtyInputs[id];
+    const q = parseInt(raw, 10);
+    if (isNaN(q) || q < 1) {
+      setQtyInputs(inp => ({ ...inp, [id]: '1' }));
+      setCart(prev => prev.map(i => i.id === id ? { ...i, qty: 1 } : i));
+    }
+  };
+
+  const removeItem = (id) => {
+    setCart(prev => prev.filter(i => i.id !== id));
+    setQtyInputs(q => { const n = { ...q }; delete n[id]; return n; });
+  };
   const total = cart.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
 
   const handleSave = async () => {
@@ -205,8 +186,10 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
     try {
       const debtor = debtors.find(d => d.id === debtorId);
 
-      // For cash sales: store in sales record + auto-adds FORGOTTEN cash entry via addSale
-      // For credit sales: store in sales record + updates debtor record
+      // Store date as LOCAL NOON (T12:00:00) to avoid UTC-midnight timezone
+      // shifting: new Date('2025-12-15') = UTC midnight = wrong day in UTC+ zones.
+      // Using T12:00:00 (local noon) is safe for any timezone UTC-11 to UTC+13.
+      const localNoonDate = new Date(saleDate + 'T12:00:00');
       await dataService.addSale({
         items: cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.qty, subtotal: i.price * i.qty })),
         total,
@@ -216,8 +199,8 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
         debtorId: payType === 'credit' ? debtorId : null,
         repaymentDate: payType === 'credit' ? repayDate : '',
         isDebt: payType === 'credit',
-        date: new Date(saleDate).toISOString(),
-        isUnrecorded: true,  // ← TIME column shows 'FORGOTTEN' in tables
+        date: localNoonDate.toISOString(),
+        isUnrecorded: true,
       });
       onSaved();
     } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
@@ -303,8 +286,15 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
               {cart.map(item => (
                 <div key={item.id} className="st-cart-row">
                   <span className="st-cart-name">{item.name}</span>
-                  <input type="number" className="st-cart-qty" value={item.qty} min="1"
-                    onChange={e => updateQty(item.id, e.target.value)} />
+                  <input
+                    type="number"
+                    className="st-cart-qty"
+                    value={qtyInputs[item.id] ?? String(item.qty)}
+                    min="1"
+                    onChange={e => handleQtyChange(item.id, e.target.value)}
+                    onBlur={() => handleQtyBlur(item.id)}
+                    onFocus={e => e.target.select()}
+                  />
                   <span className="st-cart-price">${(item.price * item.qty).toFixed(2)}</span>
                   <button className="st-cart-remove" onClick={() => removeItem(item.id)}>
                     <X size={14}/>
@@ -340,14 +330,11 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
   const [amount, setAmount]           = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving]           = useState(false);
-  const [maxDate, setMaxDate]         = useState(yesterdayStr());
+  const [maxDate, setMaxDate]         = useState('2026-02-22');
 
   useEffect(() => {
-    getSystemStartDate().then(startDate => {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() - 1);
-      setMaxDate(dateStr(d));
-    });
+    // Max selectable date hardcoded to Feb 22, 2026 (day before system first went live)
+    setMaxDate('2026-02-22');
   }, []);
 
   const handleSave = async () => {
@@ -357,13 +344,15 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
     if (!description.trim()) { alert('Please enter a description.'); return; }
     setSaving(true);
     try {
+      // Store as LOCAL NOON to prevent UTC-midnight timezone date shift
+      const localNoonDate = new Date(cashDate + 'T12:00:00');
       await dataService.addCashEntry({
         type: cashType,
         amount: amt,
         note: description.trim(),
-        date: new Date(cashDate).toISOString(),
+        date: localNoonDate.toISOString(),
         source: 'manual_backdated',
-        isUnrecorded: true,  // ← TIME column shows 'FORGOTTEN' in Cash Record
+        isUnrecorded: true,
       });
       onSaved();
     } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
@@ -454,9 +443,9 @@ function Section({ icon, title, children }) {
 function Settings({ onSettingsChange }) {
   const [lang, setLang]         = useState(() => localStorage.getItem('ks_lang') || 'en');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('ks_darkMode') === 'true');
-  const [notifDebtReminder, setNotifDebtReminder] = useState(true);
-  const [notifLowStock, setNotifLowStock]         = useState(true);
-  const [notifDailySales, setNotifDailySales]     = useState(true);
+  const [notifDebtReminder, setNotifDebtReminder] = useState(false);
+  const [notifLowStock, setNotifLowStock]         = useState(false);
+  const [notifDailySales, setNotifDailySales]     = useState(false);
   const [loaded, setLoaded]     = useState(false);
   const [showForgotSale, setShowForgotSale] = useState(false);
   const [showForgotCash, setShowForgotCash] = useState(false);
@@ -469,9 +458,9 @@ function Settings({ onSettingsChange }) {
     dataService.getSettings().then(s => {
       setLang(s.lang || 'en');
       setDarkMode(!!s.darkMode);
-      setNotifDebtReminder(s.notifDebtReminder !== false);
-      setNotifLowStock(s.notifLowStock !== false);
-      setNotifDailySales(s.notifDailySales !== false);
+      setNotifDebtReminder(!!s.notifDebtReminder);   // false by default
+      setNotifLowStock(!!s.notifLowStock);
+      setNotifDailySales(!!s.notifDailySales);
       setLoaded(true);
     });
   }, []);
@@ -489,7 +478,15 @@ function Settings({ onSettingsChange }) {
     if (onSettingsChange) onSettingsChange(merged);
   };
 
+  const [kiNotice, setKiNotice] = useState(false);
+
   const handleLang = (code) => {
+    if (code === 'ki') {
+      // Kiribati translation is under development — show notice, don't switch
+      setKiNotice(true);
+      setTimeout(() => setKiNotice(false), 5000);
+      return;
+    }
     setLang(code);
     autoSave({ lang: code });
   };
@@ -538,6 +535,11 @@ function Settings({ onSettingsChange }) {
             </div>
           </SettingRow>
         ))}
+        {kiNotice && (
+          <div className="st-ki-notice">
+            ℹ️ {KIRIBATI_COMING_SOON}
+          </div>
+        )}
       </Section>
 
       {/* ── Appearance — Android-style toggle ── */}
