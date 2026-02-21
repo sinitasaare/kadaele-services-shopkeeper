@@ -164,3 +164,22 @@ body {
   background: #9ca3af !important;
   animation: none !important;
 }
+
+/* ── Dark mode overrides (must be in App.css to beat the body rule above) ── */
+[data-theme="dark"] body {
+  background: #0f1117 !important;
+  color: #e2e8f0;
+}
+[data-theme="dark"] .app {
+  background: #0f1117;
+}
+[data-theme="dark"] .page-navigation {
+  background: #1a1d27 !important;
+  border-bottom-color: #2d3148 !important;
+}
+[data-theme="dark"] .page-title {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .app-main {
+  background: #0f1117;
+}
