@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Barcode } from 'lucide-react';
 import dataService from '../services/dataService';
 import './Inventory.css';
 
@@ -9,9 +9,8 @@ function Inventory() {
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState(null);
 
-  // Edit barcode inline
-  const [editingBarcode, setEditingBarcode] = useState(null); // good.id being edited
-  const [barcodeValue, setBarcodeValue] = useState('');
+  // Barcode image viewer
+  const [viewingBarcode, setViewingBarcode] = useState(null); // { name, barcode, imageUrl }
 
   useEffect(() => { loadGoods(); }, []);
 
@@ -44,24 +43,19 @@ function Inventory() {
     return           { label: 'In Stock',       cls: 'in-stock'     };
   };
 
-  const startEditBarcode = (good) => {
-    setEditingBarcode(good.id);
-    setBarcodeValue(good.barcode || '');
-  };
+  // A good has a barcode if it has a `barcode` string (the code value)
+  // and/or a `barcodeImage` / `barcode_image` URL (photo from Firebase).
+  const getBarcodeImageUrl = (good) =>
+    good.barcodeImage || good.barcode_image || good.barcodeUrl || good.barcode_url || null;
 
-  const saveBarcode = async (good) => {
-    try {
-      await dataService.updateGood(good.id, { barcode: barcodeValue.trim() || null });
-      setGoods(prev => prev.map(g =>
-        g.id === good.id ? { ...g, barcode: barcodeValue.trim() || null } : g
-      ));
-    } catch (err) {
-      console.error('Failed to save barcode:', err);
-      alert('Failed to save barcode.');
-    } finally {
-      setEditingBarcode(null);
-      setBarcodeValue('');
-    }
+  const openBarcodeViewer = (good) => {
+    const imgUrl = getBarcodeImageUrl(good);
+    if (!imgUrl && !good.barcode) return; // nothing to show
+    setViewingBarcode({
+      name:     good.name || 'Product',
+      barcode:  good.barcode || null,
+      imageUrl: imgUrl,
+    });
   };
 
   return (
@@ -111,13 +105,13 @@ function Inventory() {
                 <th className="inv-col-right">Price</th>
                 <th className="inv-col-center">Stock</th>
                 <th>Status</th>
-                <th>Barcode</th>
+                <th className="inv-col-center">Barcode</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((good, idx) => {
-                const status = getStockStatus(good.stock_quantity);
-                const isEditing = editingBarcode === good.id;
+                const status   = getStockStatus(good.stock_quantity);
+                const hasBarcode = good.barcode || getBarcodeImageUrl(good);
                 return (
                   <tr key={good.id}>
                     <td className="inv-col-num inv-num-cell">{idx + 1}</td>
@@ -130,32 +124,18 @@ function Inventory() {
                         <span className={`inv-badge ${status.cls}`}>{status.label}</span>
                       ) : '—'}
                     </td>
-                    <td className="inv-barcode-cell">
-                      {isEditing ? (
-                        <div className="inv-barcode-edit">
-                          <input
-                            className="inv-barcode-input"
-                            value={barcodeValue}
-                            onChange={e => setBarcodeValue(e.target.value)}
-                            placeholder="Enter barcode…"
-                            autoFocus
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') saveBarcode(good);
-                              if (e.key === 'Escape') setEditingBarcode(null);
-                            }}
-                          />
-                          <button className="inv-barcode-save" onClick={() => saveBarcode(good)}>✓</button>
-                          <button className="inv-barcode-cancel" onClick={() => setEditingBarcode(null)}>✕</button>
-                        </div>
+                    <td className="inv-col-center">
+                      {hasBarcode ? (
+                        <button
+                          className="inv-barcode-icon-btn"
+                          onClick={() => openBarcodeViewer(good)}
+                          title="View barcode"
+                          aria-label={`View barcode for ${good.name}`}
+                        >
+                          <Barcode size={20} strokeWidth={1.5} />
+                        </button>
                       ) : (
-                        <div className="inv-barcode-display" onClick={() => startEditBarcode(good)}>
-                          {good.barcode ? (
-                            <span className="inv-barcode-value">{good.barcode}</span>
-                          ) : (
-                            <span className="inv-barcode-empty">Tap to add</span>
-                          )}
-                          <span className="inv-barcode-edit-icon">✎</span>
-                        </div>
+                        <span className="inv-barcode-none">—</span>
                       )}
                     </td>
                   </tr>
@@ -166,6 +146,37 @@ function Inventory() {
           </div>
         )}
       </div>
+
+      {/* ── Barcode Image Viewer Modal ── */}
+      {viewingBarcode && (
+        <div
+          className="inv-barcode-overlay"
+          onClick={() => setViewingBarcode(null)}
+        >
+          <div className="inv-barcode-modal" onClick={e => e.stopPropagation()}>
+            <div className="inv-barcode-modal-header">
+              <span className="inv-barcode-modal-title">{viewingBarcode.name}</span>
+              <button className="inv-barcode-modal-close" onClick={() => setViewingBarcode(null)}>×</button>
+            </div>
+            {viewingBarcode.imageUrl ? (
+              <img
+                src={viewingBarcode.imageUrl}
+                alt={`Barcode for ${viewingBarcode.name}`}
+                className="inv-barcode-modal-img"
+              />
+            ) : (
+              <div className="inv-barcode-modal-text-only">
+                <Barcode size={48} strokeWidth={1} color="#667eea" />
+                <p className="inv-barcode-modal-code">{viewingBarcode.barcode}</p>
+                <p className="inv-barcode-modal-note">No barcode image saved.<br/>Barcode number shown above.</p>
+              </div>
+            )}
+            {viewingBarcode.barcode && (
+              <p className="inv-barcode-modal-code-below">{viewingBarcode.barcode}</p>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
