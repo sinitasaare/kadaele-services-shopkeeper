@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Calculator } from 'lucide-react';
 import { Camera as CapCamera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
@@ -30,6 +31,8 @@ function SalesRegister() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [repaymentDate, setRepaymentDate] = useState('');
   const [showCashPopup, setShowCashPopup] = useState(false);
+  const [showChangeCalc, setShowChangeCalc] = useState(false);  // child modal inside cash confirm
+  const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -315,6 +318,8 @@ function SalesRegister() {
   const confirmCashPayment = async () => {
     setIsProcessing(true);
     setShowCashPopup(false);
+    setShowChangeCalc(false);
+    setCustomerMoney('');
     try {
       const total = calculateTotal();
       const items = catalogue.map(item => ({
@@ -601,18 +606,96 @@ function SalesRegister() {
       )}
 
       {/* ── Cash confirm popup ── */}
-      {showCashPopup && (
-        <div className="sr-modal-overlay">
-          <div className="sr-modal-content">
-            <h2>Confirm Payment</h2>
-            <p>Are you sure you want to proceed with this cash payment?</p>
-            <div className="sr-modal-buttons">
-              <button className="sr-btn-cancel" onClick={() => setShowCashPopup(false)}>Cancel</button>
-              <button className="sr-btn-confirm" onClick={confirmCashPayment}>Confirm</button>
+      {showCashPopup && (() => {
+        const total = calculateTotal();
+        const given = parseFloat(customerMoney) || 0;
+        const change = given - total;
+        const changeValid = given > 0;
+
+        return (
+          <div className="sr-modal-overlay">
+            <div className="sr-modal-content sr-cash-confirm-modal">
+
+              {/* Calculator icon button — opens change calculator */}
+              <div className="sr-calc-icon-row">
+                <button
+                  className="sr-calc-icon-btn"
+                  onClick={() => { setShowChangeCalc(true); setCustomerMoney(''); }}
+                  title="Open change calculator"
+                >
+                  <Calculator size={32} strokeWidth={1.5} />
+                </button>
+                <span className="sr-calc-icon-hint">Tap to calculate change</span>
+              </div>
+
+              <h2>Confirm Payment</h2>
+              <p>Are you sure you want to proceed with this cash payment?</p>
+              <p className="sr-confirm-total">Total: <strong>${total.toFixed(2)}</strong></p>
+
+              <div className="sr-modal-buttons">
+                <button className="sr-btn-cancel" onClick={() => {
+                  setShowCashPopup(false);
+                  setShowChangeCalc(false);
+                  setCustomerMoney('');
+                }}>Cancel</button>
+                <button className="sr-btn-confirm" onClick={confirmCashPayment}>Confirm</button>
+              </div>
+
+              {/* ── Change Calculator child modal ── */}
+              {showChangeCalc && (
+                <div className="sr-change-overlay">
+                  <div className="sr-change-modal">
+
+                    {/* Change to give — displayed at top, auto-computed */}
+                    <div className="sr-change-result">
+                      <span className="sr-change-label">Change to give customer</span>
+                      <span className={`sr-change-amount ${changeValid ? (change < 0 ? 'sr-change-short' : 'sr-change-ok') : 'sr-change-empty'}`}>
+                        {changeValid
+                          ? (change < 0
+                              ? `–$${Math.abs(change).toFixed(2)} (short)`
+                              : `$${change.toFixed(2)}`)
+                          : '—'}
+                      </span>
+                    </div>
+
+                    {/* Customer's Money input */}
+                    <div className="sr-change-field">
+                      <label className="sr-change-field-label">Customer's Money</label>
+                      <input
+                        type="number"
+                        className="sr-change-input"
+                        placeholder={`e.g. ${(Math.ceil(total / 5) * 5).toFixed(2)}`}
+                        value={customerMoney}
+                        min="0"
+                        step="0.01"
+                        onChange={e => setCustomerMoney(e.target.value)}
+                        onFocus={e => e.target.select()}
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Cart total reminder */}
+                    <div className="sr-change-total-row">
+                      <span>Cart Total</span>
+                      <span className="sr-change-total-val">${total.toFixed(2)}</span>
+                    </div>
+
+                    {/* Close button — bottom right */}
+                    <div className="sr-change-footer">
+                      <button className="sr-change-close-btn" onClick={() => {
+                        setShowChangeCalc(false);
+                        setCustomerMoney('');
+                      }}>Close</button>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Buy on Credit modal ── */}
       {showCreditModal && (
