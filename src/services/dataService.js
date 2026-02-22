@@ -497,7 +497,9 @@ class DataService {
           // If local has a more recent createdAt, keep local
           const fbTime  = new Date(fbSale.createdAt || 0).getTime();
           const locTime = new Date(local.createdAt || 0).getTime();
-          return locTime >= fbTime ? local : fbSale;
+          const base = locTime >= fbTime ? local : fbSale;
+          // Preserve local photo data (not synced to Firebase due to size limits)
+          return base.photoUrl ? base : { ...base, photoUrl: local.photoUrl || base.photoUrl || null };
         });
         // Add any sales that exist only locally (created offline)
         for (const local of localSales) {
@@ -1559,7 +1561,10 @@ class DataService {
         const merged = fbPurchases.map(fb => {
           const loc = localMap.get(fb.id);
           if (!loc) return fb;
-          return new Date(loc.createdAt||0) >= new Date(fb.createdAt||0) ? loc : fb;
+          // Always keep local version if it has a receiptPhoto that Firebase doesn't
+          // (photos are stored only in localforage, not Firebase, to avoid size limits)
+          const base = new Date(loc.createdAt||0) >= new Date(fb.createdAt||0) ? loc : fb;
+          return base.receiptPhoto ? base : { ...base, receiptPhoto: loc.receiptPhoto || base.receiptPhoto || null };
         });
         for (const loc of local) {
           if (!merged.find(p => p.id === loc.id)) merged.push(loc);
@@ -1641,11 +1646,12 @@ class DataService {
         console.error('Error updating stock after purchase:', stockErr);
       }
 
-      // Sync to Firebase purchases collection
+      // Sync to Firebase purchases collection (strip base64 photo — too large for Firestore)
       if (this.isOnline && auth.currentUser) {
         try {
+          const { receiptPhoto: _rp, ...purchaseForFirestore } = newPurchase;
           await setDoc(doc(db, 'purchases', newPurchase.id), {
-            ...newPurchase,
+            ...purchaseForFirestore,
             createdAt: serverTimestamp(),
           });
         } catch (err) {
@@ -1758,15 +1764,16 @@ class DataService {
         lang: 'en',
         darkMode: false,
         currency: '$',
-        notifDebtReminder: true,
-        notifLowStock: true,
-        notifDailySales: true,
+        notifDebtReminder: false,
+        notifLowStock: false,
+        notifDailySales: false,
+        notifCreditorOwed: false,
         openingBalance: null,  // one-time starting cash on hand
         ...(saved || {}),
       };
     } catch (err) {
       console.error('Error getting settings:', err);
-      return { lang: 'en', darkMode: false, currency: '$', notifDebtReminder: true, notifLowStock: true, notifDailySales: true, openingBalance: null };
+      return { lang: 'en', darkMode: false, currency: '$', notifDebtReminder: false, notifLowStock: false, notifDailySales: false, notifCreditorOwed: false, openingBalance: null };
     }
   }
 
