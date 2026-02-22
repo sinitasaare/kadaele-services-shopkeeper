@@ -7,16 +7,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    // Use default minifier (esbuild) which is faster and doesn't require extra deps
     sourcemap: false,
-    // Prevent code splitting issues in Capacitor
     rollupOptions: {
+      // Capacitor plugins that are only available at runtime on native builds
+      // must be externalised so Vite doesn't try to bundle them for the web.
+      external: ['@capacitor/local-notifications'],
       output: {
         manualChunks: undefined,
       },
     },
   },
-  // This is critical for Capacitor apps
+  // Required for Capacitor apps
   base: './',
   server: {
     port: 5173,
