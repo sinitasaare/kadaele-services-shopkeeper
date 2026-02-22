@@ -19,7 +19,14 @@ async function scheduleCreditorReminders() {
     const owing = (list || []).filter(c => (c.balance || 0) > 0);
     if (owing.length === 0) return;
 
-    const { LocalNotifications } = await import('@capacitor/local-notifications').catch(() => ({ LocalNotifications: null }));
+    // Only available on native Capacitor builds — skip silently on web/PWA
+    let LocalNotifications = null;
+    try {
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isNativePlatform()) return;
+      const mod = await import('@capacitor/local-notifications');
+      LocalNotifications = mod.LocalNotifications;
+    } catch { return; }
     if (!LocalNotifications) return;
 
     const perm = await LocalNotifications.requestPermissions();
@@ -74,7 +81,13 @@ async function scheduleCreditorReminders() {
 
 async function cancelCreditorReminders() {
   try {
-    const { LocalNotifications } = await import('@capacitor/local-notifications').catch(() => ({ LocalNotifications: null }));
+    let LocalNotifications = null;
+    try {
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isNativePlatform()) return;
+      const mod = await import('@capacitor/local-notifications');
+      LocalNotifications = mod.LocalNotifications;
+    } catch { return; }
     if (!LocalNotifications) return;
     const pending = await LocalNotifications.getPending();
     const creditorNotifs = (pending.notifications || []).filter(n => n.id >= 9001 && n.id <= 9099);
