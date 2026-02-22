@@ -5,11 +5,11 @@ import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './Suppliers.css';
 
-// ── Shared 30-minute edit window helper ──────────────────────────────────────
-function isWithin30Mins(entry) {
+// ── Shared 2-hour edit window helper ──────────────────────────────────────
+function isWithin2Hours(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
+  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
 }
 
 // ── Purchase Edit Modal ────────────────────────────────────────────────────
@@ -819,14 +819,7 @@ Kadaele Services`;
                   })}
                   summary={[{label:'Total Purchases', value: fmt(historyRows.filter(r=>r.kind==='sale').reduce((s,r)=>s+(r.sale?.total||0),0))}]}
                 />
-                <div className="d-history-actions">
-                  <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
-                    <MessageSquare size={16} /> Notify
-                  </button>
-                  <button className="d-deposit-btn" onClick={() => setShowPaymentModal(true)}>
-                    <DollarSign size={16} /> Deposit
-                  </button>
-                </div>
+                <div className="d-history-actions" style={{justifyContent:'center'}}>
 
                 <div className="d-history-scroll">
                   <table className="d-history-table">
@@ -892,7 +885,7 @@ Kadaele Services`;
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{sale.invoiceRef || sale.notes || '—'}</td>}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin30Mins(sale) ? (
+                                  {isWithin2Hours(sale) ? (
                                     <button onClick={() => setEditPurchase(sale)}
                                       style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
                                       title="Edit purchase"><Edit2 size={15} /></button>
