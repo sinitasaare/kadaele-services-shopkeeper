@@ -83,35 +83,35 @@ cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml << 'EOF'
 </adaptive-icon>
 EOF
 
-echo "Writing background color (purple #667eea)..."
+echo "Writing background color (purple #ffffff)..."
 COLORS_FILE="android/app/src/main/res/values/colors.xml"
 if [ -f "$COLORS_FILE" ]; then
     if grep -q "ic_launcher_background" "$COLORS_FILE"; then
-        sed -i 's|<color name="ic_launcher_background">.*</color>|<color name="ic_launcher_background">#667eea</color>|g' "$COLORS_FILE"
+        sed -i 's|<color name="ic_launcher_background">.*</color>|<color name="ic_launcher_background">#ffffff</color>|g' "$COLORS_FILE"
     else
-        sed -i 's|</resources>|    <color name="ic_launcher_background">#667eea</color>\n</resources>|' "$COLORS_FILE"
+        sed -i 's|</resources>|    <color name="ic_launcher_background">#ffffff</color>\n</resources>|' "$COLORS_FILE"
     fi
 else
-    printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#667eea</color>\n    <color name="splash_background">#667eea</color>\n</resources>\n' > "$COLORS_FILE"
+    printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#ffffff</color>\n    <color name="splash_background">#ffffff</color>\n</resources>\n' > "$COLORS_FILE"
 fi
 
 # Add splash_background colour if not already present
 if ! grep -q "splash_background" "$COLORS_FILE"; then
-    sed -i 's|</resources>|    <color name="splash_background">#667eea</color>\n</resources>|' "$COLORS_FILE"
+    sed -i 's|</resources>|    <color name="splash_background">#ffffff</color>\n</resources>|' "$COLORS_FILE"
 fi
 
 echo "Generating splash screens (PNG fallback for older Android)..."
-convert -size 320x480   canvas:'#667eea' "$SOURCE_ICON" -resize 200x200 -gravity center -composite android/app/src/main/res/drawable-port-mdpi/splash.png
-convert -size 480x800   canvas:'#667eea' "$SOURCE_ICON" -resize 300x300 -gravity center -composite android/app/src/main/res/drawable-port-hdpi/splash.png
-convert -size 720x1280  canvas:'#667eea' "$SOURCE_ICON" -resize 450x450 -gravity center -composite android/app/src/main/res/drawable-port-xhdpi/splash.png
-convert -size 960x1600  canvas:'#667eea' "$SOURCE_ICON" -resize 600x600 -gravity center -composite android/app/src/main/res/drawable-port-xxhdpi/splash.png
-convert -size 1280x1920 canvas:'#667eea' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable-port-xxxhdpi/splash.png
-convert -size 480x320   canvas:'#667eea' "$SOURCE_ICON" -resize 200x200 -gravity center -composite android/app/src/main/res/drawable-land-mdpi/splash.png
-convert -size 800x480   canvas:'#667eea' "$SOURCE_ICON" -resize 300x300 -gravity center -composite android/app/src/main/res/drawable-land-hdpi/splash.png
-convert -size 1280x720  canvas:'#667eea' "$SOURCE_ICON" -resize 450x450 -gravity center -composite android/app/src/main/res/drawable-land-xhdpi/splash.png
-convert -size 1600x960  canvas:'#667eea' "$SOURCE_ICON" -resize 600x600 -gravity center -composite android/app/src/main/res/drawable-land-xxhdpi/splash.png
-convert -size 1920x1280 canvas:'#667eea' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable-land-xxxhdpi/splash.png
-convert -size 2732x2732 canvas:'#667eea' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable/splash.png
+convert -size 320x480   canvas:'#ffffff' "$SOURCE_ICON" -resize 200x200 -gravity center -composite android/app/src/main/res/drawable-port-mdpi/splash.png
+convert -size 480x800   canvas:'#ffffff' "$SOURCE_ICON" -resize 300x300 -gravity center -composite android/app/src/main/res/drawable-port-hdpi/splash.png
+convert -size 720x1280  canvas:'#ffffff' "$SOURCE_ICON" -resize 450x450 -gravity center -composite android/app/src/main/res/drawable-port-xhdpi/splash.png
+convert -size 960x1600  canvas:'#ffffff' "$SOURCE_ICON" -resize 600x600 -gravity center -composite android/app/src/main/res/drawable-port-xxhdpi/splash.png
+convert -size 1280x1920 canvas:'#ffffff' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable-port-xxxhdpi/splash.png
+convert -size 480x320   canvas:'#ffffff' "$SOURCE_ICON" -resize 200x200 -gravity center -composite android/app/src/main/res/drawable-land-mdpi/splash.png
+convert -size 800x480   canvas:'#ffffff' "$SOURCE_ICON" -resize 300x300 -gravity center -composite android/app/src/main/res/drawable-land-hdpi/splash.png
+convert -size 1280x720  canvas:'#ffffff' "$SOURCE_ICON" -resize 450x450 -gravity center -composite android/app/src/main/res/drawable-land-xhdpi/splash.png
+convert -size 1600x960  canvas:'#ffffff' "$SOURCE_ICON" -resize 600x600 -gravity center -composite android/app/src/main/res/drawable-land-xxhdpi/splash.png
+convert -size 1920x1280 canvas:'#ffffff' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable-land-xxxhdpi/splash.png
+convert -size 2732x2732 canvas:'#ffffff' "$SOURCE_ICON" -resize 800x800 -gravity center -composite android/app/src/main/res/drawable/splash.png
 
 echo "Writing XML splash drawable (Android 12+ SplashScreen API)..."
 # Android 12+ uses a SplashScreen API that reads a layer-list XML drawable.
@@ -125,9 +125,9 @@ cat > android/app/src/main/res/drawable-v31/splash.xml << 'EOF'
      This layer-list is used by older Capacitor SplashScreen plugin versions
      as a fallback for the splash window background. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Full-screen purple background -->
+    <!-- Full-screen white background -->
     <item>
-        <color android:color="#667eea"/>
+        <color android:color="#ffffff"/>
     </item>
     <!-- Centred app icon, scaled to ~38% of screen (matches Android guidelines) -->
     <item
@@ -147,7 +147,7 @@ cat > android/app/src/main/res/values-v31/styles.xml << 'EOF'
          Without this, Android 12+ shows only a white screen until
          the Capacitor WebView finishes loading. -->
     <style name="AppTheme.SplashScreen" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#667eea</item>
+        <item name="windowSplashScreenBackground">#ffffff</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="windowSplashScreenAnimationDuration">500</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
@@ -160,6 +160,6 @@ echo ""
 echo "Icon strategy:"
 echo "  PNG icons  -> ic_launcher + ic_launcher_round (pre-Android 8)"
 echo "  Foreground -> ic_launcher_foreground.png = our logo (Android 8+)"
-echo "  Background -> #667eea purple (Android 8+)"
+echo "  Background -> #ffffff purple (Android 8+)"
 echo "  XML files  -> mipmap-anydpi-v26 points to our foreground + background"
 echo ""
