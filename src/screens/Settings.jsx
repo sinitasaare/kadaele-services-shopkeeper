@@ -1,950 +1,1042 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Globe, Moon, Sun, Bell,
-  ClipboardList, Wallet, X, Check, Plus, Trash2,
-} from 'lucide-react';
+import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import UnrecordedSalesPage from './UnrecordedSalesPage';
-import './Settings.css';
+import PdfTableButton from '../components/PdfTableButton';
+import './Suppliers.css';
 
-// ─────────────────────────────────────────────────────────────
-// Creditor Reminder Scheduler
-// Fires at 08:30, 12:00 and 16:30 if the notification is enabled.
-// ─────────────────────────────────────────────────────────────
-async function scheduleCreditorReminders() {
-  try {
-    const creditors = await dataService.getCreditors ? dataService.getCreditors() : Promise.resolve([]);
-    const list = await creditors;
-    const owing = (list || []).filter(c => (c.balance || 0) > 0);
-    if (owing.length === 0) return;
-
-    // Only available on native Capacitor builds — skip silently on web/PWA
-    let LocalNotifications = null;
-    try {
-      const { Capacitor } = await import('@capacitor/core');
-      if (!Capacitor.isNativePlatform()) return;
-      const mod = await import('@capacitor/local-notifications');
-      LocalNotifications = mod.LocalNotifications;
-    } catch { return; }
-    if (!LocalNotifications) return;
-
-    const perm = await LocalNotifications.requestPermissions();
-    if (perm.display !== 'granted') return;
-
-    // Cancel previous creditor reminders (ids 9001-9099)
-    const pending = await LocalNotifications.getPending();
-    const creditorIds = (pending.notifications || []).filter(n => n.id >= 9001 && n.id <= 9099);
-    if (creditorIds.length) await LocalNotifications.cancel({ notifications: creditorIds });
-
-    const now = new Date();
-    const fireHours = [8.5, 12, 16.5]; // 08:30, 12:00, 16:30
-    const notifications = [];
-    let notifId = 9001;
-
-    for (const creditor of owing.slice(0, 10)) { // max 10 creditors
-      const name = creditor.name || creditor.customerName || 'Creditor';
-      const balance = creditor.balance || creditor.totalDue || 0;
-      const purchaseDate = creditor.lastPurchase ? new Date(creditor.lastPurchase) : null;
-      let dateLabel = '';
-      if (purchaseDate) {
-        const diffDays = Math.floor((now - purchaseDate) / 86400000);
-        dateLabel = diffDays <= 1 ? 'yesterday' : `on ${purchaseDate.toLocaleDateString()}`;
-      }
-      const body = `Kadaele Services still owes ${name} the amount of $${Number(balance).toFixed(2)} for purchasing cargoes on credit${dateLabel ? ' ' + dateLabel : ''}.`;
-
-      for (const h of fireHours) {
-        const fireAt = new Date(now);
-        const hrs = Math.floor(h);
-        const mins = (h - hrs) * 60;
-        fireAt.setHours(hrs, mins, 0, 0);
-        if (fireAt <= now) fireAt.setDate(fireAt.getDate() + 1); // push to tomorrow if past
-
-        notifications.push({
-          id: notifId++,
-          title: '💳 Creditor Payment Reminder',
-          body,
-          schedule: { at: fireAt, repeats: true, every: 'day' },
-          sound: 'default',
-          channelId: 'creditor_reminders',
-        });
-      }
-    }
-
-    if (notifications.length) {
-      await LocalNotifications.schedule({ notifications });
-    }
-  } catch (e) {
-    console.error('Creditor reminder scheduling error:', e);
-  }
+// ── Shared 2-hour edit window helper ──────────────────────────────────────
+function isWithin2Hours(entry) {
+  const ts = entry.createdAt || entry.date || entry.timestamp;
+  if (!ts) return false;
+  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
 }
 
-async function cancelCreditorReminders() {
-  try {
-    let LocalNotifications = null;
+// ── Purchase Edit Modal ────────────────────────────────────────────────────
+function PurchaseEditModal({ purchase, onSave, onClose, onDeleted, fmt }) {
+  const [supplierName, setSupplierName] = useState(purchase.supplierName || '');
+  const [notes, setNotes] = useState(purchase.notes || '');
+  const [invoiceRef, setInvoiceRef] = useState(purchase.invoiceRef || '');
+  const [rows, setRows] = useState((purchase.items || []).map((it, i) => ({ id: i+1, ...it })));
+  const nextId = React.useRef((purchase.items||[]).length + 1);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
+
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const { Capacitor } = await import('@capacitor/core');
-      if (!Capacitor.isNativePlatform()) return;
-      const mod = await import('@capacitor/local-notifications');
-      LocalNotifications = mod.LocalNotifications;
-    } catch { return; }
-    if (!LocalNotifications) return;
-    const pending = await LocalNotifications.getPending();
-    const creditorNotifs = (pending.notifications || []).filter(n => n.id >= 9001 && n.id <= 9099);
-    if (creditorNotifs.length) await LocalNotifications.cancel({ notifications: creditorNotifs });
-  } catch (e) {
-    console.error('Cancel creditor reminders error:', e);
-  }
+      const items = rows.filter(r => r.description?.trim()).map(r => ({
+        qty: parseFloat(r.qty)||0, description: r.description?.trim()||'',
+        costPrice: parseFloat(r.costPrice)||0, packSize: r.packSize||'',
+        subtotal: (parseFloat(r.qty)||0)*(parseFloat(r.costPrice)||0),
+      }));
+      await dataService.updatePurchase(purchase.id, {
+        supplierName: supplierName.trim(), notes: notes.trim(),
+        invoiceRef: invoiceRef.trim(), items, total: itemTotal,
+      });
+      onSave();
+    } catch (e) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this purchase record? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await dataService.deletePurchase(purchase.id);
+      onDeleted();
+    } catch (e) { alert(e.message); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
+      <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
+        <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Purchase Entry</h3>
+
+        <div style={{ marginBottom:'12px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Supplier</label>
+          <input value={supplierName} onChange={e => setSupplierName(e.target.value)}
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+        </div>
+
+        <div style={{ marginBottom:'12px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'280px' }}>
+              <thead>
+                <tr style={{ background:'#f3f4f6' }}>
+                  <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'52px' }}>Qty</th>
+                  <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Description</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Cost</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.id}>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input type="number" value={row.qty||''} onChange={e => updateRow(row.id,'qty',e.target.value)} placeholder="0"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', textAlign:'center', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input value={row.description||''} onChange={e => updateRow(row.id,'description',e.target.value)} placeholder="Description"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input type="number" value={row.costPrice||''} onChange={e => updateRow(row.id,'costPrice',e.target.value)} placeholder="0.00"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', textAlign:'right', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px', textAlign:'right', fontSize:'13px', fontWeight:500 }}>
+                      {fmt((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ textAlign:'right', fontWeight:700, fontSize:'14px', color:'#667eea', marginTop:'8px' }}>Total: {fmt(itemTotal)}</div>
+        </div>
+
+        <div style={{ marginBottom:'12px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Invoice Ref</label>
+          <input value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} placeholder="Invoice ref…"
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+        </div>
+
+        <div style={{ marginBottom:'16px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Notes</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes…"
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
+              {saving ? 'Saving…' : 'Update Record'}
+            </button>
+          </div>
+          <button onClick={handleDelete} disabled={deleting} style={{ width:'100%', padding:'10px', borderRadius:'8px', border:'none', background:'#fee2e2', color:'#dc2626', cursor:'pointer', fontWeight:700 }}>
+            {deleting ? 'Deleting…' : 'Delete Record'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Translations
-// ─────────────────────────────────────────────────────────────
-const T = {
-  en: {
-    title: 'Settings',
-    language: 'Language',
-    appearance: 'Appearance & Display',
-    darkMode: 'Dark Mode',
-    lightMode: 'Light Mode',
-    notifications: 'Notification Preferences',
-    notifDebtReminder: 'Debt reminder',
-    notifDebtReminderDesc: 'Remind debtor a day before due date of debt repayment',
-    notifLowStock: 'Low stock alert',
-    notifLowStockDesc: 'Notify when a product reaches 5 items in stock',
-    notifDailySales: 'Daily sales milestone',
-    notifDailySalesDesc: 'Notify when daily sales reaches an increment of $500',
-    notifCreditorOwed: 'Creditor payment reminder',
-    notifCreditorOwedDesc: 'Ring alarm at 8:30 AM, 12:00 PM and 4:30 PM reminding you of outstanding amounts owed to creditors',
-    forgottenEntries: 'Enter Forgotten Records',
-    forgottenEntriesNote: 'Records before the business uses this system, if need be, can be entered here.',
-    forgottenSale: 'Unrecorded Sales',
-    forgottenSaleDesc: 'Record past sales (cash or credit) with a manual date',
-    forgottenCash: 'Unrecorded Cash Entry',
-    forgottenCashDesc: 'Record a past cash in/out with a manual date',
-    cancel: 'Cancel',
-    saleDate: 'Sale Date',
-    cashDate: 'Entry Date',
-    addItem: 'Add Item',
-    items: 'Items',
-    total: 'Total',
-    paymentType: 'Payment Type',
-    cash: 'Cash',
-    credit: 'Credit',
-    description: 'Description',
-    amount: 'Amount',
-    type: 'Type',
-    cashIn: 'Cash In',
-    cashOut: 'Cash Out',
-    recordSale: 'Record Sale',
-    recordCredit: 'Record Credit',
-    recordCash: 'Record Entry',
-    qty: 'Qty',
-    searchItem: 'Search item…',
-    debtorName: 'Debtor Name',
-    repayDate: 'Repayment Date',
-    selectDebtor: 'Select debtor…',
-    systemStartHint: 'Only dates before this system was first used are selectable.',
-  },
-};
+function Suppliers() {
+  const { fmt } = useCurrency();
+  const [suppliers, setSuppliers]           = useState([]);
+  const [searchTerm, setSearchTerm]     = useState('');
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [supplierSales, setSupplierSales]   = useState([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [editPurchase, setEditPurchase] = useState(null);
+  const [paymentPhoto, setPaymentPhoto] = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const [newSupplier, setNewSupplier]       = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  const [isEditMode, setIsEditMode]     = useState(false);
+  const [editedSupplier, setEditedSupplier] = useState(null);
+  const [activeTab, setActiveTab]       = useState('details');
+  const [sortOrder, setSortOrder]       = useState(null);
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef                     = useRef(null);
+  const historyRef                      = useRef(null);  // ref for debt history section → PDF
+  const [pdfGenerating, setPdfGenerating] = useState(false);
 
-const LANG_NAMES = { en: 'English', ki: 'Kiribati' };
-const KIRIBATI_COMING_SOON = 'This language setting is still under development and will be available online soon.';
+  useEffect(() => { loadSuppliers(); }, []);
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-const dateStr = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-
-const yesterdayStr = () => {
-  const d = new Date(); d.setDate(d.getDate() - 1); return dateStr(d);
-};
-
-const getSystemStartDate = async () => {
-  const stored = localStorage.getItem('ks_system_start_date');
-  if (stored) return stored;
-  try {
-    const [sales, entries] = await Promise.all([
-      dataService.getSales(),
-      dataService.getCashEntries(),
-    ]);
-    const allDates = [
-      ...(sales || []).map(s => s.date || s.createdAt),
-      ...(entries || []).map(e => e.date || e.createdAt),
-    ].filter(Boolean).map(d => new Date(d).getTime()).filter(t => !isNaN(t));
-    if (allDates.length === 0) return yesterdayStr();
-    const earliest = new Date(Math.min(...allDates));
-    const result = dateStr(earliest);
-    localStorage.setItem('ks_system_start_date', result);
-    return result;
-  } catch { return yesterdayStr(); }
-};
-
-// ─────────────────────────────────────────────────────────────
-// Dropup component — opens ABOVE the trigger button
-// ─────────────────────────────────────────────────────────────
-function Dropup({ options, value, onSelect, placeholder = 'Please select description' }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
+  // Close sort menu when clicking outside
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handler = (e) => { if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) setShowSortMenu(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const selected = options.find(o => o.key === value);
-
-  return (
-    <div className="st-dropup-wrapper" ref={ref}>
-      {open && (
-        <div className="st-dropup-list">
-          <div className="st-dropup-placeholder">{placeholder}</div>
-          {options.map(opt => (
-            <div
-              key={opt.key}
-              className={`st-dropup-item${value === opt.key ? ' st-dropup-selected' : ''}`}
-              onMouseDown={() => { onSelect(opt.key); setOpen(false); }}
-            >
-              {opt.label}
-            </div>
-          ))}
-        </div>
-      )}
-      <button
-        type="button"
-        className={`st-dropup-trigger${open ? ' st-dropup-open' : ''}${value ? ' st-dropup-has-value' : ''}`}
-        onClick={() => setOpen(o => !o)}
-      >
-        <span className={value ? '' : 'st-dropup-placeholder-text'}>
-          {selected ? selected.label : placeholder}
-        </span>
-        <span className="st-dropup-arrow">{open ? '▲' : '▼'}</span>
-      </button>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Purchase Cargo child modal — full-screen catalogue
-// ─────────────────────────────────────────────────────────────
-function PurchaseCargoModal({ onConfirm, onCancel }) {
-  const [rows, setRows] = useState([{ id: 1, qty: '', description: '', costPrice: '' }]);
-  const nextId = useRef(2);
-
-  const addRow = () => {
-    setRows(prev => [...prev, { id: nextId.current++, qty: '', description: '', costPrice: '' }]);
-  };
-  const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
-  const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
-
-  const total = rows.reduce((sum, r) => {
-    const q = parseFloat(r.qty) || 0;
-    const c = parseFloat(r.costPrice) || 0;
-    return sum + q * c;
-  }, 0);
-
-  const handleConfirm = () => {
-    const valid = rows.filter(r => r.description.trim() && parseFloat(r.qty) > 0 && parseFloat(r.costPrice) >= 0);
-    if (valid.length === 0) { alert('Please add at least one item with description and quantity.'); return; }
-    onConfirm(valid.map(r => ({
-      qty: parseFloat(r.qty),
-      description: r.description.trim(),
-      costPrice: parseFloat(r.costPrice) || 0,
-      subtotal: (parseFloat(r.qty) || 0) * (parseFloat(r.costPrice) || 0),
-    })), total);
+  const loadSuppliers = async () => {
+    try {
+      setLoading(true);
+      const data = await dataService.getSuppliers();
+      setSuppliers(data || []);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
+  // ── Smart search ──────────────────────────────────────────────────────────
+  const smartSearch = (items, term) => {
+    if (!term.trim()) return items;
+    const t = term.toLowerCase();
+    const firstMatches = [], secondMatches = [];
+    for (const d of items) {
+      const words = (d.name || d.customerName || '').toLowerCase().split(/\s+/);
+      if (words[0] && words[0].startsWith(t)) firstMatches.push(d);
+      else if (words.length > 1 && words[1] && words[1].startsWith(t)) secondMatches.push(d);
+    }
+    const sortBy2nd = (arr, wi) => [...arr].sort((a, b) => {
+      const wa = ((a.name||a.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
+      const wb = ((b.name||b.customerName||'').toLowerCase().split(/\s+/)[wi]||'');
+      return (wa[1]||'').localeCompare(wb[1]||'');
+    });
+    return [...sortBy2nd(firstMatches, 0), ...sortBy2nd(secondMatches, 1)];
+  };
+
+  // ── Sort ──────────────────────────────────────────────────────────────────
+  const SORT_OPTIONS = [
+    { key: 'balance_desc', label: 'Balance: High to Low' },
+    { key: 'balance_asc',  label: 'Balance: Low to High' },
+    { key: 'modified_desc', label: 'Recently Modified' },
+    { key: 'modified_asc',  label: 'Oldest Modified' },
+    { key: 'due_asc',  label: 'Due Date: Soonest First' },
+    { key: 'due_desc', label: 'Due Date: Latest First' },
+  ];
+
+  const applySortAndSearch = (items) => {
+    let result = smartSearch(items, searchTerm);
+    if (!sortOrder) return result;
+    return [...result].sort((a, b) => {
+      const balA = a.balance || a.totalDue || 0;
+      const balB = b.balance || b.totalDue || 0;
+      const modA = new Date(a.updatedAt || a.lastSale || a.createdAt || 0);
+      const modB = new Date(b.updatedAt || b.lastSale || b.createdAt || 0);
+      const dueA = a.repaymentDate ? new Date(a.repaymentDate) : new Date('9999-12-31');
+      const dueB = b.repaymentDate ? new Date(b.repaymentDate) : new Date('9999-12-31');
+      switch (sortOrder) {
+        case 'balance_desc': return balB - balA;
+        case 'balance_asc':  return balA - balB;
+        case 'modified_desc': return modB - modA;
+        case 'modified_asc':  return modA - modB;
+        case 'due_asc':  return dueA - dueB;
+        case 'due_desc': return dueB - dueA;
+        default: return 0;
+      }
+    });
+  };
+
+  const filteredSuppliers = applySortAndSearch(suppliers);
+
+  const handleSupplierClick = async (supplier) => {
+    setSelectedSupplier(supplier);
+    setEditedSupplier({...supplier});
+    setIsEditMode(false);
+    setActiveTab('details');
+    try {
+      const allSales = await dataService.getSales();
+      setSupplierSales(allSales.filter(s => supplier.saleIds?.includes(s.id) || supplier.purchaseIds?.includes(s.id)));
+    } catch (e) { setSupplierSales([]); }
+  };
+
+  const closeSupplierModal = () => {
+    setSelectedSupplier(null); setSupplierSales([]);
+    setIsEditMode(false); setEditedSupplier(null); setActiveTab('details');
+  };
+
+  const openAddSupplierModal = () => {
+    setShowAddSupplierModal(true);
+    setNewSupplier({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  };
+  const closeAddSupplierModal = () => {
+    setShowAddSupplierModal(false);
+    setNewSupplier({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  };
+
+  const handleAddSupplier = async (e) => {
+    e.preventDefault();
+    if (!newSupplier.fullName || !newSupplier.phone) { alert('Full Name and Phone are required'); return; }
+    if (!newSupplier.whatsapp && !newSupplier.email) { alert('Please provide at least WhatsApp or Email'); return; }
+    if (newSupplier.email && !newSupplier.email.includes('@')) { alert('Email address must contain "@"'); return; }
+    if (!newSupplier.address) { alert('Please provide an address'); return; }
+    try {
+      const supplierData = {
+        id: dataService.generateId(), customerName: newSupplier.fullName, name: newSupplier.fullName,
+        phone: newSupplier.phone, customerPhone: newSupplier.phone, gender: '',
+        whatsapp: newSupplier.whatsapp, email: newSupplier.email, address: newSupplier.address,
+        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
+        createdAt: new Date().toISOString(), lastSale: null
+      };
+      const current = await dataService.getSuppliers();
+      current.push(supplierData);
+      await dataService.setSuppliers(current);
+      alert('Supplier added successfully!');
+      closeAddSupplierModal();
+      await loadSuppliers();
+    } catch (e) { console.error(e); alert('Failed to add supplier.'); }
+  };
+
+  const enableEditMode  = () => setIsEditMode(true);
+  const cancelEditMode  = () => { setIsEditMode(false); setEditedSupplier({...selectedSupplier}); };
+
+  const saveSupplierEdits = async () => {
+    if (!editedSupplier.name || !editedSupplier.gender || !editedSupplier.phone) { alert('Full Name, Gender and Phone are required'); return; }
+    if (!editedSupplier.whatsapp && !editedSupplier.email) { alert('Please provide at least WhatsApp or Email'); return; }
+    if (editedSupplier.email && !editedSupplier.email.includes('@')) { alert('Email address must contain "@"'); return; }
+    if (!editedSupplier.address) { alert('Please provide an address'); return; }
+    try {
+      const current = await dataService.getSuppliers();
+      const idx = current.findIndex(d => d.id === editedSupplier.id);
+      if (idx !== -1) {
+        current[idx] = { ...current[idx], name: editedSupplier.name, customerName: editedSupplier.name,
+          phone: editedSupplier.phone, customerPhone: editedSupplier.phone, gender: editedSupplier.gender,
+          whatsapp: editedSupplier.whatsapp, email: editedSupplier.email, address: editedSupplier.address };
+        await dataService.setSuppliers(current);
+        setSelectedSupplier(current[idx]); setIsEditMode(false);
+        await loadSuppliers(); alert('Supplier updated!');
+      }
+    } catch (e) { console.error(e); alert('Failed to update supplier.'); }
+  };
+
+  const [deletingSupplier, setDeletingSupplier] = useState(false);
+  const deleteSupplier = async () => {
+    if (!window.confirm(`Delete ${selectedSupplier.name || selectedSupplier.customerName}? This cannot be undone.`)) return;
+    setDeletingSupplier(true);
+    try {
+      const current = await dataService.getSuppliers();
+      const updated = current.filter(s => s.id !== selectedSupplier.id);
+      await dataService.setSuppliers(updated);
+      closeSupplierModal();
+      await loadSuppliers();
+    } catch (e) { console.error(e); alert('Failed to delete supplier.'); }
+    finally { setDeletingSupplier(false); }
+  };
+
+  // ── Build smart notification message based on due date status ──────────────
+  const buildNotifyMessage = () => {
+    const supplier  = selectedSupplier;
+    const name    = supplier.name || supplier.customerName || 'Valued Customer';
+    const gender  = supplier.gender || '';
+    const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+    const salutation = prefix ? `${prefix} ${name}` : name;
+    const balance = historyRows.length > 0
+      ? historyRows[0].runningBalance
+      : (supplier.balance || supplier.totalDue || 0);
+    const balanceStr = `${fmt(Math.abs(balance))}`;
+
+    const repaymentDate = supplier.repaymentDate || '';
+    const today  = new Date(); today.setHours(0,0,0,0);
+    const dueDate = repaymentDate ? new Date(repaymentDate) : null;
+    if (dueDate) dueDate.setHours(0,0,0,0);
+
+    const daysDiff = dueDate ? Math.round((dueDate - today) / (1000 * 60 * 60 * 24)) : null;
+
+    // Format due date as readable string e.g. "15 March 2026"
+    const dueDateStr = dueDate
+      ? dueDate.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
+      : 'the agreed date';
+
+    let subject, body;
+
+    if (daysDiff === null || daysDiff > 0) {
+      // ── Due date is still to come ──────────────────────────────────────────
+      let duePhrasing;
+      if (daysDiff === 1) {
+        duePhrasing = 'tomorrow is the due date of your debt';
+      } else if (daysDiff !== null) {
+        duePhrasing = `you have ${daysDiff} day${daysDiff !== 1 ? 's' : ''} before your debt is due`;
+      } else {
+        duePhrasing = `the due date is ${dueDateStr}`;
+      }
+      const dueDateDisplay = daysDiff === 1 ? 'tomorrow' : dueDateStr;
+
+      subject = 'Friendly Reminder: Outstanding Debt Due ' + (daysDiff === 1 ? 'Tomorrow' : `on ${dueDateStr}`);
+      body =
+`Dear ${salutation},
+
+This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+
+Please find attached a PDF of the statement with full details of your debt for your reference.
+
+We kindly remind you that ${duePhrasing}, as you had promised to pay by. We appreciate if you could settle it not later than ${dueDateDisplay}.
+
+Thank you for your attention and prompt payment.
+
+Best regards,
+Kadaele Services`;
+
+    } else {
+      // ── Due date has passed ────────────────────────────────────────────────
+      const daysOverdue = Math.abs(daysDiff);
+      subject = `Polite Reminder: Overdue Debt of ${balanceStr}`;
+      body =
+`Dear ${salutation},
+
+This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+
+Please find attached a PDF of the statement with full details of your debt for your reference.
+
+We kindly remind you that the due date was ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} ago, as you had promised to pay by.
+
+We appreciate if you could settle it as soon as possible. Thank you for your attention and prompt payment.
+
+Best regards,
+Kadaele Services`;
+    }
+
+    return { subject, body };
+  };
+
+  // ── Generate A4 PDF of the debt statement ────────────────────────────────
+  // Uses jsPDF (loaded from CDN via index.html) + html2canvas.
+  // The PDF is A4 portrait, with the business logo at the top, supplier info,
+  // then the full debt history table rendered at full width.
+  const generateA4PDF = async () => {
+    const el = historyRef.current;
+    if (!el) return null;
+
+    try {
+      // 1. Capture the history section as a high-res canvas
+      const canvas = await html2canvas(el, {
+        backgroundColor: '#ffffff',
+        scale: 3,          // high DPI so text is sharp in the PDF
+        useCORS: true,
+        logging: false,
+        // Expand to full scrollWidth so the wide table is not clipped
+        windowWidth: el.scrollWidth,
+        width: el.scrollWidth,
+      });
+
+      const { jsPDF } = window.jspdf;
+      if (!jsPDF) throw new Error('jsPDF not loaded');
+
+      // A4 dimensions in mm
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 12;
+      const contentW = pageW - margin * 2;
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // ── Header: purple bar with business name ──────────────────────────
+      pdf.setFillColor(102, 126, 234);          // brand purple
+      pdf.rect(0, 0, pageW, 22, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Kadaele Services', margin, 10);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Debt Statement', margin, 16);
+
+      // Date generated (right side of header)
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      pdf.setFontSize(8);
+      pdf.text(`Generated: ${today}`, pageW - margin, 14, { align: 'right' });
+
+      // ── Supplier info block ──────────────────────────────────────────────
+      let y = 30;
+      const supplier = selectedSupplier;
+      const supplierName = supplier.name || supplier.customerName || 'N/A';
+      const gender  = supplier.gender || '';
+      const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+      const balance = historyRows.length > 0
+        ? historyRows[0].runningBalance
+        : (supplier.balance || supplier.totalDue || 0);
+
+      pdf.setTextColor(30, 30, 30);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${prefix ? prefix + ' ' : ''}${supplierName}`, margin, y);
+
+      y += 6;
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(80, 80, 80);
+      if (supplier.phone || supplier.customerPhone) pdf.text(`Phone: ${supplier.phone || supplier.customerPhone}`, margin, y); y += 5;
+      if (supplier.whatsapp) { pdf.text(`WhatsApp: ${supplier.whatsapp}`, margin, y); y += 5; }
+      if (supplier.email)    { pdf.text(`Email: ${supplier.email}`, margin, y); y += 5; }
+      if (supplier.repaymentDate) { pdf.text(`Due Date: ${supplier.repaymentDate}`, margin, y); y += 5; }
+
+      // Outstanding balance box
+      pdf.setFillColor(balance > 0 ? 255 : 220, balance > 0 ? 235 : 252, balance > 0 ? 220 : 231);
+      pdf.roundedRect(pageW - margin - 55, 28, 55, 18, 2, 2, 'F');
+      pdf.setTextColor(balance > 0 ? 22 : 3, balance > 0 ? 101 : 105, balance > 0 ? 52 : 81);
+      pdf.setFontSize(7);
+      pdf.text('OUTSTANDING BALANCE', pageW - margin - 27.5, 34, { align: 'center' });
+      pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${fmt(Math.abs(balance))}`, pageW - margin - 27.5, 42, { align: 'center' });
+
+      // Divider
+      y = Math.max(y, 50) + 4;
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(margin, y, pageW - margin, y);
+      y += 5;
+
+      // ── Debt History table (rendered via html2canvas → image) ─────────
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(50, 50, 50);
+      pdf.text('Debt History', margin, y);
+      y += 4;
+
+      // Convert canvas to PNG data URL and embed as image
+      const imgData  = canvas.toDataURL('image/png');
+      const imgW     = contentW;
+      const imgH     = (canvas.height / canvas.width) * imgW;
+
+      // If the table is taller than what fits on one page, scale it
+      const maxH = pageH - y - margin;
+      const finalH = imgH > maxH ? maxH : imgH;
+
+      pdf.addImage(imgData, 'PNG', margin, y, imgW, finalH);
+
+      // ── Footer ────────────────────────────────────────────────────────
+      const footerY = pageH - 8;
+      pdf.setFontSize(7);
+      pdf.setTextColor(150, 150, 150);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, footerY, { align: 'center' });
+
+      return pdf;
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      return null;
+    }
+  };
+
+  // ── Save PDF and return a Blob URL or Capacitor URI ───────────────────────
+  const savePDFAndGetURI = async (pdf, supplierName) => {
+    const fileName = `statement_${supplierName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+    const pdfBlob  = pdf.output('blob');
+
+    // On native Android, write to cache directory via Capacitor Filesystem
+    const isNative = window.Capacitor?.isNativePlatform?.();
+    if (isNative) {
+      try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const reader = new FileReader();
+        const base64 = await new Promise((res, rej) => {
+          reader.onload  = () => res(reader.result.split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(pdfBlob);
+        });
+        await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+        const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
+        return { uri, fileName, blob: pdfBlob };
+      } catch (err) {
+        console.error('Capacitor Filesystem error:', err);
+      }
+    }
+
+    // On web: create an object URL so we can trigger a download
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    return { uri: blobUrl, fileName, blob: pdfBlob, isWeb: true };
+  };
+
+  const handleNotify = async (method) => {
+    const supplier = selectedSupplier;
+    const { subject, body } = buildNotifyMessage();
+    const supplierName = supplier.name || supplier.customerName || 'supplier';
+
+    // ── Step 1: Generate A4 PDF ───────────────────────────────────────────
+    setPdfGenerating(true);
+    let pdfInfo = null;
+    try {
+      const pdf = await generateA4PDF();
+      if (pdf) {
+        pdfInfo = await savePDFAndGetURI(pdf, supplierName);
+        // On web, also trigger a download so the user has the PDF to attach manually
+        if (pdfInfo?.isWeb) {
+          const link = document.createElement('a');
+          link.href = pdfInfo.uri;
+          link.download = pdfInfo.fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          // Don't revoke immediately — let the download complete
+          setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
+        }
+      }
+    } catch (err) {
+      console.error('PDF error:', err);
+    } finally {
+      setPdfGenerating(false);
+    }
+
+    // ── Step 2: Open messaging app (with PDF attached if native) ──────────
+    const isNative = window.Capacitor?.isNativePlatform?.();
+
+    if (method === 'whatsapp') {
+      const phone = supplier.whatsapp || supplier.phone || supplier.customerPhone;
+      if (!phone) { alert('No WhatsApp number available'); return; }
+      if (isNative && pdfInfo?.uri) {
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Send to ${supplierName}` });
+          setShowNotifyModal(false);
+          return;
+        } catch (err) { console.error('Share error:', err); }
+      }
+      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(body)}`, '_blank');
+
+    } else if (method === 'email') {
+      if (!supplier.email) { alert('No email available'); return; }
+      if (isNative && pdfInfo?.uri) {
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Email to ${supplierName}` });
+          setShowNotifyModal(false);
+          return;
+        } catch (err) { console.error('Share error:', err); }
+      }
+      window.location.href = `mailto:${supplier.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    } else if (method === 'sms') {
+      const phone = supplier.phone || supplier.customerPhone;
+      if (!phone) { alert('No phone number available'); return; }
+      window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
+    }
+    setShowNotifyModal(false);
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const { Camera } = await import('@capacitor/camera');
+      const { CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const image = await Camera.getPhoto({ quality:90, allowEditing:false, resultType:CameraResultType.DataUrl, source:CameraSource.Camera });
+      setPaymentPhoto(image.dataUrl);
+    } catch (e) { console.error(e); alert('Failed to take photo'); }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
+    try {
+      await dataService.recordPayment(selectedSupplier.id, parseFloat(paymentAmount), [], paymentPhoto || null);
+      alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
+      await loadSuppliers();
+      const updated = (await dataService.getSuppliers()).find(d => d.id === selectedSupplier.id);
+      if (updated) {
+        setSelectedSupplier(updated);
+        // Refresh debt history to show new deposit row
+        const allSales = await dataService.getSales();
+        setSupplierSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
+      }
+      setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null);
+    } catch (e) { console.error(e); alert('Failed to record payment'); }
+  };
+
+  const formatDate = (ts) => {
+    if (!ts) return 'N/A';
+    const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+    return isNaN(d) ? 'Invalid' : d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+  };
+  // formatTime: pass the full sale/deposit object so we can check isUnrecorded
+  const formatTime = (ts, record) => {
+    if (record?.isUnrecorded) return 'UNRECORDED';
+    if (!ts) return 'N/A';
+    const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+    return isNaN(d) ? 'Invalid' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
+  };
+
+  // ── Build merged history rows: interleave sales + deposit rows, then compute
+  //    running balance after each event. Sorted oldest → newest.
+  const buildHistoryRows = () => {
+    if (!selectedSupplier) return [];
+
+    // Sales events
+    const saleEvents = supplierSales.map(sale => ({
+      kind: 'sale',
+      date: new Date(sale.date || sale.timestamp || sale.createdAt || 0),
+      sale,
+    }));
+
+    // Deposit events
+    const depositEvents = (selectedSupplier.deposits || []).map(dep => ({
+      kind: 'deposit',
+      date: new Date(dep.date || 0),
+      deposit: dep,
+    }));
+
+    const all = [...saleEvents, ...depositEvents].sort((a, b) => a.date - b.date);
+
+    // Compute running balance after each event
+    let balance = 0;
+    return all.map(event => {
+      if (event.kind === 'sale') {
+        balance += parseFloat(event.sale.total || event.sale.total_amount || 0);
+      } else {
+        balance -= parseFloat(event.deposit.amount || 0);
+      }
+      return { ...event, runningBalance: balance };
+    }).reverse(); // newest first for display
+  };
+
+  if (loading) return <div className="d-screen"><div className="d-loading">Loading suppliers...</div></div>;
+
+  const historyRows = selectedSupplier ? buildHistoryRows() : [];
+
   return (
-    <div className="st-cargo-overlay">
-      <div className="st-cargo-modal">
-        <div className="st-cargo-header">
-          <h3>Purchase Details</h3>
-          <button className="st-modal-close" onClick={onCancel}><X size={20}/></button>
-        </div>
-        <div className="st-cargo-body">
-          <div className="st-cargo-col-headers">
-            <span>Qty</span>
-            <span>Item Description</span>
-            <span>Cost Price ($)</span>
-            <span>Subtotal</span>
-            <span></span>
-          </div>
-          {rows.map(row => (
-            <div key={row.id} className="st-cargo-row">
-              <input
-                type="number" className="st-cargo-input st-cargo-qty" placeholder="0"
-                value={row.qty} min="0" step="1"
-                onChange={e => updateRow(row.id, 'qty', e.target.value)}
-              />
-              <input
-                type="text" className="st-cargo-input st-cargo-desc" placeholder="Item name…"
-                value={row.description}
-                onChange={e => updateRow(row.id, 'description', e.target.value)}
-              />
-              <input
-                type="number" className="st-cargo-input st-cargo-cost" placeholder="0.00"
-                value={row.costPrice} min="0" step="0.01"
-                onChange={e => updateRow(row.id, 'costPrice', e.target.value)}
-              />
-              <span className="st-cargo-subtotal">
-                ${((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0)).toFixed(2)}
-              </span>
-              {rows.length > 1 && (
-                <button className="st-cargo-remove" onClick={() => removeRow(row.id)}>
-                  <Trash2 size={14}/>
+    <div className="d-screen">
+
+      {/* ── Header ── */}
+      <div className="d-header">
+        <input type="text" className="d-search" placeholder="Search supplier name…"
+          value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <div className="d-sort-wrapper" ref={sortMenuRef}>
+          <button className={`d-sort-btn${sortOrder ? ' d-sort-active' : ''}`} onClick={() => setShowSortMenu(v => !v)} title="Sort">
+            <ArrowUpDown size={16} />
+          </button>
+          {showSortMenu && (
+            <div className="d-sort-menu">
+              {SORT_OPTIONS.map(opt => (
+                <button key={opt.key}
+                  className={`d-sort-option${sortOrder === opt.key ? ' d-sort-option-active' : ''}`}
+                  onClick={() => { setSortOrder(sortOrder === opt.key ? null : opt.key); setShowSortMenu(false); }}>
+                  {opt.label}
+                </button>
+              ))}
+              {sortOrder && (
+                <button className="d-sort-option d-sort-clear" onClick={() => { setSortOrder(null); setShowSortMenu(false); }}>
+                  ✕ Clear Sort
                 </button>
               )}
             </div>
-          ))}
-          <button className="st-cargo-add-row" onClick={addRow}>
-            <Plus size={15}/> Add Next Product
-          </button>
-        </div>
-        <div className="st-cargo-footer">
-          <div className="st-cargo-total">
-            Total Cost: <strong>{fmt(total)}</strong>
-          </div>
-          <div className="st-cargo-actions">
-            <button className="st-btn-cancel" onClick={onCancel}>Cancel</button>
-            <button className="st-btn-save" onClick={handleConfirm}>Confirm Items</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Unrecorded Sales Modal
-// ─────────────────────────────────────────────────────────────
-function ForgottenSaleModal({ t, onClose, onSaved }) {
-  const [goods, setGoods]         = useState([]);
-  const [debtors, setDebtors]     = useState([]);
-  const [saleDate, setSaleDate]   = useState('');
-  const [payType, setPayType]     = useState('cash');
-  const [cart, setCart]           = useState([]);
-  const [qtyInputs, setQtyInputs] = useState({});
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
-  const [debtorId, setDebtorId]   = useState('');
-  const [repayDate, setRepayDate] = useState('');
-  const [saving, setSaving]       = useState(false);
-  const [maxDate]                 = useState('2026-02-22');
-
-  useEffect(() => {
-    dataService.getGoods().then(g => setGoods(g || []));
-    dataService.getDebtors().then(d => setDebtors(d || []));
-  }, []);
-
-  // Repayment date: min = saleDate, max = saleDate + 14 days
-  const repayMin = saleDate || '';
-  const repayMax = (() => {
-    if (!saleDate) return '';
-    const d = new Date(saleDate + 'T12:00:00');
-    d.setDate(d.getDate() + 14);
-    return dateStr(d);
-  })();
-
-  const smartSearch = (term) => {
-    if (!term.trim()) return [];
-    const t2 = term.toLowerCase();
-    return goods.filter(g => {
-      const w = (g.name || '').toLowerCase().split(/\s+/);
-      return w[0]?.startsWith(t2) || (w[1] && w[1].startsWith(t2));
-    }).slice(0, 8);
-  };
-  const searchResults = smartSearch(searchTerm);
-
-  const addToCart = (good) => {
-    setCart(prev => {
-      const ex = prev.find(i => i.id === good.id);
-      if (ex) {
-        const newQty = ex.qty + 1;
-        setQtyInputs(q => ({ ...q, [good.id]: String(newQty) }));
-        return prev.map(i => i.id === good.id ? { ...i, qty: newQty } : i);
-      }
-      setQtyInputs(q => ({ ...q, [good.id]: '1' }));
-      return [...prev, { ...good, qty: 1 }];
-    });
-    setSearchTerm(''); setShowSearch(false);
-  };
-
-  const handleQtyChange = (id, raw) => {
-    setQtyInputs(q => ({ ...q, [id]: raw }));
-    const q = parseInt(raw, 10);
-    if (!isNaN(q) && q >= 1) setCart(prev => prev.map(i => i.id === id ? { ...i, qty: q } : i));
-  };
-
-  const handleQtyBlur = (id) => {
-    const raw = qtyInputs[id];
-    const q = parseInt(raw, 10);
-    if (isNaN(q) || q < 1) {
-      setQtyInputs(inp => ({ ...inp, [id]: '1' }));
-      setCart(prev => prev.map(i => i.id === id ? { ...i, qty: 1 } : i));
-    }
-  };
-
-  const removeItem = (id) => {
-    setCart(prev => prev.filter(i => i.id !== id));
-    setQtyInputs(q => { const n = { ...q }; delete n[id]; return n; });
-  };
-  const total = cart.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
-
-  const handleSave = async () => {
-    if (!saleDate) { alert('Please select a sale date.'); return; }
-    if (cart.length === 0) { alert('Please add at least one item.'); return; }
-    if (payType === 'credit' && !debtorId) { alert('Please select a debtor.'); return; }
-    if (payType === 'credit' && !repayDate) { alert('Please enter a repayment date.'); return; }
-    setSaving(true);
-    try {
-      const debtor = debtors.find(d => d.id === debtorId);
-      const localNoonDate = new Date(saleDate + 'T12:00:00');
-      await dataService.addSale({
-        items: cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.qty, subtotal: i.price * i.qty })),
-        total,
-        paymentType: payType,
-        customerName: debtor?.name || debtor?.customerName || '',
-        customerPhone: debtor?.phone || '',
-        debtorId: payType === 'credit' ? debtorId : null,
-        repaymentDate: payType === 'credit' ? repayDate : '',
-        isDebt: payType === 'credit',
-        date: localNoonDate.toISOString(),
-        isUnrecorded: true,
-      });
-      onSaved();
-    } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div className="st-modal-overlay">
-      <div className="st-modal">
-        <div className="st-modal-header">
-          <h3>{t.forgottenSale}</h3>
-          <button className="st-modal-close" onClick={onClose}><X size={20}/></button>
-        </div>
-        <div className="st-modal-body">
-
-          <div className="st-field">
-            <label>{t.saleDate} *</label>
-            <input type="date" max={maxDate} value={saleDate}
-              onChange={e => { setSaleDate(e.target.value); setRepayDate(''); }} className="st-input" />
-            <span className="st-field-hint">{t.systemStartHint}</span>
-          </div>
-
-          <div className="st-field">
-            <label>{t.paymentType}</label>
-            <div className="st-toggle-row">
-              {['cash','credit'].map(p => (
-                <button key={p} className={`st-toggle-btn${payType===p?' st-active':''}`}
-                  onClick={() => setPayType(p)}>
-                  {p === 'cash' ? t.cash : t.credit}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {payType === 'credit' && (
-            <>
-              <div className="st-field">
-                <label>{t.debtorName} *</label>
-                <select className="st-input" value={debtorId} onChange={e => setDebtorId(e.target.value)}>
-                  <option value="">{t.selectDebtor}</option>
-                  {debtors.map(d => (
-                    <option key={d.id} value={d.id}>{d.name || d.customerName}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="st-field">
-                <label>{t.repayDate} *</label>
-                <input
-                  type="date"
-                  className="st-input"
-                  value={repayDate}
-                  min={repayMin}
-                  max={repayMax}
-                  disabled={!saleDate}
-                  onChange={e => setRepayDate(e.target.value)}
-                />
-                {!saleDate && <span className="st-field-hint">Select a sale date first to enable repayment date.</span>}
-                {saleDate && <span className="st-field-hint">Date range: {saleDate} to {repayMax} (sale date + 14 days)</span>}
-              </div>
-            </>
           )}
+        </div>
+        <button className="d-add-btn" onClick={openAddSupplierModal}>+ Add Supplier</button>
+      </div>
 
-          <div className="st-field" style={{ position: 'relative' }}>
-            <label>{t.addItem}</label>
-            <input type="text" className="st-input" placeholder={t.searchItem}
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setShowSearch(true); }}
-              onFocus={() => setShowSearch(true)}
-              onBlur={() => setTimeout(() => setShowSearch(false), 200)} />
-            {showSearch && searchResults.length > 0 && (
-              <div className="st-search-dropdown">
-                {searchResults.map(g => (
-                  <div key={g.id} className="st-search-item" onMouseDown={() => addToCart(g)}>
-                    <span>{g.name}</span>
-                    <span className="st-search-price">{fmt((g.price||0))}</span>
+      {/* ── Supplier cards ── */}
+      <div className="d-grid">
+        {filteredSuppliers.length === 0 ? (
+          <div className="d-empty">
+            {searchTerm ? 'No suppliers match your search.' : 'No suppliers yet. Click "+ Add Supplier" to get started.'}
+          </div>
+        ) : (
+          filteredSuppliers.map(supplier => (
+            <div key={supplier.id} className="d-card" onClick={() => handleSupplierClick(supplier)}>
+              <div className="d-card-name">{supplier.name || supplier.customerName}</div>
+              <div className="d-card-balance">{fmt((supplier.balance || supplier.totalDue || 0))}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── Supplier detail modal ── */}
+      {selectedSupplier && (
+        <div className="d-overlay" onClick={closeSupplierModal}>
+          <div className="d-modal" onClick={e => e.stopPropagation()}>
+
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">{selectedSupplier.name || selectedSupplier.customerName}</h2>
+              <div className="d-modal-actions">
+                {activeTab === 'history' && (
+                  <PdfTableButton
+                    title={`Trading History — ${selectedSupplier?.name||selectedSupplier?.customerName||''}`}
+                    columns={[
+                      {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Supplier',key:'supplier'},
+                      {header:'QTY',key:'qty'},{header:'PACKSIZE',key:'packSize'},
+                      {header:'Items',key:'items'},{header:'Pay',key:'pay'},
+                      {header:'Total',key:'total'},{header:'Ref',key:'ref'}
+                    ]}
+                    rows={historyRows.flatMap(row => {
+                      if (row.kind === 'deposit') {
+                        const dep = row.deposit;
+                        const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
+                        return [{
+                          date: d ? d.toLocaleDateString('en-GB') : 'N/A',
+                          time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
+                          supplier:'—', qty:'—', packSize:'—', items:'Deposited Cash to repay Debt',
+                          pay:'—', total: fmt(parseFloat(dep.amount)), ref:'—',
+                        }];
+                      }
+                      const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
+                      const rawTs = sale.date||sale.timestamp||sale.createdAt;
+                      const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
+                      const supName = selectedSupplier?.name||selectedSupplier?.customerName||'—';
+                      const payLabel = sale.paymentType==='credit' ? 'Credit' : sale.paymentType==='cash' ? 'Cash' : (sale.paymentType||'—');
+                      return items.map((item,idx) => ({
+                        date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
+                        time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
+                        supplier: idx===0 ? supName : '',
+                        qty: String(item?.qty||item?.quantity||'—'),
+                        packSize: item?.packSize||'—',
+                        items: item ? (item.description||item.name||'N/A') : 'N/A',
+                        pay: idx===0 ? payLabel : '',
+                        total: idx===0 ? fmt(sale.total||0) : '',
+                        ref: idx===0 ? (sale.invoiceRef||sale.notes||'—') : '',
+                      }));
+                    })}
+                    summary={[{label:'Total Purchases', value: fmt(historyRows.filter(r=>r.kind==='sale').reduce((s,r)=>s+(r.sale?.total||0),0))}]}
+                  />
+                )}
+                {activeTab === 'details' && !isEditMode && (
+                  <button className="d-edit-btn" onClick={enableEditMode} title="Edit"><Edit2 size={18} /></button>
+                )}
+                <button className="d-close-btn" onClick={closeSupplierModal}><X size={22} /></button>
+              </div>
+            </div>
+
+            <div className="d-tabs">
+              <button className={`d-tab${activeTab==='details'?' d-tab-active':''}`} onClick={() => setActiveTab('details')}>Details</button>
+              <button className={`d-tab${activeTab==='history'?' d-tab-active':''}`} onClick={() => setActiveTab('history')}>Trading History</button>
+            </div>
+
+            {/* ── Details tab ── */}
+            {activeTab === 'details' && (
+              <div className="d-tab-body">
+                {isEditMode ? (
+                  <div className="d-edit-form">
+                    {[['Full Name *','text',editedSupplier?.name||'','name'],['Phone *','tel',editedSupplier?.phone||'','phone'],
+                      ['WhatsApp','tel',editedSupplier?.whatsapp||'','whatsapp'],['Email','email',editedSupplier?.email||'','email']].map(([lbl,type,val,field]) => (
+                      <div className="d-form-group" key={field}>
+                        <label>{lbl}</label>
+                        <input type={type} value={val} onChange={e => setEditedSupplier({...editedSupplier,[field]:e.target.value})} />
+                      </div>
+                    ))}
+                    <div className="d-form-group">
+                      <label>Gender *</label>
+                      <div className="d-gender">
+                        {['Male','Female'].map(g => (
+                          <label key={g} className="d-gender-option">
+                            <input type="radio" name="edit-gender" checked={editedSupplier?.gender===g} onChange={() => setEditedSupplier({...editedSupplier,gender:g})} />{g}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="d-form-group">
+                      <label>Address *</label>
+                      <textarea rows="2" value={editedSupplier?.address||''} onChange={e => setEditedSupplier({...editedSupplier,address:e.target.value})} />
+                    </div>
+                    <div className="d-form-actions d-form-actions-3">
+                      <button className="d-btn-cancel" onClick={cancelEditMode}>Cancel</button>
+                      <button className="d-btn-delete" onClick={deleteSupplier} disabled={deletingSupplier}>
+                        {deletingSupplier ? 'Deleting…' : 'Delete'}
+                      </button>
+                      <button className="d-btn-save" onClick={saveSupplierEdits}>Update</button>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  <div className="d-details-view">
+                    {[
+                      ['Name', selectedSupplier.name || selectedSupplier.customerName],
+                      ['Gender', selectedSupplier.gender],
+                      ['Phone', selectedSupplier.phone || selectedSupplier.customerPhone],
+                      ['WhatsApp', selectedSupplier.whatsapp],
+                      ['Email', selectedSupplier.email],
+                      ['Address', selectedSupplier.address],
+                    ].map(([lbl, val]) => (
+                      <div className="d-detail-row" key={lbl}>
+                        <span className="d-detail-label">{lbl}</span>
+                        <span className="d-detail-value">{val || 'N/A'}</span>
+                      </div>
+                    ))}
+                    <div className="d-debt-summary">
+                      <span className="d-detail-label">Outstanding Balance</span>
+                      <span className="d-debt-amount">{fmt((historyRows.length > 0 ? historyRows[0].runningBalance : (selectedSupplier.balance || selectedSupplier.totalDue || 0)))}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Trading History tab ── */}
+            {activeTab === 'history' && (
+              <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
+                <div className="d-history-scroll">
+                  <table className="d-history-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Supplier</th>
+                        <th>QTY</th>
+                        <th>PACKSIZE</th>
+                        <th>Items</th>
+                        <th>Pay</th>
+                        <th>Total</th>
+                        <th>Ref</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRows.length === 0 ? (
+                        <tr><td colSpan="10" className="d-empty-cell">No purchases yet</td></tr>
+                      ) : (
+                        historyRows.map((row, rowIdx) => {
+                          if (row.kind === 'deposit') {
+                            // ── Deposit row ─────────────────────────────────
+                            const dep = row.deposit;
+                            return (
+                              <tr key={`dep-${dep.id}`} className="d-deposit-row">
+                                <td className="d-merged">{formatDate(dep.date)}</td>
+                                <td className="d-merged">{formatTime(dep.date, dep)}</td>
+                                <td colSpan="5" className="d-deposit-merged-cell">
+                                  D&nbsp;e&nbsp;p&nbsp;o&nbsp;s&nbsp;i&nbsp;t&nbsp;e&nbsp;d&nbsp;&nbsp;&nbsp;
+                                  C&nbsp;a&nbsp;s&nbsp;h&nbsp;&nbsp;&nbsp;t&nbsp;o&nbsp;&nbsp;&nbsp;
+                                  r&nbsp;e&nbsp;p&nbsp;a&nbsp;y&nbsp;&nbsp;&nbsp;
+                                  D&nbsp;e&nbsp;b&nbsp;t
+                                </td>
+                                <td className="d-deposited-amount">{fmt(parseFloat(dep.amount))}</td>
+                                <td className={`d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
+                                  {fmt(Math.abs(row.runningBalance))}
+                                </td>
+                                <td></td>
+                              </tr>
+                            );
+                          }
+
+                          // ── Purchase / Sale row(s) ──────────────────────
+                          const sale  = row.sale;
+                          const items = sale.items && sale.items.length > 0 ? sale.items : [null];
+                          const rowSpan = items.length;
+                          const rawTs = sale.date || sale.timestamp || sale.createdAt;
+                          const supplierName = selectedSupplier?.name || selectedSupplier?.customerName || '—';
+                          const payLabel = sale.paymentType === 'credit' ? 'Credit' : sale.paymentType === 'cash' ? 'Cash' : (sale.paymentType || '—');
+
+                          return items.map((item, idx) => (
+                            <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs, sale)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{supplierName}</td>}
+                              <td className="d-qty">{item?.qty || item?.quantity || '—'}</td>
+                              <td>{item?.packSize || '—'}</td>
+                              <td>{item ? (item.description || item.name || 'N/A') : 'N/A'}</td>
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{payLabel}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">{fmt(sale.total || sale.total_amount || 0)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{sale.invoiceRef || sale.notes || '—'}</td>}
+                              {idx === 0 && (
+                                <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
+                                  {isWithin2Hours(sale) ? (
+                                    <button onClick={() => setEditPurchase(sale)}
+                                      style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                                      title="Edit purchase"><Edit2 size={15} /></button>
+                                  ) : null}
+                                </td>
+                              )}
+                            </tr>
+                          ));
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
-
-          {cart.length > 0 && (
-            <div className="st-cart">
-              <div className="st-cart-header">
-                <span>{t.items}</span><span>{t.qty}</span><span>Price</span><span></span>
-              </div>
-              {cart.map(item => (
-                <div key={item.id} className="st-cart-row">
-                  <span className="st-cart-name">{item.name}</span>
-                  <input
-                    type="number" className="st-cart-qty"
-                    value={qtyInputs[item.id] ?? String(item.qty)} min="1"
-                    onChange={e => handleQtyChange(item.id, e.target.value)}
-                    onBlur={() => handleQtyBlur(item.id)}
-                    onFocus={e => e.target.select()}
-                  />
-                  <span className="st-cart-price">{fmt((item.price * item.qty))}</span>
-                  <button className="st-cart-remove" onClick={() => removeItem(item.id)}>
-                    <X size={14}/>
-                  </button>
-                </div>
-              ))}
-              <div className="st-cart-total">
-                <span>{t.total}</span>
-                <span className="st-cart-total-val">{fmt(total)}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="st-modal-footer">
-          <button className="st-btn-cancel" onClick={onClose}>{t.cancel}</button>
-          <button className="st-btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? '…' : payType === 'credit' ? t.recordCredit : t.recordSale}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Unrecorded Cash Entry Modal
-// Enhanced with From/Paid To fields, dropup descriptions,
-// and Purchase Cargo child modal
-// ─────────────────────────────────────────────────────────────
-function ForgottenCashModal({ t, onClose, onSaved }) {
-  const [cashDate, setCashDate]     = useState('');
-  const [cashType, setCashType]     = useState('in');
-  const [amount, setAmount]         = useState('');
-  const [fromName, setFromName]     = useState('');   // Cash IN: lender name
-  const [paidTo, setPaidTo]         = useState('');   // Cash OUT: receiver name
-  const [descKey, setDescKey]       = useState('');   // selected dropup key
-  const [cargoItems, setCargoItems] = useState([]);   // filled from PurchaseCargoModal
-  const [cargoTotal, setCargoTotal] = useState(0);
-  const [showCargo, setShowCargo]   = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [maxDate]                   = useState('2026-02-22');
-
-  // Reset per-type fields when type changes
-  const switchType = (type) => {
-    setCashType(type);
-    setDescKey('');
-    setFromName('');
-    setPaidTo('');
-    setCargoItems([]);
-    setCargoTotal(0);
-    setAmount('');
-  };
-
-  // Cash IN description options
-  const IN_OPTIONS = [
-    { key: 'float',   label: 'Float'   },
-    { key: 'capital', label: 'Capital' },
-  ];
-
-  // Cash OUT description options
-  const OUT_OPTIONS = [
-    { key: 'withdrawal', label: 'Withdrawal for personal use' },
-    { key: 'cargo',      label: 'Purchases cargo'             },
-    { key: 'bill',       label: 'Pay bill'                    },
-  ];
-
-  // Build the note string that will appear in CASH RECORD Description column
-  const buildNote = () => {
-    if (cashType === 'in') {
-      const name = fromName.trim() || 'Lender';
-      if (descKey === 'float')   return `From ${name} for additional FLOAT`;
-      if (descKey === 'capital') return `From ${name} - additional capital contribution`;
-    } else {
-      const name = paidTo.trim() || 'Receiver';
-      if (descKey === 'withdrawal') return `Paid to ${name} for personal withdrawal`;
-      if (descKey === 'bill')       return `Paid to ${name} - bills`;
-      if (descKey === 'cargo') {
-        if (cargoItems.length > 0) return `Paid to ${name} to purchase cargo`;
-        return ''; // not complete until cargo confirmed
-      }
-    }
-    return '';
-  };
-
-  const note = buildNote();
-
-  // When cargo option is selected, open the cargo child modal
-  const handleDescSelect = (key) => {
-    setDescKey(key);
-    setCargoItems([]);
-    setCargoTotal(0);
-    if (key === 'cargo') setShowCargo(true);
-  };
-
-  const handleCargoConfirm = (items, total) => {
-    setCargoItems(items);
-    setCargoTotal(total);
-    setAmount(total.toFixed(2));
-    setShowCargo(false);
-  };
-
-  const handleSave = async () => {
-    if (!cashDate) { alert('Please select an entry date.'); return; }
-    const amt = descKey === 'cargo' ? cargoTotal : parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) { alert('Please enter a valid amount.'); return; }
-    if (!note) { alert('Please complete all description fields.'); return; }
-    if (cashType === 'in' && !fromName.trim()) { alert('Please enter the lender\'s name.'); return; }
-    if (cashType === 'out' && descKey !== 'cargo' && !paidTo.trim()) { alert('Please enter the receiver\'s name.'); return; }
-    if (cashType === 'out' && descKey === 'cargo' && cargoItems.length === 0) { alert('Please add cargo items.'); return; }
-
-    setSaving(true);
-    try {
-      const localNoonDate = new Date(cashDate + 'T12:00:00');
-
-      if (cashType === 'out' && descKey === 'cargo') {
-        // Save as a full Purchase record (which auto-creates Cash OUT)
-        await dataService.addPurchase({
-          supplierName: paidTo.trim() || 'Supplier',
-          date: localNoonDate.toISOString(),
-          items: cargoItems,
-          total: cargoTotal,
-          notes: note,
-          isUnrecorded: true,
-        });
-      } else {
-        await dataService.addCashEntry({
-          type: cashType,
-          amount: amt,
-          note,
-          date: localNoonDate.toISOString(),
-          source: 'manual_backdated',
-          isUnrecorded: true,
-        });
-      }
-      onSaved();
-    } catch (e) { console.error(e); alert('Failed to save. Please try again.'); }
-    finally { setSaving(false); }
-  };
-
-  const cargoAmountDisplay = cargoItems.length > 0
-    ? `${fmt(cargoTotal)} (${cargoItems.length} item${cargoItems.length !== 1 ? 's' : ''})`
-    : null;
-
-  return (
-    <div className="st-modal-overlay">
-      <div className="st-modal st-modal-sm">
-        <div className="st-modal-header">
-          <h3>{t.forgottenCash}</h3>
-          <button className="st-modal-close" onClick={onClose}><X size={20}/></button>
-        </div>
-        <div className="st-modal-body">
-
-          {/* Date */}
-          <div className="st-field">
-            <label>{t.cashDate} *</label>
-            <input type="date" max={maxDate} value={cashDate}
-              onChange={e => setCashDate(e.target.value)} className="st-input" />
-            <span className="st-field-hint">{t.systemStartHint}</span>
-          </div>
-
-          {/* Type toggle */}
-          <div className="st-field">
-            <label>{t.type}</label>
-            <div className="st-toggle-row">
-              {['in','out'].map(tp => (
-                <button key={tp} className={`st-toggle-btn${cashType===tp?' st-active':''}`}
-                  onClick={() => switchType(tp)}>
-                  {tp === 'in' ? t.cashIn : t.cashOut}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Amount — hidden for cargo (auto-set from cargo total) */}
-          {!(cashType === 'out' && descKey === 'cargo') && (
-            <div className="st-field">
-              <label>{t.amount} *</label>
-              <input type="number" className="st-input" placeholder="0.00"
-                value={amount} onChange={e => setAmount(e.target.value)} min="0.01" step="0.01" />
-            </div>
-          )}
-
-          {/* Cash IN: From field */}
-          {cashType === 'in' && (
-            <div className="st-field">
-              <label>From: *</label>
-              <input type="text" className="st-input"
-                placeholder="Please enter name of lender"
-                value={fromName} onChange={e => setFromName(e.target.value)} />
-            </div>
-          )}
-
-          {/* Cash OUT: Paid to field */}
-          {cashType === 'out' && (
-            <div className="st-field">
-              <label>Paid to: *</label>
-              <input type="text" className="st-input"
-                placeholder="Name of receiver/supplier"
-                value={paidTo} onChange={e => setPaidTo(e.target.value)} />
-            </div>
-          )}
-
-          {/* Description dropup */}
-          <div className="st-field">
-            <label>{t.description} *</label>
-            <Dropup
-              options={cashType === 'in' ? IN_OPTIONS : OUT_OPTIONS}
-              value={descKey}
-              onSelect={handleDescSelect}
-            />
-          </div>
-
-          {/* Cargo summary if cargo was selected and confirmed */}
-          {cashType === 'out' && descKey === 'cargo' && cargoAmountDisplay && (
-            <div className="st-cargo-summary">
-              <span>📦 {cargoAmountDisplay}</span>
-              <button className="st-cargo-edit-btn" onClick={() => setShowCargo(true)}>Edit Items</button>
-            </div>
-          )}
-
-          {/* Note preview */}
-          {note && (
-            <div className="st-note-preview">
-              <span className="st-note-preview-label">Will appear as:</span>
-              <span className="st-note-preview-text">"{note}"</span>
-            </div>
-          )}
-
-        </div>
-
-        <div className="st-modal-footer">
-          <button className="st-btn-cancel" onClick={onClose}>{t.cancel}</button>
-          <button className="st-btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? '…' : t.recordCash}
-          </button>
-        </div>
-
-        {/* Purchase Cargo child modal */}
-        {showCargo && (
-          <PurchaseCargoModal
-            onConfirm={handleCargoConfirm}
-            onCancel={() => { setShowCargo(false); if (cargoItems.length === 0) setDescKey(''); }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Android-style Setting Row
-// ─────────────────────────────────────────────────────────────
-function SettingRow({ label, desc, children }) {
-  return (
-    <div className="st-android-row">
-      <div className="st-android-text">
-        <span className="st-android-label">{label}</span>
-        {desc && <span className="st-android-desc">{desc}</span>}
-      </div>
-      <div className="st-android-control">{children}</div>
-    </div>
-  );
-}
-
-function Section({ icon, title, children }) {
-  return (
-    <div className="st-section">
-      <div className="st-section-header">
-        {icon}
-        <h3 className="st-section-title">{title}</h3>
-      </div>
-      <div className="st-section-body">{children}</div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Main Settings component
-// ─────────────────────────────────────────────────────────────
-function Settings({ onSettingsChange }) {
-  const { fmt } = useCurrency();
-  const [lang, setLang]         = useState(() => localStorage.getItem('ks_lang') || 'en');
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('ks_darkMode') === 'true');
-  const [notifDebtReminder, setNotifDebtReminder] = useState(false);
-  const [notifLowStock, setNotifLowStock]         = useState(false);
-  const [notifDailySales, setNotifDailySales]     = useState(false);
-  const [notifCreditorOwed, setNotifCreditorOwed] = useState(false);
-  const [loaded, setLoaded]     = useState(false);
-  const [showForgotSale, setShowForgotSale] = useState(false);
-  const [showForgotCash, setShowForgotCash] = useState(false);
-  const [savedToast, setSavedToast]         = useState('');
-  const [kiNotice, setKiNotice] = useState(false);
-
-  const t = T[lang] || T.en;
-
-  useEffect(() => {
-    dataService.getSettings().then(s => {
-      setLang(s.lang || 'en');
-      setDarkMode(!!s.darkMode);
-      setNotifDebtReminder(!!s.notifDebtReminder);
-      setNotifLowStock(!!s.notifLowStock);
-      setNotifDailySales(!!s.notifDailySales);
-      setNotifCreditorOwed(!!s.notifCreditorOwed);
-      setLoaded(true);
-    });
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
-
-  const autoSave = async (updates) => {
-    const current = await dataService.getSettings();
-    const merged = { ...current, ...updates };
-    await dataService.saveSettings(merged);
-    if (onSettingsChange) onSettingsChange(merged);
-  };
-
-  const handleLang = (code) => {
-    if (code === 'ki') {
-      setKiNotice(true);
-      setTimeout(() => setKiNotice(false), 5000);
-      return;
-    }
-    setLang(code);
-    autoSave({ lang: code });
-  };
-
-  const handleDarkMode = (val) => { setDarkMode(val); autoSave({ darkMode: val }); };
-  const handleToggle = (key, setter, current) => {
-    const next = !current;
-    setter(next);
-    autoSave({ [key]: next });
-    if (key === 'notifCreditorOwed') {
-      if (next) scheduleCreditorReminders();
-      else cancelCreditorReminders();
-    }
-  };
-
-  const flashSaved = (msg = 'Saved!') => {
-    setSavedToast(msg);
-    setTimeout(() => setSavedToast(''), 2000);
-  };
-
-  if (!loaded) {
-    return (
-      <div className="st-screen" style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
-        <div style={{ color:'#888', fontSize:'14px' }}>Loading settings…</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="st-screen">
-      {savedToast && <div className="st-toast"><Check size={16}/> {savedToast}</div>}
-
-      <Section icon={<Globe size={18}/>} title={t.language}>
-        {Object.entries(LANG_NAMES).map(([code, name]) => (
-          <SettingRow key={code} label={name}>
-            <div className={`st-android-radio${lang === code ? ' st-radio-on' : ''}`}
-              onClick={() => handleLang(code)}>
-              <div className="st-radio-dot"/>
-            </div>
-          </SettingRow>
-        ))}
-        {kiNotice && <div className="st-ki-notice">ℹ️ {KIRIBATI_COMING_SOON}</div>}
-      </Section>
-
-      <Section icon={darkMode ? <Moon size={18}/> : <Sun size={18}/>} title={t.appearance}>
-        <SettingRow
-          label={darkMode ? t.darkMode : t.lightMode}
-          desc={darkMode ? 'Dark background, light text' : 'Light background, dark text'}
-        >
-          <div className={`st-switch${darkMode ? ' st-switch-on' : ''}`}
-            onClick={() => handleDarkMode(!darkMode)}>
-            <div className="st-switch-thumb"/>
-          </div>
-        </SettingRow>
-      </Section>
-
-      <Section icon={<Bell size={18}/>} title={t.notifications}>
-        {[
-          { key: 'notifDebtReminder', val: notifDebtReminder, set: setNotifDebtReminder, label: t.notifDebtReminder, desc: t.notifDebtReminderDesc },
-          { key: 'notifLowStock',     val: notifLowStock,     set: setNotifLowStock,     label: t.notifLowStock,     desc: t.notifLowStockDesc    },
-          { key: 'notifDailySales',   val: notifDailySales,   set: setNotifDailySales,   label: t.notifDailySales,   desc: t.notifDailySalesDesc  },
-          { key: 'notifCreditorOwed', val: notifCreditorOwed, set: setNotifCreditorOwed, label: t.notifCreditorOwed, desc: t.notifCreditorOwedDesc },
-        ].map(({ key, val, set, label, desc }) => (
-          <SettingRow key={key} label={label} desc={desc}>
-            <div className={`st-switch${val ? ' st-switch-on' : ''}`}
-              onClick={() => handleToggle(key, set, val)}>
-              <div className="st-switch-thumb"/>
-            </div>
-          </SettingRow>
-        ))}
-      </Section>
-
-      <Section icon={<ClipboardList size={18}/>} title={t.forgottenEntries}>
-        <p className="st-forgotten-note">{t.forgottenEntriesNote}</p>
-
-        <div className="st-forgotten-row">
-          <div className="st-forgotten-info">
-            <span className="st-notif-label">{t.forgottenSale}</span>
-            <span className="st-notif-desc">{t.forgottenSaleDesc}</span>
-          </div>
-          <button className="st-forgotten-btn st-forgotten-sale"
-            onClick={() => setShowForgotSale(true)}>
-            <ClipboardList size={16}/> {t.forgottenSale}
-          </button>
-        </div>
-
-        <div className="st-forgotten-row" style={{ marginTop: 12 }}>
-          <div className="st-forgotten-info">
-            <span className="st-notif-label">{t.forgottenCash}</span>
-            <span className="st-notif-desc">{t.forgottenCashDesc}</span>
-          </div>
-          <button className="st-forgotten-btn st-forgotten-cash"
-            onClick={() => setShowForgotCash(true)}>
-            <Wallet size={16}/> {t.forgottenCash}
-          </button>
-        </div>
-      </Section>
-
-      {showForgotSale && (
-        <div style={{position:'fixed',inset:0,zIndex:2000,background:'#f0fdfa',display:'flex',flexDirection:'column'}}>
-          <UnrecordedSalesPage
-            onClose={() => setShowForgotSale(false)}
-            onSaved={() => { setShowForgotSale(false); flashSaved('Entry saved!'); }}
-          />
         </div>
       )}
-      {showForgotCash && (
-        <ForgottenCashModal t={t}
-          onClose={() => setShowForgotCash(false)}
-          onSaved={() => { setShowForgotCash(false); flashSaved('Entry saved!'); }}
+
+      {/* ── Add Supplier Modal ── */}
+      {showAddSupplierModal && (
+        <div className="d-overlay" onClick={closeAddSupplierModal}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Add New Supplier</h2>
+              <button className="d-close-btn" onClick={closeAddSupplierModal}><X size={22} /></button>
+            </div>
+            <form className="d-add-form" onSubmit={handleAddSupplier}>
+              {[['Full Name *','text','fullName','Enter full name'],['Phone *','tel','phone','Phone number'],
+                ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
+                <div className="d-form-group" key={field}>
+                  <label>{lbl}</label>
+                  <input type={type} value={newSupplier[field]} placeholder={ph}
+                    onChange={e => setNewSupplier({...newSupplier,[field]:e.target.value})} />
+                </div>
+              ))}
+              <div className="d-form-group">
+                <label>Address *</label>
+                <textarea rows="2" value={newSupplier.address} placeholder="Enter address"
+                  onChange={e => setNewSupplier({...newSupplier,address:e.target.value})} />
+              </div>
+              <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
+              <div className="d-form-actions">
+                <button type="button" className="d-btn-cancel" onClick={closeAddSupplierModal}>Cancel</button>
+                <button type="submit" className="d-btn-save">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payment / Deposit Modal ── */}
+      {showPaymentModal && (
+        <div className="d-overlay" onClick={() => setShowPaymentModal(false)}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Record Deposit</h2>
+              <button className="d-close-btn" onClick={() => setShowPaymentModal(false)}><X size={22} /></button>
+            </div>
+            <div className="d-payment-form">
+              <div className="d-form-group">
+                <label>Deposit Amount</label>
+                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
+                  onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
+              </div>
+              <button className="d-camera-btn" onClick={handleTakePhoto}>
+                <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
+              </button>
+              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
+              <div className="d-form-actions">
+                <button className="d-btn-cancel" onClick={() => setShowPaymentModal(false)}>Cancel</button>
+                <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Notify Modal ── */}
+      {showNotifyModal && (
+        <div className="d-overlay" onClick={() => !pdfGenerating && setShowNotifyModal(false)}>
+          <div className="d-modal d-modal-sm d-notify-modal" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header" style={{ flexShrink: 0 }}>
+              <h2 className="d-modal-title">Notify via</h2>
+              <button className="d-close-btn" onClick={() => !pdfGenerating && setShowNotifyModal(false)}><X size={22} /></button>
+            </div>
+            {pdfGenerating && (
+              <div style={{ padding: '10px 16px', background: '#fef3c7', borderRadius: '8px', margin: '0 16px 8px',
+                fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '16px' }}>⏳</span>
+                Generating statement image, please wait…
+              </div>
+            )}
+            <div className="d-notify-options" style={{ flexShrink: 0 }}>
+              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')} disabled={pdfGenerating}>
+                <MessageSquare size={20}/> {pdfGenerating ? '…' : 'WhatsApp'}
+              </button>
+              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')} disabled={pdfGenerating}>
+                <Mail size={20}/> {pdfGenerating ? '…' : 'Email'}
+              </button>
+              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')} disabled={pdfGenerating}>
+                <Phone size={20}/> {pdfGenerating ? '…' : 'SMS'}
+              </button>
+            </div>
+            <div className="d-notify-preview d-notify-preview-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              <p className="d-notify-preview-label">Message Preview</p>
+              <pre className="d-notify-preview-text" style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'inherit',margin:0}}>
+                {selectedSupplier ? buildNotifyMessage().body : ''}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Purchase Modal (2-hour window) ── */}
+      {editPurchase && (
+        <PurchaseEditModal
+          purchase={editPurchase}
+          fmt={fmt}
+          onSave={async () => {
+            setEditPurchase(null);
+            const all = await dataService.getPurchases();
+            setSupplierSales(all.filter(p => p.supplierId === selectedSupplier?.id || p.supplierName === (selectedSupplier?.name || selectedSupplier?.customerName)));
+          }}
+          onDeleted={async () => {
+            setEditPurchase(null);
+            const all = await dataService.getPurchases();
+            setSupplierSales(all.filter(p => p.supplierId === selectedSupplier?.id || p.supplierName === (selectedSupplier?.name || selectedSupplier?.customerName)));
+          }}
+          onClose={() => setEditPurchase(null)}
         />
       )}
     </div>
   );
 }
 
-export default Settings;
+export default Suppliers;
