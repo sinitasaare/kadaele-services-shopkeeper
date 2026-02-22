@@ -5,11 +5,11 @@ import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './Debtors.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
@@ -1014,7 +1014,7 @@ Kadaele Services`;
                               )}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin2Hours(sale) ? (
+                                  {isWithin30Mins(sale) ? (
                                     <button onClick={() => setEditSale(sale)}
                                       style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
                                       title="Edit sale"><Edit2 size={15} /></button>
@@ -1093,7 +1093,7 @@ Kadaele Services`;
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
-              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
+              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" onClick={() => setEnlargedPhoto(paymentPhoto)} style={{cursor:'zoom-in'}} title="Tap to view full screen" />}
               <div className="d-form-actions">
                 <button className="d-btn-cancel" onClick={() => setShowPaymentModal(false)}>Cancel</button>
                 <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
