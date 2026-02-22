@@ -8,11 +8,11 @@ import './CashJournal.css';
 const TYPE_IN  = 'in';
 const TYPE_OUT = 'out';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 
 // ── Cash Entry Edit Modal ──────────────────────────────────────────────────
@@ -507,7 +507,7 @@ function CashJournal() {
             ) : (
               filteredEntries.map(entry => {
                 const { date, time } = formatDateTime(entry);
-                const editable = isWithin2Hours(entry);
+                const editable = isWithin30Mins(entry);
                 return (
                   <tr key={entry.id} className="cj-row">
                     <td>{date}</td>
