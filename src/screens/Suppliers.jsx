@@ -3,7 +3,7 @@ import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSqu
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
-import './Debtors.css';
+import './Suppliers.css';
 
 // ── Shared 2-hour edit window helper ──────────────────────────────────────
 function isWithin2Hours(entry) {
@@ -12,36 +12,29 @@ function isWithin2Hours(entry) {
   return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
 }
 
-// ── Sale Edit Modal ────────────────────────────────────────────────────────
-function SaleEditModal({ sale, onSave, onClose, fmt }) {
-  const [customerName, setCustomerName] = useState(sale.customer_name || sale.customerName || '');
-  const [items, setItems] = useState((sale.items || []).map(i => ({ ...i })));
+// ── Purchase Edit Modal ────────────────────────────────────────────────────
+function PurchaseEditModal({ purchase, onSave, onClose, fmt }) {
+  const [supplierName, setSupplierName] = useState(purchase.supplierName || '');
+  const [notes, setNotes] = useState(purchase.notes || '');
+  const [invoiceRef, setInvoiceRef] = useState(purchase.invoiceRef || '');
+  const [rows, setRows] = useState((purchase.items || []).map((it, i) => ({ id: i+1, ...it })));
+  const nextId = React.useRef((purchase.items||[]).length + 1);
   const [saving, setSaving] = useState(false);
 
-  const updateItem = (idx, field, val) =>
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it));
-
-  const total = items.reduce((sum, it) => {
-    const qty = parseFloat(it.quantity ?? it.qty ?? 0);
-    const price = parseFloat(it.price ?? 0);
-    return sum + qty * price;
-  }, 0);
+  const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updatedItems = items.map(it => ({
-        ...it,
-        quantity: parseFloat(it.quantity ?? it.qty ?? 0),
-        qty: parseFloat(it.quantity ?? it.qty ?? 0),
-        subtotal: parseFloat(it.quantity ?? it.qty ?? 0) * parseFloat(it.price ?? 0),
+      const items = rows.filter(r => r.description?.trim()).map(r => ({
+        qty: parseFloat(r.qty)||0, description: r.description?.trim()||'',
+        costPrice: parseFloat(r.costPrice)||0, packSize: r.packSize||'',
+        subtotal: (parseFloat(r.qty)||0)*(parseFloat(r.costPrice)||0),
       }));
-      await dataService.updateSale(sale.id, {
-        items: updatedItems,
-        total_amount: total,
-        total,
-        customer_name: customerName,
-        customerName,
+      await dataService.updatePurchase(purchase.id, {
+        supplierName: supplierName.trim(), notes: notes.trim(),
+        invoiceRef: invoiceRef.trim(), items, total: itemTotal,
       });
       onSave();
     } catch (e) { alert(e.message); }
@@ -51,30 +44,39 @@ function SaleEditModal({ sale, onSave, onClose, fmt }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
       <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
-        <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Sale Entry</h3>
+        <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Purchase Entry</h3>
 
         <div style={{ marginBottom:'12px' }}>
-          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Customer Name</label>
-          <input value={customerName} onChange={e => setCustomerName(e.target.value)}
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Supplier</label>
+          <input value={supplierName} onChange={e => setSupplierName(e.target.value)}
             style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
 
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
-          {items.map((it, idx) => (
-            <div key={idx} style={{ display:'grid', gridTemplateColumns:'1fr 60px 70px', gap:'6px', marginBottom:'6px' }}>
-              <input value={it.name || ''} onChange={e => updateItem(idx, 'name', e.target.value)} placeholder="Item name"
+          {rows.map(row => (
+            <div key={row.id} style={{ display:'grid', gridTemplateColumns:'50px 1fr 70px', gap:'6px', marginBottom:'6px' }}>
+              <input type="number" value={row.qty||''} onChange={e => updateRow(row.id,'qty',e.target.value)} placeholder="Qty"
                 style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-              <input type="number" value={it.quantity ?? it.qty ?? ''} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="Qty"
+              <input value={row.description||''} onChange={e => updateRow(row.id,'description',e.target.value)} placeholder="Description"
                 style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-              <input type="number" value={it.price ?? ''} onChange={e => updateItem(idx, 'price', e.target.value)} placeholder="Price"
+              <input type="number" value={row.costPrice||''} onChange={e => updateRow(row.id,'costPrice',e.target.value)} placeholder="Cost"
                 style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
             </div>
           ))}
+          <div style={{ textAlign:'right', fontWeight:700, fontSize:'14px', color:'#667eea', marginTop:'6px' }}>Total: {fmt(itemTotal)}</div>
         </div>
 
-        <div style={{ textAlign:'right', fontWeight:700, fontSize:'15px', marginBottom:'16px', color:'#667eea' }}>
-          Total: {fmt(total)}
+        <div style={{ marginBottom:'12px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Invoice Ref</label>
+          <input value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} placeholder="Invoice ref…"
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+        </div>
+
+        <div style={{ marginBottom:'16px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Notes</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes…"
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
 
         <div style={{ display:'flex', gap:'8px' }}>
@@ -88,31 +90,30 @@ function SaleEditModal({ sale, onSave, onClose, fmt }) {
   );
 }
 
-function Debtors() {
+function Suppliers() {
   const { fmt } = useCurrency();
-  const [debtors, setDebtors]           = useState([]);
+  const [suppliers, setSuppliers]           = useState([]);
   const [searchTerm, setSearchTerm]     = useState('');
-  const [selectedDebtor, setSelectedDebtor] = useState(null);
-  const [debtorSales, setDebtorSales]   = useState([]);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [supplierSales, setSupplierSales]   = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [editSale, setEditSale] = useState(null);
+  const [editPurchase, setEditPurchase] = useState(null);
   const [paymentPhoto, setPaymentPhoto] = useState(null);
   const [loading, setLoading]           = useState(true);
   const [showNotifyModal, setShowNotifyModal] = useState(false);
-  const [showAddDebtorModal, setShowAddDebtorModal] = useState(false);
-  const [newDebtor, setNewDebtor]       = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const [newSupplier, setNewSupplier]       = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   const [isEditMode, setIsEditMode]     = useState(false);
-  const [editedDebtor, setEditedDebtor] = useState(null);
+  const [editedSupplier, setEditedSupplier] = useState(null);
   const [activeTab, setActiveTab]       = useState('details');
   const [sortOrder, setSortOrder]       = useState(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef                     = useRef(null);
   const historyRef                      = useRef(null);  // ref for debt history section → PDF
   const [pdfGenerating, setPdfGenerating] = useState(false);
-  const [enlargedPhoto, setEnlargedPhoto] = useState(null);
 
-  useEffect(() => { loadDebtors(); }, []);
+  useEffect(() => { loadSuppliers(); }, []);
 
   // Close sort menu when clicking outside
   useEffect(() => {
@@ -121,11 +122,11 @@ function Debtors() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const loadDebtors = async () => {
+  const loadSuppliers = async () => {
     try {
       setLoading(true);
-      const data = await dataService.getDebtors();
-      setDebtors(data || []);
+      const data = await dataService.getSuppliers();
+      setSuppliers(data || []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -179,91 +180,91 @@ function Debtors() {
     });
   };
 
-  const filteredDebtors = applySortAndSearch(debtors);
+  const filteredSuppliers = applySortAndSearch(suppliers);
 
-  const handleDebtorClick = async (debtor) => {
-    setSelectedDebtor(debtor);
-    setEditedDebtor({...debtor});
+  const handleSupplierClick = async (supplier) => {
+    setSelectedSupplier(supplier);
+    setEditedSupplier({...supplier});
     setIsEditMode(false);
     setActiveTab('details');
     try {
       const allSales = await dataService.getSales();
-      setDebtorSales(allSales.filter(s => debtor.saleIds?.includes(s.id) || debtor.purchaseIds?.includes(s.id)));
-    } catch (e) { setDebtorSales([]); }
+      setSupplierSales(allSales.filter(s => supplier.saleIds?.includes(s.id) || supplier.purchaseIds?.includes(s.id)));
+    } catch (e) { setSupplierSales([]); }
   };
 
-  const closeDebtorModal = () => {
-    setSelectedDebtor(null); setDebtorSales([]);
-    setIsEditMode(false); setEditedDebtor(null); setActiveTab('details');
+  const closeSupplierModal = () => {
+    setSelectedSupplier(null); setSupplierSales([]);
+    setIsEditMode(false); setEditedSupplier(null); setActiveTab('details');
   };
 
-  const openAddDebtorModal = () => {
-    setShowAddDebtorModal(true);
-    setNewDebtor({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  const openAddSupplierModal = () => {
+    setShowAddSupplierModal(true);
+    setNewSupplier({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   };
-  const closeAddDebtorModal = () => {
-    setShowAddDebtorModal(false);
-    setNewDebtor({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  const closeAddSupplierModal = () => {
+    setShowAddSupplierModal(false);
+    setNewSupplier({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   };
 
-  const handleAddDebtor = async (e) => {
+  const handleAddSupplier = async (e) => {
     e.preventDefault();
-    if (!newDebtor.fullName || !newDebtor.gender || !newDebtor.phone) { alert('Full Name, Gender and Phone are required'); return; }
-    if (!newDebtor.whatsapp && !newDebtor.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (newDebtor.email && !newDebtor.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!newDebtor.address) { alert('Please provide an address'); return; }
+    if (!newSupplier.fullName || !newSupplier.phone) { alert('Full Name and Phone are required'); return; }
+    if (!newSupplier.whatsapp && !newSupplier.email) { alert('Please provide at least WhatsApp or Email'); return; }
+    if (newSupplier.email && !newSupplier.email.includes('@')) { alert('Email address must contain "@"'); return; }
+    if (!newSupplier.address) { alert('Please provide an address'); return; }
     try {
-      const debtorData = {
-        id: dataService.generateId(), customerName: newDebtor.fullName, name: newDebtor.fullName,
-        phone: newDebtor.phone, customerPhone: newDebtor.phone, gender: newDebtor.gender,
-        whatsapp: newDebtor.whatsapp, email: newDebtor.email, address: newDebtor.address,
+      const supplierData = {
+        id: dataService.generateId(), customerName: newSupplier.fullName, name: newSupplier.fullName,
+        phone: newSupplier.phone, customerPhone: newSupplier.phone, gender: '',
+        whatsapp: newSupplier.whatsapp, email: newSupplier.email, address: newSupplier.address,
         totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
         createdAt: new Date().toISOString(), lastSale: null
       };
-      const current = await dataService.getDebtors();
-      current.push(debtorData);
-      await dataService.setDebtors(current);
-      alert('Debtor added successfully!');
-      closeAddDebtorModal();
-      await loadDebtors();
-    } catch (e) { console.error(e); alert('Failed to add debtor.'); }
+      const current = await dataService.getSuppliers();
+      current.push(supplierData);
+      await dataService.setSuppliers(current);
+      alert('Supplier added successfully!');
+      closeAddSupplierModal();
+      await loadSuppliers();
+    } catch (e) { console.error(e); alert('Failed to add supplier.'); }
   };
 
   const enableEditMode  = () => setIsEditMode(true);
-  const cancelEditMode  = () => { setIsEditMode(false); setEditedDebtor({...selectedDebtor}); };
+  const cancelEditMode  = () => { setIsEditMode(false); setEditedSupplier({...selectedSupplier}); };
 
-  const saveDebtorEdits = async () => {
-    if (!editedDebtor.name || !editedDebtor.gender || !editedDebtor.phone) { alert('Full Name, Gender and Phone are required'); return; }
-    if (!editedDebtor.whatsapp && !editedDebtor.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (editedDebtor.email && !editedDebtor.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!editedDebtor.address) { alert('Please provide an address'); return; }
+  const saveSupplierEdits = async () => {
+    if (!editedSupplier.name || !editedSupplier.gender || !editedSupplier.phone) { alert('Full Name, Gender and Phone are required'); return; }
+    if (!editedSupplier.whatsapp && !editedSupplier.email) { alert('Please provide at least WhatsApp or Email'); return; }
+    if (editedSupplier.email && !editedSupplier.email.includes('@')) { alert('Email address must contain "@"'); return; }
+    if (!editedSupplier.address) { alert('Please provide an address'); return; }
     try {
-      const current = await dataService.getDebtors();
-      const idx = current.findIndex(d => d.id === editedDebtor.id);
+      const current = await dataService.getSuppliers();
+      const idx = current.findIndex(d => d.id === editedSupplier.id);
       if (idx !== -1) {
-        current[idx] = { ...current[idx], name: editedDebtor.name, customerName: editedDebtor.name,
-          phone: editedDebtor.phone, customerPhone: editedDebtor.phone, gender: editedDebtor.gender,
-          whatsapp: editedDebtor.whatsapp, email: editedDebtor.email, address: editedDebtor.address };
-        await dataService.setDebtors(current);
-        setSelectedDebtor(current[idx]); setIsEditMode(false);
-        await loadDebtors(); alert('Debtor updated!');
+        current[idx] = { ...current[idx], name: editedSupplier.name, customerName: editedSupplier.name,
+          phone: editedSupplier.phone, customerPhone: editedSupplier.phone, gender: editedSupplier.gender,
+          whatsapp: editedSupplier.whatsapp, email: editedSupplier.email, address: editedSupplier.address };
+        await dataService.setSuppliers(current);
+        setSelectedSupplier(current[idx]); setIsEditMode(false);
+        await loadSuppliers(); alert('Supplier updated!');
       }
-    } catch (e) { console.error(e); alert('Failed to update debtor.'); }
+    } catch (e) { console.error(e); alert('Failed to update supplier.'); }
   };
 
   // ── Build smart notification message based on due date status ──────────────
   const buildNotifyMessage = () => {
-    const debtor  = selectedDebtor;
-    const name    = debtor.name || debtor.customerName || 'Valued Customer';
-    const gender  = debtor.gender || '';
+    const supplier  = selectedSupplier;
+    const name    = supplier.name || supplier.customerName || 'Valued Customer';
+    const gender  = supplier.gender || '';
     const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
     const salutation = prefix ? `${prefix} ${name}` : name;
     const balance = historyRows.length > 0
       ? historyRows[0].runningBalance
-      : (debtor.balance || debtor.totalDue || 0);
+      : (supplier.balance || supplier.totalDue || 0);
     const balanceStr = `${fmt(Math.abs(balance))}`;
 
-    const repaymentDate = debtor.repaymentDate || '';
+    const repaymentDate = supplier.repaymentDate || '';
     const today  = new Date(); today.setHours(0,0,0,0);
     const dueDate = repaymentDate ? new Date(repaymentDate) : null;
     if (dueDate) dueDate.setHours(0,0,0,0);
@@ -327,214 +328,116 @@ Kadaele Services`;
   };
 
   // ── Generate A4 PDF of the debt statement ────────────────────────────────
-  // Uses jsPDF + jspdf-autotable (both loaded via CDN in index.html).
-  // Draws: Kadaele logo, debtor info, full Debt History table, outstanding total.
+  // Uses jsPDF (loaded from CDN via index.html) + html2canvas.
+  // The PDF is A4 portrait, with the business logo at the top, supplier info,
+  // then the full debt history table rendered at full width.
   const generateA4PDF = async () => {
+    const el = historyRef.current;
+    if (!el) return null;
+
     try {
+      // 1. Capture the history section as a high-res canvas
+      const canvas = await html2canvas(el, {
+        backgroundColor: '#ffffff',
+        scale: 3,          // high DPI so text is sharp in the PDF
+        useCORS: true,
+        logging: false,
+        // Expand to full scrollWidth so the wide table is not clipped
+        windowWidth: el.scrollWidth,
+        width: el.scrollWidth,
+      });
+
       const { jsPDF } = window.jspdf;
       if (!jsPDF) throw new Error('jsPDF not loaded');
 
-      const pageW  = 210;
-      const pageH  = 297;
+      // A4 dimensions in mm
+      const pageW = 210;
+      const pageH = 297;
       const margin = 12;
-      const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const contentW = pageW - margin * 2;
 
-      // ── 1. Load Kadaele logo ──────────────────────────────────────────────
-      let logoLoaded = false;
-      try {
-        const logoUrl  = '/kadaele-logo.png';
-        const response = await fetch(logoUrl);
-        if (response.ok) {
-          const blob   = await response.blob();
-          const base64 = await new Promise((res, rej) => {
-            const r = new FileReader();
-            r.onload  = () => res(r.result);
-            r.onerror = rej;
-            r.readAsDataURL(blob);
-          });
-          // Draw logo top-left (max 28mm wide, proportional height)
-          const img  = new Image();
-          await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; img.src = base64; });
-          const ratio  = img.naturalHeight / (img.naturalWidth || 1);
-          const logoW  = 28;
-          const logoH  = Math.min(logoW * ratio, 18);
-          pdf.addImage(base64, 'PNG', margin, 8, logoW, logoH);
-          logoLoaded = true;
-        }
-      } catch (_) { /* logo optional — continue without it */ }
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-      // ── 2. Purple header bar ──────────────────────────────────────────────
-      pdf.setFillColor(102, 126, 234);
-      pdf.rect(0, 0, pageW, 26, 'F');
-
-      if (!logoLoaded) {
-        // Fallback text logo
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(13);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Kadaele Services', margin, 12);
-      }
-
+      // ── Header: purple bar with business name ──────────────────────────
+      pdf.setFillColor(102, 126, 234);          // brand purple
+      pdf.rect(0, 0, pageW, 22, 'F');
       pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(9);
+      pdf.setFontSize(14);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('DEBT STATEMENT', logoLoaded ? margin + 30 : margin, logoLoaded ? 12 : 20);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(7);
-      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-      pdf.text(`Generated: ${today}`, pageW - margin, 20, { align: 'right' });
-
-      // ── 3. Debtor info block ──────────────────────────────────────────────
-      let y = 34;
-      const debtor     = selectedDebtor;
-      const debtorName = debtor.name || debtor.customerName || 'N/A';
-      const gender     = debtor.gender || '';
-      const prefix     = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
-      const balance    = historyRows.length > 0
-        ? historyRows[0].runningBalance
-        : (debtor.balance || debtor.totalDue || 0);
-
-      pdf.setTextColor(20, 20, 20);
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`${prefix ? prefix + ' ' : ''}${debtorName}`, margin, y);
-
-      y += 5;
+      pdf.text('Kadaele Services', margin, 10);
       pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(70, 70, 70);
-      const infoLines = [];
-      if (debtor.phone || debtor.customerPhone) infoLines.push(`Phone: ${debtor.phone || debtor.customerPhone}`);
-      if (debtor.whatsapp)     infoLines.push(`WhatsApp: ${debtor.whatsapp}`);
-      if (debtor.email)        infoLines.push(`Email: ${debtor.email}`);
-      if (debtor.address)      infoLines.push(`Address: ${debtor.address}`);
-      if (debtor.repaymentDate) infoLines.push(`Due Date: ${debtor.repaymentDate}`);
-      infoLines.forEach(line => { pdf.text(line, margin, y); y += 4.5; });
+      pdf.text('Debt Statement', margin, 16);
 
-      // Outstanding balance box (right side)
-      const boxX = pageW - margin - 52;
-      const boxY = 30;
-      const isOwed = balance > 0;
-      pdf.setFillColor(isOwed ? 254 : 220, isOwed ? 226 : 252, isOwed ? 226 : 231);
-      pdf.roundedRect(boxX, boxY, 52, 20, 2, 2, 'F');
-      pdf.setFontSize(6.5);
+      // Date generated (right side of header)
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      pdf.setFontSize(8);
+      pdf.text(`Generated: ${today}`, pageW - margin, 14, { align: 'right' });
+
+      // ── Supplier info block ──────────────────────────────────────────────
+      let y = 30;
+      const supplier = selectedSupplier;
+      const supplierName = supplier.name || supplier.customerName || 'N/A';
+      const gender  = supplier.gender || '';
+      const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+      const balance = historyRows.length > 0
+        ? historyRows[0].runningBalance
+        : (supplier.balance || supplier.totalDue || 0);
+
+      pdf.setTextColor(30, 30, 30);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${prefix ? prefix + ' ' : ''}${supplierName}`, margin, y);
+
+      y += 6;
+      pdf.setFontSize(9);
       pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(isOwed ? 153 : 3, isOwed ? 27 : 105, isOwed ? 27 : 81);
-      pdf.text('OUTSTANDING BALANCE', boxX + 26, boxY + 6, { align: 'center' });
+      pdf.setTextColor(80, 80, 80);
+      if (supplier.phone || supplier.customerPhone) pdf.text(`Phone: ${supplier.phone || supplier.customerPhone}`, margin, y); y += 5;
+      if (supplier.whatsapp) { pdf.text(`WhatsApp: ${supplier.whatsapp}`, margin, y); y += 5; }
+      if (supplier.email)    { pdf.text(`Email: ${supplier.email}`, margin, y); y += 5; }
+      if (supplier.repaymentDate) { pdf.text(`Due Date: ${supplier.repaymentDate}`, margin, y); y += 5; }
+
+      // Outstanding balance box
+      pdf.setFillColor(balance > 0 ? 255 : 220, balance > 0 ? 235 : 252, balance > 0 ? 220 : 231);
+      pdf.roundedRect(pageW - margin - 55, 28, 55, 18, 2, 2, 'F');
+      pdf.setTextColor(balance > 0 ? 22 : 3, balance > 0 ? 101 : 105, balance > 0 ? 52 : 81);
+      pdf.setFontSize(7);
+      pdf.text('OUTSTANDING BALANCE', pageW - margin - 27.5, 34, { align: 'center' });
       pdf.setFontSize(13);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(fmt(Math.abs(balance)), boxX + 26, boxY + 15, { align: 'center' });
+      pdf.text(`${fmt(Math.abs(balance))}`, pageW - margin - 27.5, 42, { align: 'center' });
 
       // Divider
-      y = Math.max(y, boxY + 24) + 3;
+      y = Math.max(y, 50) + 4;
       pdf.setDrawColor(200, 200, 200);
       pdf.line(margin, y, pageW - margin, y);
-      y += 4;
+      y += 5;
 
-      // ── 4. Section title ──────────────────────────────────────────────────
+      // ── Debt History table (rendered via html2canvas → image) ─────────
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(50, 50, 50);
       pdf.text('Debt History', margin, y);
-      y += 3;
+      y += 4;
 
-      // ── 5. Build table rows from historyRows ──────────────────────────────
-      const tableHead = [['Date', 'Time', 'Item', 'Qty', 'Price', 'Subtotal', 'Sale Total', 'Deposited', 'Balance']];
-      const tableBody = [];
+      // Convert canvas to PNG data URL and embed as image
+      const imgData  = canvas.toDataURL('image/png');
+      const imgW     = contentW;
+      const imgH     = (canvas.height / canvas.width) * imgW;
 
-      historyRows.forEach(row => {
-        if (row.kind === 'deposit') {
-          const dep = row.deposit;
-          const dDate = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
-          const dDateStr = dDate ? dDate.toLocaleDateString('en-GB') : 'N/A';
-          const dTimeStr = dep.isUnrecorded ? 'UNRECORDED' : (dDate ? dDate.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A');
-          tableBody.push([
-            dDateStr, dTimeStr,
-            { content: 'Deposited Cash to repay Debt', colSpan: 5, styles: { fillColor: [237,233,254], fontStyle:'italic', halign:'center', textColor:[88,28,135] } },
-            fmt(parseFloat(dep.amount)),
-            fmt(Math.abs(row.runningBalance)),
-          ]);
-        } else {
-          const sale  = row.sale;
-          const items = sale.items && sale.items.length > 0 ? sale.items : [null];
-          const rawTs = sale.date || sale.timestamp || sale.createdAt;
-          const sDate = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
-          const sDateStr = sDate ? sDate.toLocaleDateString('en-GB') : 'N/A';
-          const sTimeStr = sale.isUnrecorded ? 'UNRECORDED' : (sDate ? sDate.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A');
+      // If the table is taller than what fits on one page, scale it
+      const maxH = pageH - y - margin;
+      const finalH = imgH > maxH ? maxH : imgH;
 
-          items.forEach((item, idx) => {
-            if (idx === 0) {
-              tableBody.push([
-                sDateStr, sTimeStr,
-                item ? (item.name || 'N/A') : 'N/A',
-                item ? String(item.quantity ?? item.qty ?? 0) : '—',
-                item ? fmt(item.price || 0) : '—',
-                item ? fmt(item.subtotal || (item.price||0)*(item.quantity||item.qty||0)) : '—',
-                fmt(sale.total || sale.total_amount || 0),
-                '—',
-                fmt(Math.abs(row.runningBalance)),
-              ]);
-            } else {
-              tableBody.push([
-                '', '',
-                item ? (item.name || 'N/A') : 'N/A',
-                item ? String(item.quantity ?? item.qty ?? 0) : '—',
-                item ? fmt(item.price || 0) : '—',
-                item ? fmt(item.subtotal || (item.price||0)*(item.quantity||item.qty||0)) : '—',
-                '', '', '',
-              ]);
-            }
-          });
-        }
-      });
+      pdf.addImage(imgData, 'PNG', margin, y, imgW, finalH);
 
-      if (tableBody.length === 0) {
-        tableBody.push([{ content: 'No history yet', colSpan: 9, styles: { halign: 'center', textColor: [150,150,150] } }]);
-      }
-
-      // ── 6. Draw table via autoTable ───────────────────────────────────────
-      pdf.autoTable({
-        startY: y,
-        head:   tableHead,
-        body:   tableBody,
-        margin: { left: margin, right: margin },
-        styles: {
-          fontSize: 7,
-          cellPadding: 2,
-          overflow: 'linebreak',
-          valign: 'middle',
-        },
-        headStyles: {
-          fillColor: [102, 126, 234],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize:  7,
-        },
-        alternateRowStyles: { fillColor: [248, 248, 252] },
-        columnStyles: {
-          0: { cellWidth: 18 },  // Date
-          1: { cellWidth: 20 },  // Time
-          2: { cellWidth: 'auto' }, // Item (flex)
-          3: { cellWidth: 10, halign: 'center' }, // Qty
-          4: { cellWidth: 18, halign: 'right' },  // Price
-          5: { cellWidth: 20, halign: 'right' },  // Subtotal
-          6: { cellWidth: 20, halign: 'right' },  // Sale Total
-          7: { cellWidth: 20, halign: 'right' },  // Deposited
-          8: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }, // Balance
-        },
-        didParseCell: (data) => {
-          // Highlight deposit rows with a light purple tint
-          if (data.row.raw?.[2]?.content?.includes?.('Deposited')) {
-            data.cell.styles.fillColor = [237, 233, 254];
-          }
-        },
-      });
-
-      // ── 8. Footer ─────────────────────────────────────────────────────────
-      pdf.setFontSize(6.5);
+      // ── Footer ────────────────────────────────────────────────────────
+      const footerY = pageH - 8;
+      pdf.setFontSize(7);
+      pdf.setTextColor(150, 150, 150);
       pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(160, 160, 160);
-      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, pageH - 6, { align: 'center' });
+      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, footerY, { align: 'center' });
 
       return pdf;
     } catch (err) {
@@ -544,8 +447,8 @@ Kadaele Services`;
   };
 
   // ── Save PDF and return a Blob URL or Capacitor URI ───────────────────────
-  const savePDFAndGetURI = async (pdf, debtorName) => {
-    const fileName = `statement_${debtorName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+  const savePDFAndGetURI = async (pdf, supplierName) => {
+    const fileName = `statement_${supplierName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
     const pdfBlob  = pdf.output('blob');
 
     // On native Android, write to cache directory via Capacitor Filesystem
@@ -573,80 +476,67 @@ Kadaele Services`;
   };
 
   const handleNotify = async (method) => {
-    const debtor = selectedDebtor;
+    const supplier = selectedSupplier;
     const { subject, body } = buildNotifyMessage();
-    const debtorName = debtor.name || debtor.customerName || 'debtor';
+    const supplierName = supplier.name || supplier.customerName || 'supplier';
 
-    // ── Generate PDF first ─────────────────────────────────────────────────
+    // ── Step 1: Generate A4 PDF ───────────────────────────────────────────
     setPdfGenerating(true);
     let pdfInfo = null;
     try {
       const pdf = await generateA4PDF();
-      if (pdf) pdfInfo = await savePDFAndGetURI(pdf, debtorName);
-    } catch (err) { console.error('PDF error:', err); }
-    finally { setPdfGenerating(false); }
+      if (pdf) {
+        pdfInfo = await savePDFAndGetURI(pdf, supplierName);
+        // On web, also trigger a download so the user has the PDF to attach manually
+        if (pdfInfo?.isWeb) {
+          const link = document.createElement('a');
+          link.href = pdfInfo.uri;
+          link.download = pdfInfo.fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          // Don't revoke immediately — let the download complete
+          setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
+        }
+      }
+    } catch (err) {
+      console.error('PDF error:', err);
+    } finally {
+      setPdfGenerating(false);
+    }
 
-    // ── Open the specific contact directly ─────────────────────────────────
+    // ── Step 2: Open messaging app (with PDF attached if native) ──────────
     const isNative = window.Capacitor?.isNativePlatform?.();
 
     if (method === 'whatsapp') {
-      const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
+      const phone = supplier.whatsapp || supplier.phone || supplier.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
-      const clean = phone.replace(/\D/g, '');
       if (isNative && pdfInfo?.uri) {
         try {
-          // On Android, share directly to WhatsApp with the PDF + text
           const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject, text: body, url: pdfInfo.uri,
-            dialogTitle: `Send to ${debtorName}`,
-          });
-          setShowNotifyModal(false); return;
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Send to ${supplierName}` });
+          setShowNotifyModal(false);
+          return;
         } catch (err) { console.error('Share error:', err); }
       }
-      // Web fallback: open WhatsApp directly to the contact with the message
-      window.open(`https://wa.me/${clean}?text=${encodeURIComponent(body)}`, '_blank');
-      // Also download the PDF so user can attach manually
-      if (pdfInfo?.isWeb) {
-        const link = document.createElement('a');
-        link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-      }
+      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(body)}`, '_blank');
 
     } else if (method === 'email') {
-      const email = debtor.email;
-      if (!email) { alert('No email address available'); return; }
+      if (!supplier.email) { alert('No email available'); return; }
       if (isNative && pdfInfo?.uri) {
         try {
           const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject, text: body, url: pdfInfo.uri,
-            dialogTitle: `Email to ${debtorName}`,
-          });
-          setShowNotifyModal(false); return;
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Email to ${supplierName}` });
+          setShowNotifyModal(false);
+          return;
         } catch (err) { console.error('Share error:', err); }
       }
-      // Web: open mailto: directly pre-filled with recipient, subject, body
-      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      if (pdfInfo?.isWeb) {
-        const link = document.createElement('a');
-        link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-      }
+      window.location.href = `mailto:${supplier.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     } else if (method === 'sms') {
-      const phone = debtor.phone || debtor.customerPhone;
+      const phone = supplier.phone || supplier.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
-      // SMS cannot carry files — send text only, download PDF separately
       window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
-      if (pdfInfo?.isWeb) {
-        const link = document.createElement('a');
-        link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-      }
     }
     setShowNotifyModal(false);
   };
@@ -663,15 +553,15 @@ Kadaele Services`;
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
     try {
-      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount), [], paymentPhoto || null);
+      await dataService.recordPayment(selectedSupplier.id, parseFloat(paymentAmount), [], paymentPhoto || null);
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
-      await loadDebtors();
-      const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
+      await loadSuppliers();
+      const updated = (await dataService.getSuppliers()).find(d => d.id === selectedSupplier.id);
       if (updated) {
-        setSelectedDebtor(updated);
+        setSelectedSupplier(updated);
         // Refresh debt history to show new deposit row
         const allSales = await dataService.getSales();
-        setDebtorSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
+        setSupplierSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
       }
       setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null);
     } catch (e) { console.error(e); alert('Failed to record payment'); }
@@ -693,17 +583,17 @@ Kadaele Services`;
   // ── Build merged history rows: interleave sales + deposit rows, then compute
   //    running balance after each event. Sorted oldest → newest.
   const buildHistoryRows = () => {
-    if (!selectedDebtor) return [];
+    if (!selectedSupplier) return [];
 
     // Sales events
-    const saleEvents = debtorSales.map(sale => ({
+    const saleEvents = supplierSales.map(sale => ({
       kind: 'sale',
       date: new Date(sale.date || sale.timestamp || sale.createdAt || 0),
       sale,
     }));
 
     // Deposit events
-    const depositEvents = (selectedDebtor.deposits || []).map(dep => ({
+    const depositEvents = (selectedSupplier.deposits || []).map(dep => ({
       kind: 'deposit',
       date: new Date(dep.date || 0),
       deposit: dep,
@@ -723,16 +613,16 @@ Kadaele Services`;
     }).reverse(); // newest first for display
   };
 
-  if (loading) return <div className="d-screen"><div className="d-loading">Loading debtors...</div></div>;
+  if (loading) return <div className="d-screen"><div className="d-loading">Loading suppliers...</div></div>;
 
-  const historyRows = selectedDebtor ? buildHistoryRows() : [];
+  const historyRows = selectedSupplier ? buildHistoryRows() : [];
 
   return (
     <div className="d-screen">
 
       {/* ── Header ── */}
       <div className="d-header">
-        <input type="text" className="d-search" placeholder="Search debtor name…"
+        <input type="text" className="d-search" placeholder="Search supplier name…"
           value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         <div className="d-sort-wrapper" ref={sortMenuRef}>
           <button className={`d-sort-btn${sortOrder ? ' d-sort-active' : ''}`} onClick={() => setShowSortMenu(v => !v)} title="Sort">
@@ -755,43 +645,43 @@ Kadaele Services`;
             </div>
           )}
         </div>
-        <button className="d-add-btn" onClick={openAddDebtorModal}>+ Add Debtor</button>
+        <button className="d-add-btn" onClick={openAddSupplierModal}>+ Add Supplier</button>
       </div>
 
-      {/* ── Debtor cards ── */}
+      {/* ── Supplier cards ── */}
       <div className="d-grid">
-        {filteredDebtors.length === 0 ? (
+        {filteredSuppliers.length === 0 ? (
           <div className="d-empty">
-            {searchTerm ? 'No debtors match your search.' : 'No debtors yet. Click "+ Add Debtor" to get started.'}
+            {searchTerm ? 'No suppliers match your search.' : 'No suppliers yet. Click "+ Add Supplier" to get started.'}
           </div>
         ) : (
-          filteredDebtors.map(debtor => (
-            <div key={debtor.id} className="d-card" onClick={() => handleDebtorClick(debtor)}>
-              <div className="d-card-name">{debtor.name || debtor.customerName}</div>
-              <div className="d-card-balance">{fmt((debtor.balance || debtor.totalDue || 0))}</div>
+          filteredSuppliers.map(supplier => (
+            <div key={supplier.id} className="d-card" onClick={() => handleSupplierClick(supplier)}>
+              <div className="d-card-name">{supplier.name || supplier.customerName}</div>
+              <div className="d-card-balance">{fmt((supplier.balance || supplier.totalDue || 0))}</div>
             </div>
           ))
         )}
       </div>
 
-      {/* ── Debtor detail modal ── */}
-      {selectedDebtor && (
-        <div className="d-overlay" onClick={closeDebtorModal}>
+      {/* ── Supplier detail modal ── */}
+      {selectedSupplier && (
+        <div className="d-overlay" onClick={closeSupplierModal}>
           <div className="d-modal" onClick={e => e.stopPropagation()}>
 
             <div className="d-modal-header">
-              <h2 className="d-modal-title">{selectedDebtor.name || selectedDebtor.customerName}</h2>
+              <h2 className="d-modal-title">{selectedSupplier.name || selectedSupplier.customerName}</h2>
               <div className="d-modal-actions">
                 {activeTab === 'details' && !isEditMode && (
                   <button className="d-edit-btn" onClick={enableEditMode} title="Edit"><Edit2 size={18} /></button>
                 )}
-                <button className="d-close-btn" onClick={closeDebtorModal}><X size={22} /></button>
+                <button className="d-close-btn" onClick={closeSupplierModal}><X size={22} /></button>
               </div>
             </div>
 
             <div className="d-tabs">
               <button className={`d-tab${activeTab==='details'?' d-tab-active':''}`} onClick={() => setActiveTab('details')}>Details</button>
-              <button className={`d-tab${activeTab==='history'?' d-tab-active':''}`} onClick={() => setActiveTab('history')}>Debt History</button>
+              <button className={`d-tab${activeTab==='history'?' d-tab-active':''}`} onClick={() => setActiveTab('history')}>Purchase History</button>
             </div>
 
             {/* ── Details tab ── */}
@@ -799,11 +689,11 @@ Kadaele Services`;
               <div className="d-tab-body">
                 {isEditMode ? (
                   <div className="d-edit-form">
-                    {[['Full Name *','text',editedDebtor?.name||'','name'],['Phone *','tel',editedDebtor?.phone||'','phone'],
-                      ['WhatsApp','tel',editedDebtor?.whatsapp||'','whatsapp'],['Email','email',editedDebtor?.email||'','email']].map(([lbl,type,val,field]) => (
+                    {[['Full Name *','text',editedSupplier?.name||'','name'],['Phone *','tel',editedSupplier?.phone||'','phone'],
+                      ['WhatsApp','tel',editedSupplier?.whatsapp||'','whatsapp'],['Email','email',editedSupplier?.email||'','email']].map(([lbl,type,val,field]) => (
                       <div className="d-form-group" key={field}>
                         <label>{lbl}</label>
-                        <input type={type} value={val} onChange={e => setEditedDebtor({...editedDebtor,[field]:e.target.value})} />
+                        <input type={type} value={val} onChange={e => setEditedSupplier({...editedSupplier,[field]:e.target.value})} />
                       </div>
                     ))}
                     <div className="d-form-group">
@@ -811,29 +701,29 @@ Kadaele Services`;
                       <div className="d-gender">
                         {['Male','Female'].map(g => (
                           <label key={g} className="d-gender-option">
-                            <input type="radio" name="edit-gender" checked={editedDebtor?.gender===g} onChange={() => setEditedDebtor({...editedDebtor,gender:g})} />{g}
+                            <input type="radio" name="edit-gender" checked={editedSupplier?.gender===g} onChange={() => setEditedSupplier({...editedSupplier,gender:g})} />{g}
                           </label>
                         ))}
                       </div>
                     </div>
                     <div className="d-form-group">
                       <label>Address *</label>
-                      <textarea rows="2" value={editedDebtor?.address||''} onChange={e => setEditedDebtor({...editedDebtor,address:e.target.value})} />
+                      <textarea rows="2" value={editedSupplier?.address||''} onChange={e => setEditedSupplier({...editedSupplier,address:e.target.value})} />
                     </div>
                     <div className="d-form-actions">
                       <button className="d-btn-cancel" onClick={cancelEditMode}>Cancel</button>
-                      <button className="d-btn-save" onClick={saveDebtorEdits}>Save</button>
+                      <button className="d-btn-save" onClick={saveSupplierEdits}>Save</button>
                     </div>
                   </div>
                 ) : (
                   <div className="d-details-view">
                     {[
-                      ['Name', selectedDebtor.name || selectedDebtor.customerName],
-                      ['Gender', selectedDebtor.gender],
-                      ['Phone', selectedDebtor.phone || selectedDebtor.customerPhone],
-                      ['WhatsApp', selectedDebtor.whatsapp],
-                      ['Email', selectedDebtor.email],
-                      ['Address', selectedDebtor.address],
+                      ['Name', selectedSupplier.name || selectedSupplier.customerName],
+                      ['Gender', selectedSupplier.gender],
+                      ['Phone', selectedSupplier.phone || selectedSupplier.customerPhone],
+                      ['WhatsApp', selectedSupplier.whatsapp],
+                      ['Email', selectedSupplier.email],
+                      ['Address', selectedSupplier.address],
                     ].map(([lbl, val]) => (
                       <div className="d-detail-row" key={lbl}>
                         <span className="d-detail-label">{lbl}</span>
@@ -842,23 +732,23 @@ Kadaele Services`;
                     ))}
                     <div className="d-debt-summary">
                       <span className="d-detail-label">Outstanding Balance</span>
-                      <span className="d-debt-amount">{fmt((historyRows.length > 0 ? historyRows[0].runningBalance : (selectedDebtor.balance || selectedDebtor.totalDue || 0)))}</span>
+                      <span className="d-debt-amount">{fmt((historyRows.length > 0 ? historyRows[0].runningBalance : (selectedSupplier.balance || selectedSupplier.totalDue || 0)))}</span>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* ── Debt History tab ── */}
+            {/* ── Purchase History tab ── */}
             {activeTab === 'history' && (
               <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
                 <PdfTableButton
-                  title={`Debt History — ${selectedDebtor?.name||selectedDebtor?.customerName||''}`}
+                  title={`Purchase History — ${selectedSupplier?.name||selectedSupplier?.customerName||''}`}
                   columns={[
-                    {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Image',key:'img'},
-                    {header:'Items',key:'items'},{header:'Qty',key:'qty'},{header:'Price',key:'price'},
-                    {header:'Subtotal',key:'sub'},{header:'Sale Total',key:'saleTotal'},
-                    {header:'Deposited',key:'deposited'},{header:'Balance',key:'balance'}
+                    {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Supplier',key:'supplier'},
+                    {header:'QTY',key:'qty'},{header:'PACKSIZE',key:'packSize'},
+                    {header:'Items',key:'items'},{header:'Pay',key:'pay'},
+                    {header:'Total',key:'total'},{header:'Ref',key:'ref'}
                   ]}
                   rows={historyRows.flatMap(row => {
                     if (row.kind === 'deposit') {
@@ -867,27 +757,28 @@ Kadaele Services`;
                       return [{
                         date: d ? d.toLocaleDateString('en-GB') : 'N/A',
                         time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
-                        img:'—', items:'Deposited Cash to repay Debt', qty:'—', price:'—', sub:'—', saleTotal:'—',
-                        deposited: fmt(parseFloat(dep.amount)), balance: fmt(Math.abs(row.runningBalance)),
+                        supplier:'—', qty:'—', packSize:'—', items:'Deposited Cash to repay Debt',
+                        pay:'—', total: fmt(parseFloat(dep.amount)), ref:'—',
                       }];
                     }
                     const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
                     const rawTs = sale.date||sale.timestamp||sale.createdAt;
                     const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
+                    const supName = selectedSupplier?.name||selectedSupplier?.customerName||'—';
+                    const payLabel = sale.paymentType==='credit' ? 'Credit' : sale.paymentType==='cash' ? 'Cash' : (sale.paymentType||'—');
                     return items.map((item,idx) => ({
                       date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
                       time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
-                      img: idx===0 ? (sale.photoUrl ? '[photo]':'—') : '',
-                      items: item ? (item.name||'N/A') : 'N/A',
-                      qty: item ? String(item.quantity||item.qty||0) : '—',
-                      price: item ? fmt(item.price||0) : '—',
-                      sub: item ? fmt(item.subtotal||(item.price||0)*(item.quantity||item.qty||0)) : '—',
-                      saleTotal: idx===0 ? fmt(sale.total||sale.total_amount||0) : '',
-                      deposited: '—',
-                      balance: idx===0 ? fmt(Math.abs(row.runningBalance)) : '',
+                      supplier: idx===0 ? supName : '',
+                      qty: String(item?.qty||item?.quantity||'—'),
+                      packSize: item?.packSize||'—',
+                      items: item ? (item.description||item.name||'N/A') : 'N/A',
+                      pay: idx===0 ? payLabel : '',
+                      total: idx===0 ? fmt(sale.total||0) : '',
+                      ref: idx===0 ? (sale.invoiceRef||sale.notes||'—') : '',
                     }));
                   })}
-                  summary={[{label:'Total Outstanding', value: fmt(Math.abs(historyRows.length>0 ? historyRows[0].runningBalance : (selectedDebtor?.balance||0)))}]}
+                  summary={[{label:'Total Purchases', value: fmt(historyRows.filter(r=>r.kind==='sale').reduce((s,r)=>s+(r.sale?.total||0),0))}]}
                 />
                 <div className="d-history-actions">
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
@@ -904,19 +795,18 @@ Kadaele Services`;
                       <tr>
                         <th>Date</th>
                         <th>Time</th>
-                        <th>Image</th>
-                        <th>Item</th>
-                        <th>Qty</th>
-                        <th>Price</th>
-                        <th>Subtotal</th>
-                        <th>Sale Total</th>
-                        <th>Deposited</th>
-                        <th>Balance</th>
+                        <th>Supplier</th>
+                        <th>QTY</th>
+                        <th>PACKSIZE</th>
+                        <th>Items</th>
+                        <th>Pay</th>
+                        <th>Total</th>
+                        <th>Ref</th>
                       </tr>
                     </thead>
                     <tbody>
                       {historyRows.length === 0 ? (
-                        <tr><td colSpan="10" className="d-empty-cell">No history yet</td></tr>
+                        <tr><td colSpan="9" className="d-empty-cell">No purchases yet</td></tr>
                       ) : (
                         historyRows.map((row, rowIdx) => {
                           if (row.kind === 'deposit') {
@@ -926,8 +816,6 @@ Kadaele Services`;
                               <tr key={`dep-${dep.id}`} className="d-deposit-row">
                                 <td className="d-merged">{formatDate(dep.date)}</td>
                                 <td className="d-merged">{formatTime(dep.date, dep)}</td>
-                                <td className="d-merged">—</td>
-                                {/* Merged grey cell spanning item/qty/price/subtotal/sale-total */}
                                 <td colSpan="5" className="d-deposit-merged-cell">
                                   D&nbsp;e&nbsp;p&nbsp;o&nbsp;s&nbsp;i&nbsp;t&nbsp;e&nbsp;d&nbsp;&nbsp;&nbsp;
                                   C&nbsp;a&nbsp;s&nbsp;h&nbsp;&nbsp;&nbsp;t&nbsp;o&nbsp;&nbsp;&nbsp;
@@ -942,42 +830,27 @@ Kadaele Services`;
                             );
                           }
 
-                          // ── Sale row(s) ──────────────────────────────────
-                          const sale = row.sale;
+                          // ── Purchase / Sale row(s) ──────────────────────
+                          const sale  = row.sale;
                           const items = sale.items && sale.items.length > 0 ? sale.items : [null];
                           const rowSpan = items.length;
                           const rawTs = sale.date || sale.timestamp || sale.createdAt;
+                          const supplierName = selectedSupplier?.name || selectedSupplier?.customerName || '—';
+                          const payLabel = sale.paymentType === 'credit' ? 'Credit' : sale.paymentType === 'cash' ? 'Cash' : (sale.paymentType || '—');
 
                           return items.map((item, idx) => (
                             <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}
                               style={{ cursor: isWithin2Hours(sale) ? 'pointer' : 'default' }}
-                              onClick={() => isWithin2Hours(sale) && setEditSale(sale)}>
+                              onClick={() => isWithin2Hours(sale) && setEditPurchase(sale)}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs, sale)}</td>}
-                              {idx === 0 && (
-                                <td rowSpan={rowSpan} className="d-merged d-img-cell">
-                                  {sale.photoUrl ? (
-                                    <img
-                                      src={sale.photoUrl}
-                                      alt="Credit book"
-                                      className="d-hist-thumb"
-                                      onClick={() => setEnlargedPhoto(sale.photoUrl)}
-                                      title="Click to enlarge"
-                                    />
-                                  ) : '—'}
-                                </td>
-                              )}
-                              <td>{item ? (item.name || 'N/A') : 'N/A'}</td>
-                              <td className="d-qty">{item ? (item.quantity || item.qty || 0) : '—'}</td>
-                              <td>{item ? fmt(item.price || 0) : '0.00'}</td>
-                              <td>{item ? fmt(item.subtotal || (item.price||0)*(item.quantity||item.qty||0)) : '0.00'}</td>
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">{fmt((sale.total || sale.total_amount || 0))}</td>}
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">—</td>}
-                              {idx === 0 && (
-                                <td rowSpan={rowSpan} className={`d-merged d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
-                                  {fmt(Math.abs(row.runningBalance))}
-                                </td>
-                              )}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{supplierName}</td>}
+                              <td className="d-qty">{item?.qty || item?.quantity || '—'}</td>
+                              <td>{item?.packSize || '—'}</td>
+                              <td>{item ? (item.description || item.name || 'N/A') : 'N/A'}</td>
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{payLabel}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">{fmt(sale.total || sale.total_amount || 0)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{sale.invoiceRef || sale.notes || '—'}</td>}
                             </tr>
                           ));
                         })
@@ -991,41 +864,31 @@ Kadaele Services`;
         </div>
       )}
 
-      {/* ── Add Debtor Modal ── */}
-      {showAddDebtorModal && (
-        <div className="d-overlay" onClick={closeAddDebtorModal}>
+      {/* ── Add Supplier Modal ── */}
+      {showAddSupplierModal && (
+        <div className="d-overlay" onClick={closeAddSupplierModal}>
           <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
             <div className="d-modal-header">
-              <h2 className="d-modal-title">Add New Debtor</h2>
-              <button className="d-close-btn" onClick={closeAddDebtorModal}><X size={22} /></button>
+              <h2 className="d-modal-title">Add New Supplier</h2>
+              <button className="d-close-btn" onClick={closeAddSupplierModal}><X size={22} /></button>
             </div>
-            <form className="d-add-form" onSubmit={handleAddDebtor}>
+            <form className="d-add-form" onSubmit={handleAddSupplier}>
               {[['Full Name *','text','fullName','Enter full name'],['Phone *','tel','phone','Phone number'],
                 ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
                 <div className="d-form-group" key={field}>
                   <label>{lbl}</label>
-                  <input type={type} value={newDebtor[field]} placeholder={ph}
-                    onChange={e => setNewDebtor({...newDebtor,[field]:e.target.value})} />
+                  <input type={type} value={newSupplier[field]} placeholder={ph}
+                    onChange={e => setNewSupplier({...newSupplier,[field]:e.target.value})} />
                 </div>
               ))}
               <div className="d-form-group">
-                <label>Gender *</label>
-                <div className="d-gender">
-                  {['Male','Female'].map(g => (
-                    <label key={g} className="d-gender-option">
-                      <input type="radio" name="new-gender" checked={newDebtor.gender===g} onChange={() => setNewDebtor({...newDebtor,gender:g})} />{g}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="d-form-group">
                 <label>Address *</label>
-                <textarea rows="2" value={newDebtor.address} placeholder="Enter address"
-                  onChange={e => setNewDebtor({...newDebtor,address:e.target.value})} />
+                <textarea rows="2" value={newSupplier.address} placeholder="Enter address"
+                  onChange={e => setNewSupplier({...newSupplier,address:e.target.value})} />
               </div>
               <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
               <div className="d-form-actions">
-                <button type="button" className="d-btn-cancel" onClick={closeAddDebtorModal}>Cancel</button>
+                <button type="button" className="d-btn-cancel" onClick={closeAddSupplierModal}>Cancel</button>
                 <button type="submit" className="d-btn-save">Save</button>
               </div>
             </form>
@@ -1089,39 +952,24 @@ Kadaele Services`;
             <div className="d-notify-preview d-notify-preview-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               <p className="d-notify-preview-label">Message Preview</p>
               <pre className="d-notify-preview-text" style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'inherit',margin:0}}>
-                {selectedDebtor ? buildNotifyMessage().body : ''}
+                {selectedSupplier ? buildNotifyMessage().body : ''}
               </pre>
             </div>
           </div>
         </div>
       )}
-      {/* ── Enlarged Photo Modal ── */}
-      {enlargedPhoto && (
-        <div className="d-overlay" onClick={() => setEnlargedPhoto(null)} style={{zIndex:5000}}>
-          <div style={{maxWidth:'95vw',maxHeight:'90vh',display:'flex',flexDirection:'column',alignItems:'center',gap:'12px'}}>
-            <img src={enlargedPhoto} alt="Credit book" style={{maxWidth:'100%',maxHeight:'80vh',borderRadius:'8px',objectFit:'contain'}} />
-            <button onClick={() => setEnlargedPhoto(null)} style={{padding:'10px 24px',background:'white',border:'none',borderRadius:'8px',fontWeight:700,cursor:'pointer',fontSize:'15px'}}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* ── Edit Sale Modal (2-hour window) ── */}
-      {editSale && (
-        <SaleEditModal
-          sale={editSale}
+      {/* ── Edit Purchase Modal (2-hour window) ── */}
+      {editPurchase && (
+        <PurchaseEditModal
+          purchase={editPurchase}
           fmt={fmt}
-          onSave={async () => {
-            setEditSale(null);
-            const sales = await dataService.getSales();
-            setDebtorSales(sales.filter(s => (s.customer_name||s.customerName) === (selectedDebtor?.name||selectedDebtor?.customerName)));
-          }}
-          onClose={() => setEditSale(null)}
+          onSave={() => setEditPurchase(null)}
+          onClose={() => setEditPurchase(null)}
         />
       )}
     </div>
   );
 }
 
-export default Debtors;
+export default Suppliers;

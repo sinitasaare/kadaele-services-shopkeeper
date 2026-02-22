@@ -255,7 +255,8 @@ textarea {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.875rem;
 }
 
@@ -311,3 +312,118 @@ tr:hover {
     padding: 0.625rem 0.75rem;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE — applied when <html data-theme="dark">
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  --background: #0f1117;
+  --surface: #1a1d27;
+  --border: #2d3148;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  color-scheme: dark;
+}
+
+/* Body + root */
+[data-theme="dark"] body {
+  background-color: #0f1117;
+  color: #e2e8f0;
+}
+
+/* App shell */
+[data-theme="dark"] .app { background: #0f1117; }
+[data-theme="dark"] .page-navigation {
+  background: #1a1d27;
+  border-bottom-color: #2d3148;
+}
+[data-theme="dark"] .page-title { color: #e2e8f0; }
+
+/* Settings sections */
+[data-theme="dark"] .st-screen { background: #0f1117; }
+[data-theme="dark"] .st-section {
+  background: #1a1d27;
+  border-color: #2d3148;
+}
+[data-theme="dark"] .st-section-header { border-bottom-color: #2d3148; }
+[data-theme="dark"] .st-section-title { color: #e2e8f0; }
+[data-theme="dark"] .st-android-label { color: #e2e8f0; }
+[data-theme="dark"] .st-android-desc  { color: #64748b; }
+[data-theme="dark"] .st-android-row { border-bottom-color: #2d3148; }
+[data-theme="dark"] .st-notif-label { color: #e2e8f0; }
+[data-theme="dark"] .st-notif-desc  { color: #64748b; }
+[data-theme="dark"] .st-notif-row { border-bottom-color: #2d3148; }
+[data-theme="dark"] .st-forgotten-note {
+  background: #151825;
+  color: #94a3b8;
+  border-left-color: #667eea;
+}
+[data-theme="dark"] .st-field label { color: #94a3b8; }
+[data-theme="dark"] .st-input {
+  background: #151825;
+  border-color: #2d3148;
+  color: #e2e8f0;
+}
+[data-theme="dark"] .st-input:focus { border-color: #667eea; background: #1a1d27; }
+[data-theme="dark"] .st-modal { background: #1a1d27; }
+[data-theme="dark"] .st-modal-header { border-bottom-color: #2d3148; }
+[data-theme="dark"] .st-modal-header h3 { color: #e2e8f0; }
+[data-theme="dark"] .st-modal-footer { border-top-color: #2d3148; }
+[data-theme="dark"] .st-btn-cancel { background: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] .st-btn-cancel:hover { background: #374263; }
+[data-theme="dark"] .st-cart { background: #151825; border-color: #2d3148; }
+[data-theme="dark"] .st-cart-header { background: #1a1d27; color: #64748b; border-bottom-color: #2d3148; }
+[data-theme="dark"] .st-cart-row { border-bottom-color: #2d3148; }
+[data-theme="dark"] .st-cart-name { color: #e2e8f0; }
+[data-theme="dark"] .st-cart-qty { background: #1a1d27; border-color: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] .st-cart-total { background: #1a1d27; border-top-color: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] .st-search-dropdown { background: #1a1d27; border-color: #2d3148; }
+[data-theme="dark"] .st-search-item { border-bottom-color: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] .st-search-item:hover { background: #2d3148; }
+[data-theme="dark"] .st-ki-notice { background: #1e2535; color: #94a3b8; border-color: #2d3148; }
+
+/* Debtors screen */
+[data-theme="dark"] .d-screen { background: #0f1117; }
+[data-theme="dark"] .d-header { background: #1a1d27; border-bottom-color: #2d3148; }
+[data-theme="dark"] .d-modal { background: #1a1d27; }
+[data-theme="dark"] .d-modal-header { background: #1a1d27; border-bottom-color: #2d3148; }
+[data-theme="dark"] .d-modal-title { color: #e2e8f0; }
+[data-theme="dark"] .d-overlay { background: rgba(0,0,0,0.75); }
+[data-theme="dark"] .d-card { background: #1a1d27; border-color: #2d3148; }
+[data-theme="dark"] .d-name { color: #e2e8f0; }
+[data-theme="dark"] .d-history-table th { background: #151825; color: #94a3b8; border-color: #2d3148; }
+[data-theme="dark"] .d-history-table td { border-color: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] .d-history-table tr:hover td { background: #1e2535; }
+
+/* Inventory screen */
+[data-theme="dark"] .inventory { background: #0f1117; }
+[data-theme="dark"] .inv-sticky-bar { background: #1a1d27; border-bottom-color: #2d3148; }
+[data-theme="dark"] .inv-search-box { background: #151825; border-color: #2d3148; }
+[data-theme="dark"] .inv-search-input { background: transparent; color: #e2e8f0; }
+[data-theme="dark"] .inv-table-wrapper { background: #1a1d27; }
+[data-theme="dark"] .inv-thead th { background: #151825; color: #94a3b8; border-bottom-color: #2d3148; }
+[data-theme="dark"] .inv-table td { border-bottom-color: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] .inv-table tr:hover td { background: #1e2535; }
+[data-theme="dark"] .inv-barcode-modal { background: #1a1d27; }
+[data-theme="dark"] .inv-barcode-modal-header { border-bottom-color: #2d3148; }
+[data-theme="dark"] .inv-barcode-modal-title { color: #e2e8f0; }
+
+/* Sales Register */
+[data-theme="dark"] .register-screen, [data-theme="dark"] .sr-screen { background: #0f1117; }
+[data-theme="dark"] .sr-card, [data-theme="dark"] .grand-total-card { background: #1a1d27; border-color: #2d3148; }
+[data-theme="dark"] .sr-label, [data-theme="dark"] .sr-total-label { color: #94a3b8; }
+[data-theme="dark"] .sr-value, [data-theme="dark"] .sr-total-value { color: #e2e8f0; }
+
+/* Sales Journal / Cash Journal tables */
+[data-theme="dark"] .journal-screen, [data-theme="dark"] .cash-screen,
+[data-theme="dark"] .sj-screen, [data-theme="dark"] .cj-screen { background: #0f1117; }
+[data-theme="dark"] .filter-bar, [data-theme="dark"] .sj-sticky-bar,
+[data-theme="dark"] .cj-sticky-bar { background: #1a1d27; border-bottom-color: #2d3148; }
+[data-theme="dark"] table th { background: #151825; color: #94a3b8; border-color: #2d3148; }
+[data-theme="dark"] table td { border-color: #2d3148; color: #e2e8f0; }
+[data-theme="dark"] table tr:hover { background: #1e2535; }
+
+/* Scrollbars in dark mode */
+[data-theme="dark"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #0f1117; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 3px; }

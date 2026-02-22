@@ -1,5 +1,5 @@
 /* ============================================================
-   Debtors.css  —  all classes namespaced with .d- prefix
+   Suppliers.css  —  all classes namespaced with .d- prefix
    ============================================================ */
 
 .d-screen {
@@ -403,6 +403,3 @@
 .d-balance-neg {
   color: #dc2626;
 }
-
-.d-hist-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1.5px solid #e5e7eb; }
-.d-img-cell { text-align: center; }
