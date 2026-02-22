@@ -41,6 +41,19 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
+    - name: Install ImageMagick
+      run: sudo apt-get install -y imagemagick
+
+    - name: Prepare Kadaele icon (resize logo to 1024x1024 for resources)
+      run: |
+        convert kadaele-logo.png -resize 1024x1024 -background none -gravity center -extent 1024x1024 resources/icon.png
+        echo "Icon prepared: $(identify resources/icon.png)"
+
+    - name: Generate all Android icons and splash screens
+      run: |
+        chmod +x generate-icons.sh
+        bash generate-icons.sh
+
     - name: Sync Capacitor
       run: npx cap sync android
 
@@ -50,8 +63,12 @@ jobs:
         chmod +x gradlew
         ./gradlew assembleDebug
 
+    - name: Rename APK
+      run: |
+        mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/kadaele-shopkeeper.apk
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+        name: kadaele-shopkeeper
+        path: android/app/build/outputs/apk/debug/kadaele-shopkeeper.apk
