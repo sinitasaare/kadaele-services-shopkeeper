@@ -172,12 +172,16 @@
 .d-form-note { font-size: 11px; color: #9ca3af; margin-top: 4px; }
 
 .d-form-actions { display: flex; gap: 10px; margin-top: 6px; }
-.d-btn-cancel, .d-btn-save {
+.d-form-actions-3 { justify-content: space-between; }
+.d-btn-cancel, .d-btn-save, .d-btn-delete {
   flex: 1; padding: 11px; border: none; border-radius: 8px;
   font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
 }
 .d-btn-cancel { background: #e5e7eb; color: #374151; }
 .d-btn-cancel:hover { background: #d1d5db; }
+.d-btn-delete { background: #fee2e2; color: #dc2626; }
+.d-btn-delete:hover { background: #fecaca; }
+.d-btn-delete:disabled { opacity: 0.55; cursor: not-allowed; }
 .d-btn-save { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
 .d-btn-save:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.35); }
 
