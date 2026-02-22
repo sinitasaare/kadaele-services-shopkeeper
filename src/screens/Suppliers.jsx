@@ -5,11 +5,11 @@ import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './Suppliers.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 
 // ── Purchase Edit Modal ────────────────────────────────────────────────────
@@ -892,7 +892,7 @@ Kadaele Services`;
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{sale.invoiceRef || sale.notes || '—'}</td>}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin2Hours(sale) ? (
+                                  {isWithin30Mins(sale) ? (
                                     <button onClick={() => setEditPurchase(sale)}
                                       style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
                                       title="Edit purchase"><Edit2 size={15} /></button>
