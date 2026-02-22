@@ -72,6 +72,9 @@ jobs:
     - name: Build APK
       run: |
         cd android
+        # Remove Capacitor's auto-generated ic_launcher_background.xml to avoid
+        # duplicate resource conflict with the colour already in colors.xml
+        rm -f app/src/main/res/values/ic_launcher_background.xml
         chmod +x gradlew
         ./gradlew assembleDebug
 
