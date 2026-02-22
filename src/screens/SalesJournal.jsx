@@ -5,12 +5,12 @@ import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './SalesJournal.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
   const created = new Date(ts);
-  return (new Date() - created) / (1000 * 60 * 60) <= 2;
+  return (new Date() - created) / (1000 * 60) <= 30;
 }
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
@@ -475,7 +475,7 @@ function SalesJournal() {
                   const items    = sale.items && sale.items.length > 0 ? sale.items : [null];
                   const rowSpan  = items.length;
                   const isActive = !sale.status || sale.status === 'active';
-                  const canEdit = isActive && isWithin2Hours(sale);
+                  const canEdit = isActive && isWithin30Mins(sale);
 
                   return items.map((item, idx) => (
                     <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}
