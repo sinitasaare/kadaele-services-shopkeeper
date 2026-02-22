@@ -5,6 +5,7 @@ import { Camera as CapCamera } from '@capacitor/camera';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
+import ImageViewer from '../components/ImageViewer';
 import './Inventory.css';
 
 function Inventory() {
@@ -16,6 +17,7 @@ function Inventory() {
   const [selectedGood, setSelectedGood] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedGood, setEditedGood] = useState(null);
+  const [viewImg, setViewImg] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { loadGoods(); }, []);
@@ -240,8 +242,8 @@ function Inventory() {
           <table className="inv-table">
             <thead className="inv-thead">
               <tr>
-                <th className="inv-col-num">#</th>
-                <th>PRODUCT NAME</th>
+                <th className="inv-col-num inv-frozen-1">#</th>
+                <th className="inv-frozen-2">PRODUCT NAME</th>
                 <th>Category</th>
                 <th className="inv-col-right">Price</th>
                 <th className="inv-col-center">Stock</th>
@@ -259,8 +261,8 @@ function Inventory() {
                     className="inv-row-clickable"
                     onClick={() => openProductModal(good)}
                   >
-                    <td className="inv-col-num inv-num-cell">{idx + 1}</td>
-                    <td className="inv-name-cell">{good.name || '—'}</td>
+                    <td className="inv-col-num inv-num-cell inv-frozen-1">{idx + 1}</td>
+                    <td className="inv-name-cell inv-frozen-2">{good.name || '—'}</td>
                     <td className="inv-cat-cell">{good.category || '—'}</td>
                     <td className="inv-col-right">{fmt(parseFloat(good.price || 0))}</td>
                     <td className="inv-col-center">{good.stock_quantity ?? '—'}</td>
@@ -341,6 +343,9 @@ function Inventory() {
                         src={getBarcodeImageUrl(selectedGood)} 
                         alt="Product Barcode" 
                         className="inv-detail-barcode-img"
+                        onClick={() => setViewImg(getBarcodeImageUrl(selectedGood))}
+                        style={{ cursor: 'zoom-in' }}
+                        title="Tap to view full screen"
                       />
                     </div>
                   )}
@@ -349,6 +354,8 @@ function Inventory() {
           </div>
         </div>
       )}
+
+      {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Product image" />}
 
     </div>
   );
