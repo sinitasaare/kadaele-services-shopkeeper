@@ -3,13 +3,14 @@ import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSqu
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
+import ImageViewer from '../components/ImageViewer';
 import './Creditors.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
@@ -122,6 +123,7 @@ function Creditors() {
   const [newCreditor, setNewCreditor]       = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [supplierList, setSupplierList]     = useState([]);
+  const [viewImg, setViewImg]               = useState(null);
   const [isEditMode, setIsEditMode]     = useState(false);
   const [editedCreditor, setEditedCreditor] = useState(null);
   const [activeTab, setActiveTab]       = useState('details');
@@ -666,14 +668,14 @@ Kadaele Services`;
             </div>
           )}
         </div>
-        <button className="d-add-btn" onClick={openAddCreditorModal}>+ Add Creditor</button>
+
       </div>
 
       {/* ── Creditor cards ── */}
       <div className="d-grid">
         {filteredCreditors.length === 0 ? (
           <div className="d-empty">
-            {searchTerm ? 'No creditors match your search.' : 'No creditors yet. Click "+ Add Creditor" to get started.'}
+            {searchTerm ? 'No creditors match your search.' : 'No creditors yet.'}
           </div>
         ) : (
           filteredCreditors.map(creditor => (
@@ -872,7 +874,7 @@ Kadaele Services`;
                               )}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin2Hours(sale) ? (
+                                  {isWithin30Mins(sale) ? (
                                     <button onClick={() => setEditSale(sale)}
                                       style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
                                       title="Edit sale"><Edit2 size={15} /></button>
@@ -993,7 +995,7 @@ Kadaele Services`;
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
-              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
+              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" onClick={() => setViewImg(paymentPhoto)} style={{cursor:'zoom-in'}} title="Tap to view full screen" />}
               <div className="d-form-actions">
                 <button className="d-btn-cancel" onClick={() => { setShowPaymentModal(false); setReceiptNumber(''); }}>Cancel</button>
                 <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
@@ -1055,6 +1057,7 @@ Kadaele Services`;
           onClose={() => setEditSale(null)}
         />
       )}
+      {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Receipt photo" />}
     </div>
   );
 }
