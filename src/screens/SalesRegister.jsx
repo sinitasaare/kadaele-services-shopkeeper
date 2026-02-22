@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
+import ImageViewer from '../components/ImageViewer';
 import './SalesRegister.css';
 
 // ── Barcode beep (Web Audio API — no file needed) ──────────────────────────
@@ -38,6 +39,7 @@ function SalesRegister() {
   const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [viewImg, setViewImg] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Debtor search states
@@ -873,7 +875,7 @@ function SalesRegister() {
                   {capturedPhoto ? '📷 Retake Photo' : '📷 Take Photo'}
                 </button>
                 {capturedPhoto && (
-                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />
+                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" onClick={() => setViewImg(capturedPhoto)} style={{cursor:'zoom-in'}} title="Tap to view full screen" />
                 )}
                 {!capturedPhoto && <p style={{fontSize:'11px',color:'#dc2626',marginTop:'4px'}}>Photo is required</p>}
               </div>
@@ -886,6 +888,7 @@ function SalesRegister() {
           </div>
         </div>
       )}
+      {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Credit book photo" />}
     </div>
   );
 }
