@@ -38,6 +38,11 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
+    - name: Pin Gradle to stable version
+      run: |
+        sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2.1-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+        cat android/gradle/wrapper/gradle-wrapper.properties
+
     - name: Install ImageMagick
       run: sudo apt-get install -y imagemagick
 
@@ -53,6 +58,16 @@ jobs:
 
     - name: Sync Capacitor
       run: npx cap sync android
+
+    - name: Cache Gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
 
     - name: Build APK
       run: |
