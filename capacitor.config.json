@@ -1,6 +1,6 @@
 {
   "appId": "com.kadaele.shopkeeper",
-  "appName": "Kadaele Shopkeeper",
+  "appName": "Shopkeeper",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "plugins": {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Camera as CapCamera } from '@capacitor/camera';
 import dataService from '../services/dataService';
@@ -413,7 +413,7 @@ function AddPurchaseModal({ onSave, onClose }) {
 // ─────────────────────────────────────────────────────────────
 // Purchase Detail / Edit modal
 // ─────────────────────────────────────────────────────────────
-function PurchaseDetailModal({ purchase, onClose, onSaved }) {
+function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted }) {
   const { fmt } = useCurrency();
   const editable = isWithin2Hours(purchase);
   const [supplierName, setSupplierName] = useState(purchase.supplierName || '');
@@ -423,6 +423,17 @@ function PurchaseDetailModal({ purchase, onClose, onSaved }) {
   const [rows, setRows] = useState((purchase.items || []).map((it, i) => ({ id: i + 1, ...it })));
   const nextId = React.useRef((purchase.items || []).length + 1);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this purchase record? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await dataService.deletePurchase(purchase.id);
+      onDeleted();
+    } catch (e) { alert(e.message); }
+    finally { setDeleting(false); }
+  };
 
   if (!purchase) return null;
   const d = new Date(purchase.date || purchase.createdAt || 0);
@@ -499,36 +510,75 @@ function PurchaseDetailModal({ purchase, onClose, onSaved }) {
             <label>Items</label>
             {editable ? (
               <>
-                <div className="pr-items-header pr-items-header-v2">
-                  <span>Qty</span><span>Description</span><span>Pack</span><span>Cost</span><span>Sub</span><span></span>
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'340px' }}>
+                    <thead>
+                      <tr style={{ background:'#f3f4f6' }}>
+                        <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'52px' }}>Qty</th>
+                        <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Description</th>
+                        <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'56px' }}>Pack</th>
+                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Cost</th>
+                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Subtotal</th>
+                        <th style={{ width:'28px' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(row => (
+                        <tr key={row.id}>
+                          <td style={{ padding:'4px 8px' }}>
+                            <input type="number" className="pr-item-input pr-item-qty" placeholder="0" value={row.qty||''} min="0"
+                              onChange={e => updateRow(row.id,'qty',e.target.value)} />
+                          </td>
+                          <td style={{ padding:'4px 8px' }}>
+                            <input type="text" className="pr-item-input pr-item-desc" placeholder="Item name…" value={row.description||''}
+                              onChange={e => updateRow(row.id,'description',e.target.value)} />
+                          </td>
+                          <td style={{ padding:'4px 8px' }}>
+                            <input type="text" className="pr-item-input" placeholder="Pack" value={row.packSize||''} style={{ width:'52px' }}
+                              onChange={e => updateRow(row.id,'packSize',e.target.value)} />
+                          </td>
+                          <td style={{ padding:'4px 8px' }}>
+                            <input type="number" className="pr-item-input pr-item-cost" placeholder="0.00" value={row.costPrice||''} min="0" step="0.01"
+                              onChange={e => updateRow(row.id,'costPrice',e.target.value)} />
+                          </td>
+                          <td style={{ padding:'4px 8px', textAlign:'right', fontSize:'13px', fontWeight:500 }}>
+                            {fmt((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0))}
+                          </td>
+                          <td style={{ padding:'4px 4px' }}>
+                            {rows.length > 1 && <button className="pr-item-remove" onClick={() => removeRow(row.id)}><Trash2 size={14}/></button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                {rows.map(row => (
-                  <div key={row.id} className="pr-item-row pr-item-row-v2">
-                    <input type="number" className="pr-item-input pr-item-qty" placeholder="0" value={row.qty||''} min="0"
-                      onChange={e => updateRow(row.id,'qty',e.target.value)} />
-                    <input type="text" className="pr-item-input pr-item-desc" placeholder="Item name…" value={row.description||''}
-                      onChange={e => updateRow(row.id,'description',e.target.value)} />
-                    <input type="text" className="pr-item-input" placeholder="Pack" value={row.packSize||''} style={{ width:'56px' }}
-                      onChange={e => updateRow(row.id,'packSize',e.target.value)} />
-                    <input type="number" className="pr-item-input pr-item-cost" placeholder="0.00" value={row.costPrice||''} min="0" step="0.01"
-                      onChange={e => updateRow(row.id,'costPrice',e.target.value)} />
-                    <span className="pr-item-subtotal">{fmt((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0))}</span>
-                    {rows.length > 1 && <button className="pr-item-remove" onClick={() => removeRow(row.id)}><Trash2 size={14}/></button>}
-                  </div>
-                ))}
                 <button className="pr-add-row-btn" onClick={addRow}><Plus size={14}/> Add Item</button>
                 <div className="pr-total-row"><span>Total</span><span className="pr-total-val">{fmt(itemTotal)}</span></div>
               </>
             ) : (
               <>
-                {(purchase.items || []).map((item, i) => (
-                  <div key={i} className="pr-detail-item-row">
-                    <span className="pr-di-qty">{item.qty}×</span>
-                    <span className="pr-di-desc">{item.description}</span>
-                    <span className="pr-di-price">{fmt(item.costPrice||0)}</span>
-                    <span className="pr-di-sub">{fmt(item.subtotal||0)}</span>
-                  </div>
-                ))}
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'260px' }}>
+                    <thead>
+                      <tr style={{ background:'#f3f4f6' }}>
+                        <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'40px' }}>Qty</th>
+                        <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Description</th>
+                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Price</th>
+                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(purchase.items || []).map((item, i) => (
+                        <tr key={i}>
+                          <td style={{ padding:'6px 8px', textAlign:'center' }}>{item.qty}×</td>
+                          <td style={{ padding:'6px 8px' }}>{item.description}</td>
+                          <td style={{ padding:'6px 8px', textAlign:'right' }}>{fmt(item.costPrice||0)}</td>
+                          <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:500 }}>{fmt(item.subtotal||0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <div className="pr-detail-total"><span>Total Cost</span><span>{fmt(purchase.total||0)}</span></div>
               </>
             )}
@@ -558,9 +608,14 @@ function PurchaseDetailModal({ purchase, onClose, onSaved }) {
         <div className="pr-modal-footer">
           {editable ? (
             <>
-              <button className="pr-btn-cancel" onClick={onClose}>Cancel</button>
-              <button className="pr-btn-save" onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving…' : 'Save Changes'}
+              <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
+                <button className="pr-btn-cancel" onClick={onClose}>Cancel</button>
+                <button className="pr-btn-save" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving…' : 'Update Record'}
+                </button>
+              </div>
+              <button onClick={handleDelete} disabled={deleting} style={{ width:'100%', padding:'10px', borderRadius:'8px', border:'none', background:'#fee2e2', color:'#dc2626', cursor:'pointer', fontWeight:700, fontSize:'14px' }}>
+                {deleting ? 'Deleting…' : 'Delete Record'}
               </button>
             </>
           ) : (
@@ -825,20 +880,22 @@ function PurchaseRecord() {
                 <th>Pay</th>
                 <th className="pr-col-right">Total</th>
                 <th>Ref</th>
+                <th className="pr-col-center">Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan="9" className="pr-empty-cell">No purchases found</td></tr>
+                <tr><td colSpan="10" className="pr-empty-cell">No purchases found</td></tr>
               ) : (
                 filtered.map(p => {
                   const { date, time } = formatDateTime(p);
                   const items = p.items || [];
                   const payType = p.paymentType || p.payment_type || 'cash';
+                  const canEdit = isWithin2Hours(p);
 
                   if (items.length === 0) {
                     return (
-                      <tr key={p.id} className="pr-row" style={{ cursor: isWithin2Hours(p) ? 'pointer' : 'default' }} onClick={() => setViewPurchase(p)}>
+                      <tr key={p.id} className="pr-row" style={{ cursor: canEdit ? 'pointer' : 'default' }} onClick={() => setViewPurchase(p)}>
                         <td rowSpan="1">{date}</td>
                         <td rowSpan="1">{time}</td>
                         <td rowSpan="1" className="pr-supplier-cell">{p.supplierName || '—'}</td>
@@ -853,12 +910,19 @@ function PurchaseRecord() {
                         </td>
                         <td rowSpan="1" className="pr-col-right pr-total-cell">{fmt(p.total||0)}</td>
                         <td rowSpan="1" className="pr-notes-cell">{p.invoiceRef || p.notes || '—'}</td>
+                        <td rowSpan="1" className="pr-col-center">
+                          {canEdit ? (
+                            <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                              title="Edit purchase"><Edit2 size={15} /></button>
+                          ) : null}
+                        </td>
                       </tr>
                     );
                   }
 
                   return items.map((item, idx) => (
-                    <tr key={`${p.id}-${idx}`} className="pr-row" style={{ cursor: isWithin2Hours(p) ? 'pointer' : 'default' }} onClick={() => setViewPurchase(p)}>
+                    <tr key={`${p.id}-${idx}`} className="pr-row" style={{ cursor: canEdit ? 'pointer' : 'default' }} onClick={() => setViewPurchase(p)}>
                       {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell">{date}</td>}
                       {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell">{time}</td>}
                       {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell pr-supplier-cell">{p.supplierName || '—'}</td>}
@@ -875,6 +939,15 @@ function PurchaseRecord() {
                       )}
                       {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell pr-col-right pr-total-cell">{fmt(p.total||0)}</td>}
                       {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell">{p.invoiceRef || p.notes || '—'}</td>}
+                      {idx === 0 && (
+                        <td rowSpan={items.length} className="pr-merged-cell pr-col-center">
+                          {canEdit ? (
+                            <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                              title="Edit purchase"><Edit2 size={15} /></button>
+                          ) : null}
+                        </td>
+                      )}
                     </tr>
                   ));
                 })
@@ -895,6 +968,7 @@ function PurchaseRecord() {
           purchase={viewPurchase}
           onClose={() => setViewPurchase(null)}
           onSaved={async () => { setViewPurchase(null); await loadPurchases(); }}
+          onDeleted={async () => { setViewPurchase(null); await loadPurchases(); }}
         />
       )}
     </div>

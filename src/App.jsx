@@ -442,12 +442,12 @@ function App() {
       </header>
 
       <div className="page-navigation">
-        <button onClick={() => setShowMenuModal(true)} className="nav-icon-btn" aria-label="Menu">
-          <Menu size={24} />
-        </button>
-        <h2 className="page-title">{PAGES[currentPageIndex].name}</h2>
         <button onClick={() => setShowHelpModal(true)} className="nav-icon-btn" aria-label="Help">
           <HelpCircle size={24} />
+        </button>
+        <h2 className="page-title">{PAGES[currentPageIndex].name}</h2>
+        <button onClick={() => setShowMenuModal(true)} className="nav-icon-btn" aria-label="Menu">
+          <Menu size={24} />
         </button>
       </div>
 

@@ -38,10 +38,6 @@ function SalesRegister() {
   const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
-  const [showCropModal, setShowCropModal] = useState(false);
-  const [cropPhotoSrc, setCropPhotoSrc] = useState(null);
-  const cropCanvasRef = React.useRef(null);
-  const [cropData, setCropData] = useState({ startX: 0, startY: 0, endX: 0, endY: 0, dragging: false });
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Debtor search states
@@ -367,7 +363,7 @@ function SalesRegister() {
         const file = e.target.files[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = (ev) => { setCropPhotoSrc(ev.target.result); setShowCropModal(true); };
+          reader.onload = (ev) => { setCapturedPhoto(ev.target.result); };
           reader.readAsDataURL(file);
         }
       };
@@ -375,37 +371,9 @@ function SalesRegister() {
     } else {
       try {
         const image = await CapCamera.getPhoto({ quality: 70, allowEditing: false, resultType: 'dataUrl' });
-        setCropPhotoSrc(image.dataUrl);
-        setShowCropModal(true);
+        setCapturedPhoto(image.dataUrl);
       } catch { alert('Could not capture photo. Please try again.'); }
     }
-  };
-
-  const applyCrop = () => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      // Simple crop: just use the image as-is if no real crop applied (basic implementation)
-      const { startX, startY, endX, endY } = cropData;
-      const x = Math.min(startX, endX);
-      const y = Math.min(startY, endY);
-      const w = Math.abs(endX - startX);
-      const h = Math.abs(endY - startY);
-      if (w < 10 || h < 10) {
-        // No real crop selected, use full image
-        canvas.width = img.width;
-        canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-      } else {
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
-      }
-      setCapturedPhoto(canvas.toDataURL('image/jpeg', 0.85));
-      setShowCropModal(false);
-      setCropData({ startX: 0, startY: 0, endX: 0, endY: 0, dragging: false });
-    };
-    img.src = cropPhotoSrc;
   };
   const confirmCreditSale = async (e) => {
     e.preventDefault();
@@ -905,12 +873,7 @@ function SalesRegister() {
                   {capturedPhoto ? '📷 Retake Photo' : '📷 Take Photo'}
                 </button>
                 {capturedPhoto && (
-                  <>
-                    <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />
-                    <button type="button" className="sr-btn-crop" onClick={() => { setCropPhotoSrc(capturedPhoto); setShowCropModal(true); }}>
-                      ✂️ CROP
-                    </button>
-                  </>
+                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />
                 )}
                 {!capturedPhoto && <p style={{fontSize:'11px',color:'#dc2626',marginTop:'4px'}}>Photo is required</p>}
               </div>
@@ -920,67 +883,6 @@ function SalesRegister() {
                 <button type="submit" className="sr-btn-confirm" disabled={isProcessing || !selectedDebtorId}>Save</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-      {/* ── Crop Modal ── */}
-      {showCropModal && cropPhotoSrc && (
-        <div className="sr-modal-overlay" style={{zIndex:3000}}>
-          <div className="sr-modal-content" style={{maxWidth:'95vw',width:'95vw',padding:'12px'}}>
-            <h2 style={{marginBottom:'8px'}}>Crop Photo</h2>
-            <p style={{fontSize:'12px',color:'#6b7280',marginBottom:'8px'}}>Drag on the image to select crop area, then tap CROP.</p>
-            <div style={{position:'relative',overflow:'hidden',maxHeight:'60vh',display:'flex',justifyContent:'center'}}>
-              <img
-                src={cropPhotoSrc}
-                alt="Crop preview"
-                style={{maxWidth:'100%',maxHeight:'60vh',objectFit:'contain',userSelect:'none'}}
-                ref={cropCanvasRef}
-                onMouseDown={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const scaleX = e.currentTarget.naturalWidth / rect.width;
-                  const scaleY = e.currentTarget.naturalHeight / rect.height;
-                  const x = (e.clientX - rect.left) * scaleX;
-                  const y = (e.clientY - rect.top) * scaleY;
-                  setCropData({ startX: x, startY: y, endX: x, endY: y, dragging: true, scaleX, scaleY });
-                }}
-                onMouseMove={(e) => {
-                  if (!cropData.dragging) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = (e.clientX - rect.left) * cropData.scaleX;
-                  const y = (e.clientY - rect.top) * cropData.scaleY;
-                  setCropData(d => ({ ...d, endX: x, endY: y }));
-                }}
-                onMouseUp={() => setCropData(d => ({ ...d, dragging: false }))}
-                onTouchStart={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const t = e.touches[0];
-                  const scaleX = e.currentTarget.naturalWidth / rect.width;
-                  const scaleY = e.currentTarget.naturalHeight / rect.height;
-                  const x = (t.clientX - rect.left) * scaleX;
-                  const y = (t.clientY - rect.top) * scaleY;
-                  setCropData({ startX: x, startY: y, endX: x, endY: y, dragging: true, scaleX, scaleY });
-                }}
-                onTouchMove={(e) => {
-                  if (!cropData.dragging) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const t = e.touches[0];
-                  const x = (t.clientX - rect.left) * cropData.scaleX;
-                  const y = (t.clientY - rect.top) * cropData.scaleY;
-                  setCropData(d => ({ ...d, endX: x, endY: y }));
-                }}
-                onTouchEnd={() => setCropData(d => ({ ...d, dragging: false }))}
-              />
-            </div>
-            <div className="sr-modal-buttons" style={{marginTop:'12px'}}>
-              <button className="sr-btn-cancel" onClick={() => { setShowCropModal(false); if(!capturedPhoto) setCropPhotoSrc(null); }}>Cancel</button>
-              <button className="sr-btn-confirm" onClick={applyCrop}>✂️ CROP</button>
-            </div>
-            <button
-              onClick={() => { setCapturedPhoto(cropPhotoSrc); setShowCropModal(false); }}
-              style={{width:'100%',marginTop:'8px',padding:'8px',background:'none',border:'1px solid #ccc',borderRadius:'6px',fontSize:'13px',color:'#6b7280',cursor:'pointer'}}
-            >
-              Use Full Photo (no crop)
-            </button>
           </div>
         </div>
       )}

@@ -13,13 +13,14 @@ function isWithin2Hours(entry) {
 }
 
 // ── Purchase Edit Modal ────────────────────────────────────────────────────
-function PurchaseEditModal({ purchase, onSave, onClose, fmt }) {
+function PurchaseEditModal({ purchase, onSave, onClose, onDeleted, fmt }) {
   const [supplierName, setSupplierName] = useState(purchase.supplierName || '');
   const [notes, setNotes] = useState(purchase.notes || '');
   const [invoiceRef, setInvoiceRef] = useState(purchase.invoiceRef || '');
   const [rows, setRows] = useState((purchase.items || []).map((it, i) => ({ id: i+1, ...it })));
   const nextId = React.useRef((purchase.items||[]).length + 1);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
   const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
@@ -41,6 +42,16 @@ function PurchaseEditModal({ purchase, onSave, onClose, fmt }) {
     finally { setSaving(false); }
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this purchase record? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await dataService.deletePurchase(purchase.id);
+      onDeleted();
+    } catch (e) { alert(e.message); }
+    finally { setDeleting(false); }
+  };
+
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
       <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
@@ -54,17 +65,40 @@ function PurchaseEditModal({ purchase, onSave, onClose, fmt }) {
 
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
-          {rows.map(row => (
-            <div key={row.id} style={{ display:'grid', gridTemplateColumns:'50px 1fr 70px', gap:'6px', marginBottom:'6px' }}>
-              <input type="number" value={row.qty||''} onChange={e => updateRow(row.id,'qty',e.target.value)} placeholder="Qty"
-                style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-              <input value={row.description||''} onChange={e => updateRow(row.id,'description',e.target.value)} placeholder="Description"
-                style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-              <input type="number" value={row.costPrice||''} onChange={e => updateRow(row.id,'costPrice',e.target.value)} placeholder="Cost"
-                style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-            </div>
-          ))}
-          <div style={{ textAlign:'right', fontWeight:700, fontSize:'14px', color:'#667eea', marginTop:'6px' }}>Total: {fmt(itemTotal)}</div>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'280px' }}>
+              <thead>
+                <tr style={{ background:'#f3f4f6' }}>
+                  <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'52px' }}>Qty</th>
+                  <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Description</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Cost</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.id}>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input type="number" value={row.qty||''} onChange={e => updateRow(row.id,'qty',e.target.value)} placeholder="0"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', textAlign:'center', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input value={row.description||''} onChange={e => updateRow(row.id,'description',e.target.value)} placeholder="Description"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input type="number" value={row.costPrice||''} onChange={e => updateRow(row.id,'costPrice',e.target.value)} placeholder="0.00"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', textAlign:'right', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px', textAlign:'right', fontSize:'13px', fontWeight:500 }}>
+                      {fmt((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ textAlign:'right', fontWeight:700, fontSize:'14px', color:'#667eea', marginTop:'8px' }}>Total: {fmt(itemTotal)}</div>
         </div>
 
         <div style={{ marginBottom:'12px' }}>
@@ -79,10 +113,15 @@ function PurchaseEditModal({ purchase, onSave, onClose, fmt }) {
             style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
 
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
-            {saving ? 'Saving…' : 'Save Changes'}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
+              {saving ? 'Saving…' : 'Update Record'}
+            </button>
+          </div>
+          <button onClick={handleDelete} disabled={deleting} style={{ width:'100%', padding:'10px', borderRadius:'8px', border:'none', background:'#fee2e2', color:'#dc2626', cursor:'pointer', fontWeight:700 }}>
+            {deleting ? 'Deleting…' : 'Delete Record'}
           </button>
         </div>
       </div>
@@ -802,11 +841,12 @@ Kadaele Services`;
                         <th>Pay</th>
                         <th>Total</th>
                         <th>Ref</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {historyRows.length === 0 ? (
-                        <tr><td colSpan="9" className="d-empty-cell">No purchases yet</td></tr>
+                        <tr><td colSpan="10" className="d-empty-cell">No purchases yet</td></tr>
                       ) : (
                         historyRows.map((row, rowIdx) => {
                           if (row.kind === 'deposit') {
@@ -826,6 +866,7 @@ Kadaele Services`;
                                 <td className={`d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
                                   {fmt(Math.abs(row.runningBalance))}
                                 </td>
+                                <td></td>
                               </tr>
                             );
                           }
@@ -839,9 +880,7 @@ Kadaele Services`;
                           const payLabel = sale.paymentType === 'credit' ? 'Credit' : sale.paymentType === 'cash' ? 'Cash' : (sale.paymentType || '—');
 
                           return items.map((item, idx) => (
-                            <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}
-                              style={{ cursor: isWithin2Hours(sale) ? 'pointer' : 'default' }}
-                              onClick={() => isWithin2Hours(sale) && setEditPurchase(sale)}>
+                            <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs, sale)}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{supplierName}</td>}
@@ -851,6 +890,15 @@ Kadaele Services`;
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{payLabel}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">{fmt(sale.total || sale.total_amount || 0)}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{sale.invoiceRef || sale.notes || '—'}</td>}
+                              {idx === 0 && (
+                                <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
+                                  {isWithin2Hours(sale) ? (
+                                    <button onClick={() => setEditPurchase(sale)}
+                                      style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                                      title="Edit purchase"><Edit2 size={15} /></button>
+                                  ) : null}
+                                </td>
+                              )}
                             </tr>
                           ));
                         })
@@ -964,7 +1012,16 @@ Kadaele Services`;
         <PurchaseEditModal
           purchase={editPurchase}
           fmt={fmt}
-          onSave={() => setEditPurchase(null)}
+          onSave={async () => {
+            setEditPurchase(null);
+            const all = await dataService.getPurchases();
+            setSupplierSales(all.filter(p => p.supplierId === selectedSupplier?.id || p.supplierName === (selectedSupplier?.name || selectedSupplier?.customerName)));
+          }}
+          onDeleted={async () => {
+            setEditPurchase(null);
+            const all = await dataService.getPurchases();
+            setSupplierSales(all.filter(p => p.supplierId === selectedSupplier?.id || p.supplierName === (selectedSupplier?.name || selectedSupplier?.customerName)));
+          }}
           onClose={() => setEditPurchase(null)}
         />
       )}

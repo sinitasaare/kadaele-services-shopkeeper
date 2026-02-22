@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Edit2 } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
@@ -13,11 +14,12 @@ function isWithin2Hours(entry) {
 }
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
-function SaleEditModal({ sale, onSave, onClose, fmt }) {
+function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
   const [paymentType, setPaymentType] = useState(sale.payment_type || sale.paymentType || 'cash');
   const [customerName, setCustomerName] = useState(sale.customer_name || sale.customerName || '');
   const [items, setItems] = useState((sale.items || []).map(i => ({ ...i })));
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const updateItem = (idx, field, val) => {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it));
@@ -52,6 +54,16 @@ function SaleEditModal({ sale, onSave, onClose, fmt }) {
     finally { setSaving(false); }
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this sale record? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await dataService.deleteSale(sale.id);
+      onDeleted();
+    } catch (e) { alert(e.message); }
+    finally { setDeleting(false); }
+  };
+
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
       <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
@@ -81,26 +93,50 @@ function SaleEditModal({ sale, onSave, onClose, fmt }) {
 
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
-          {items.map((it, idx) => (
-            <div key={idx} style={{ display:'grid', gridTemplateColumns:'1fr 60px 70px', gap:'6px', marginBottom:'6px', alignItems:'center' }}>
-              <input value={it.name || ''} onChange={e => updateItem(idx, 'name', e.target.value)} placeholder="Item name"
-                style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-              <input type="number" value={it.quantity ?? it.qty ?? ''} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="Qty"
-                style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-              <input type="number" value={it.price ?? ''} onChange={e => updateItem(idx, 'price', e.target.value)} placeholder="Price"
-                style={{ padding:'6px 8px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'13px' }} />
-            </div>
-          ))}
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'280px' }}>
+              <thead>
+                <tr style={{ background:'#f3f4f6' }}>
+                  <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Product Name</th>
+                  <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'60px' }}>Qty</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, idx) => (
+                  <tr key={idx}>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input value={it.name || ''} onChange={e => updateItem(idx, 'name', e.target.value)} placeholder="Item name"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input type="number" value={it.quantity ?? it.qty ?? ''} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="0"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', textAlign:'center', boxSizing:'border-box' }} />
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <input type="number" value={it.price ?? ''} onChange={e => updateItem(idx, 'price', e.target.value)} placeholder="0.00"
+                        style={{ width:'100%', padding:'5px 6px', border:'1.5px solid #d1d5db', borderRadius:'5px', fontSize:'13px', textAlign:'right', boxSizing:'border-box' }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div style={{ textAlign:'right', fontWeight:700, fontSize:'15px', marginBottom:'16px', color:'#667eea' }}>
           Total: {fmt(total)}
         </div>
 
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
-            {saving ? 'Saving…' : 'Save Changes'}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
+              {saving ? 'Saving…' : 'Update Record'}
+            </button>
+          </div>
+          <button onClick={handleDelete} disabled={deleting} style={{ width:'100%', padding:'10px', borderRadius:'8px', border:'none', background:'#fee2e2', color:'#dc2626', cursor:'pointer', fontWeight:700 }}>
+            {deleting ? 'Deleting…' : 'Delete Record'}
           </button>
         </div>
       </div>
@@ -443,8 +479,7 @@ function SalesJournal() {
 
                   return items.map((item, idx) => (
                     <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}
-                      style={{ opacity: !isActive ? 0.55 : 1, cursor: canEdit ? 'pointer' : 'default' }}
-                      onClick={() => canEdit && setEditSale(sale)}>
+                      style={{ opacity: !isActive ? 0.55 : 1 }}>
                       {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{date}</td>}
                       {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
                       <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
@@ -465,25 +500,15 @@ function SalesJournal() {
                       )}
                       {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{customer || '—'}</td>}
                       {idx === 0 && (
-                        <td rowSpan={rowSpan} className="merged-cell">
+                        <td rowSpan={rowSpan} className="merged-cell" style={{ textAlign:'center' }}>
                           {canEdit ? (
-                            <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                              <button
-                                onClick={() => { setVoidSale(sale); setVoidReason(''); }}
-                                style={{ fontSize:'11px', padding:'3px 8px', background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:600 }}>
-                                Void
-                              </button>
-                              <button
-                                onClick={() => { setRefundSale(sale); setRefundAmount(total.toFixed(2)); setRefundReason(''); }}
-                                style={{ fontSize:'11px', padding:'3px 8px', background:'#fef3c7', color:'#d97706', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:600 }}>
-                                Refund
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize:'10px', color:'#9ca3af' }}>
-                              {!isActive ? '—' : '>2h'}
-                            </span>
-                          )}
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditSale(sale); }}
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                              title="Edit sale">
+                              <Edit2 size={15} />
+                            </button>
+                          ) : null}
                         </td>
                       )}
                     </tr>
@@ -597,6 +622,11 @@ function SalesJournal() {
           sale={editSale}
           fmt={fmt}
           onSave={async () => {
+            setEditSale(null);
+            const data = await dataService.getSales();
+            setSales((data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0)));
+          }}
+          onDeleted={async () => {
             setEditSale(null);
             const data = await dataService.getSales();
             setSales((data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0)));

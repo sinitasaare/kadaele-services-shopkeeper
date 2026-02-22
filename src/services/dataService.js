@@ -653,6 +653,49 @@ class DataService {
     return null;
   }
 
+  async deleteSale(id) {
+    const sales = await this.getSales();
+    const index = sales.findIndex(s => s.id === id);
+    if (index === -1) throw new Error('Sale not found');
+    const sale = sales[index];
+    const hoursDiff = (new Date() - new Date(sale.createdAt || sale.date || 0)) / (1000 * 60 * 60);
+    if (hoursDiff > 2) throw new Error('Cannot delete sale after 2 hours');
+    sales.splice(index, 1);
+    await this.setSales(sales);
+    if (this.isOnline && auth.currentUser) {
+      try { await deleteDoc(doc(db, 'sales', id)); } catch (err) { console.error('Firebase delete sale error:', err); }
+    }
+    await this.recalculateDebtors();
+  }
+
+  async deleteCashEntry(id) {
+    const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    const index = entries.findIndex(e => e.id === id);
+    if (index === -1) throw new Error('Cash entry not found');
+    const entry = entries[index];
+    const hoursDiff = (new Date() - new Date(entry.date || entry.createdAt || 0)) / (1000 * 60 * 60);
+    if (hoursDiff > 2) throw new Error('Cannot delete cash entry after 2 hours');
+    entries.splice(index, 1);
+    await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+    if (this.isOnline && auth.currentUser) {
+      try { await deleteDoc(doc(db, 'cash_entries', id)); } catch (err) { console.error('Firebase delete cash entry error:', err); }
+    }
+  }
+
+  async deletePurchase(id) {
+    const purchases = await localforage.getItem(DATA_KEYS.PURCHASES) || [];
+    const index = purchases.findIndex(p => p.id === id);
+    if (index === -1) throw new Error('Purchase not found');
+    const purchase = purchases[index];
+    const hoursDiff = (new Date() - new Date(purchase.createdAt || purchase.date || 0)) / (1000 * 60 * 60);
+    if (hoursDiff > 2) throw new Error('Cannot delete purchase after 2 hours');
+    purchases.splice(index, 1);
+    await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
+    if (this.isOnline && auth.currentUser) {
+      try { await deleteDoc(doc(db, 'purchases', id)); } catch (err) { console.error('Firebase delete purchase error:', err); }
+    }
+  }
+
   async voidSale(id, reason) {
     return await this.updateSale(id, { 
       status: 'voided', 

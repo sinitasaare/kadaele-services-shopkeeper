@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Edit2 } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
@@ -15,11 +16,12 @@ function isWithin2Hours(entry) {
 }
 
 // ── Cash Entry Edit Modal ──────────────────────────────────────────────────
-function CashEditModal({ entry, onSave, onClose, fmt }) {
+function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
   const [type, setType] = useState(entry.type || TYPE_IN);
   const [amount, setAmount] = useState(String(entry.amount || ''));
   const [note, setNote] = useState(entry.note || '');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleSave = async () => {
     const parsedAmount = parseFloat(amount);
@@ -31,6 +33,16 @@ function CashEditModal({ entry, onSave, onClose, fmt }) {
       onSave();
     } catch (e) { alert(e.message); }
     finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this cash entry? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await dataService.deleteCashEntry(entry.id);
+      onDeleted();
+    } catch (e) { alert(e.message); }
+    finally { setDeleting(false); }
   };
 
   return (
@@ -64,10 +76,15 @@ function CashEditModal({ entry, onSave, onClose, fmt }) {
             style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
 
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
-            {saving ? 'Saving…' : 'Save Changes'}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
+              {saving ? 'Saving…' : 'Update Record'}
+            </button>
+          </div>
+          <button onClick={handleDelete} disabled={deleting} style={{ width:'100%', padding:'10px', borderRadius:'8px', border:'none', background:'#fee2e2', color:'#dc2626', cursor:'pointer', fontWeight:700 }}>
+            {deleting ? 'Deleting…' : 'Delete Record'}
           </button>
         </div>
       </div>
@@ -481,19 +498,18 @@ function CashJournal() {
               <th className="cj-col-right">Amount</th>
               <th className="cj-col-center">Type</th>
               <th className="cj-col-right">Balance</th>
+              <th className="cj-col-center">Action</th>
             </tr>
           </thead>
           <tbody>
             {filteredEntries.length === 0 ? (
-              <tr><td colSpan="7" className="cj-empty-cell">No entries found</td></tr>
+              <tr><td colSpan="8" className="cj-empty-cell">No entries found</td></tr>
             ) : (
               filteredEntries.map(entry => {
                 const { date, time } = formatDateTime(entry);
                 const editable = isWithin2Hours(entry);
                 return (
-                  <tr key={entry.id} className="cj-row"
-                    style={{ cursor: editable ? 'pointer' : 'default' }}
-                    onClick={() => editable && setEditEntry(entry)}>
+                  <tr key={entry.id} className="cj-row">
                     <td>{date}</td>
                     <td>{time}</td>
                     <td className="cj-ref-cell">{entry.invoiceRef || entry.ref || '—'}</td>
@@ -508,6 +524,15 @@ function CashJournal() {
                     </td>
                     <td className={`cj-col-right cj-balance ${entry.balance < 0 ? 'cj-balance-neg' : ''}`}>
                       {entry.balance < 0 ? '-' : ''}{fmt(Math.abs(entry.balance))}
+                    </td>
+                    <td className="cj-col-center">
+                      {editable ? (
+                        <button onClick={() => setEditEntry(entry)}
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                          title="Edit entry">
+                          <Edit2 size={15} />
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -667,6 +692,7 @@ function CashJournal() {
           entry={editEntry}
           fmt={fmt}
           onSave={async () => { setEditEntry(null); await loadEntries(); }}
+          onDeleted={async () => { setEditEntry(null); await loadEntries(); }}
           onClose={() => setEditEntry(null)}
         />
       )}
