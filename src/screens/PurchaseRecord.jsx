@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Camera as CapCamera } from '@capacitor/camera';
@@ -8,63 +8,29 @@ import PdfTableButton from '../components/PdfTableButton';
 import ImageViewer from '../components/ImageViewer';
 import './PurchaseRecord.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ───────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 
 // ─────────────────────────────────────────────────────────────
-// PackSize child modal
-// ─────────────────────────────────────────────────────────────
-function PackSizeModal({ productName, onSave, onClose }) {
-  const [units, setUnits] = useState('');
-  const [size, setSize] = useState('');
-  return (
-    <div className="pr-modal-overlay" style={{zIndex:3000}}>
-      <div className="pr-modal-content" style={{maxWidth:'320px'}}>
-        <div className="pr-modal-header">
-          <h2>Content of [{productName}] carton</h2>
-          <button className="pr-modal-close" onClick={onClose}><X size={20}/></button>
-        </div>
-        <div className="pr-modal-body">
-          <div className="pr-field">
-            <input type="number" className="pr-input" placeholder="Units" value={units}
-              onChange={e => setUnits(e.target.value)} min="1" />
-          </div>
-          <div className="pr-field">
-            <input type="text" className="pr-input" placeholder="Size (e.g. 300g or 250ml)" value={size}
-              onChange={e => setSize(e.target.value)} />
-          </div>
-        </div>
-        <div className="pr-modal-footer">
-          <button className="pr-btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="pr-btn-save" onClick={() => {
-            if (!units) { alert('Please enter units.'); return; }
-            onSave(`${units}×${size || '?'}`);
-          }}>OK</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Add Purchase Modal — now with payment type and creditor link
+// Add Purchase Modal
 // ─────────────────────────────────────────────────────────────
 function AddPurchaseModal({ onSave, onClose }) {
   const { fmt } = useCurrency();
-  const [supplierId, setSupplierId]     = useState(null);
+
+  const [supplierId, setSupplierId]         = useState(null);
   const [supplierSearch, setSupplierSearch] = useState('');
-  const [suppliers, setSuppliers]       = useState([]);
+  const [suppliers, setSuppliers]           = useState([]);
   const [showSupplierDrop, setShowSupplierDrop] = useState(false);
   const selectedSupplier = suppliers.find(s => s.id === supplierId);
   const supplierName = selectedSupplier ? (selectedSupplier.name || selectedSupplier.customerName || '') : '';
 
-  const [paymentType, setPaymentType]   = useState('cash');
-  const [creditors, setCreditors]       = useState([]);
-  const [creditorId, setCreditorId]     = useState(null);
+  const [paymentType, setPaymentType] = useState('cash');
+  const [creditors, setCreditors]     = useState([]);
+  const [creditorId, setCreditorId]   = useState(null);
   const [creditorName, setCreditorName] = useState('');
   const [showCreditorDrop, setShowCreditorDrop] = useState(false);
 
@@ -72,17 +38,22 @@ function AddPurchaseModal({ onSave, onClose }) {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   });
-  const [rows, setRows] = useState([{ id: 1, qty: '', description: '', costPrice: '', packSize: '' }]);
-  const [packSizeRowId, setPackSizeRowId] = useState(null);
-  const [notes, setNotes] = useState('');
+
+  const [rows, setRows] = useState([{
+    id: 1, qty: '', description: '', descSearch: '', showDescDrop: false,
+    costPrice: '', packUnit: '', packSize: '',
+  }]);
+  const [goods, setGoods]           = useState([]);
   const [invoiceRef, setInvoiceRef] = useState('');
+  const [notes, setNotes]           = useState('');
   const [receiptPhoto, setReceiptPhoto] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const nextId = React.useRef(2);
+  const [saving, setSaving]         = useState(false);
+  const nextId = useRef(2);
 
   useEffect(() => {
-    dataService.getSuppliers().then(data => setSuppliers(data || []));
-    dataService.getCreditors().then(data => setCreditors(data || []));
+    dataService.getSuppliers().then(d => setSuppliers(d || []));
+    dataService.getCreditors().then(d => setCreditors(d || []));
+    dataService.getGoods().then(d => setGoods(d || []));
   }, []);
 
   const getTodayStr = () => {
@@ -90,27 +61,39 @@ function AddPurchaseModal({ onSave, onClose }) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
-  const addRow = () => setRows(prev => [...prev, { id: nextId.current++, qty: '', description: '', costPrice: '', packSize: '' }]);
+  const filteredSuppliers = suppliers
+    .filter(s => (s.name||s.customerName||'').toLowerCase().includes(supplierSearch.toLowerCase()))
+    .sort((a,b) => (a.name||a.customerName||'').localeCompare(b.name||b.customerName||''));
+
+  const addRow = () => setRows(prev => [...prev, {
+    id: nextId.current++, qty: '', description: '', descSearch: '',
+    showDescDrop: false, costPrice: '', packUnit: '', packSize: '',
+  }]);
   const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
   const updateRow = (id, field, val) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
 
-  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
+  const descResults = (search) => {
+    if (!search.trim()) return [];
+    const t = search.toLowerCase();
+    return goods
+      .filter(g => (g.name||'').toLowerCase().includes(t))
+      .sort((a,b) => (a.name||'').localeCompare(b.name||''))
+      .slice(0, 10);
+  };
 
-  const filteredSuppliers = suppliers.filter(s =>
-    (s.name||s.customerName||'').toLowerCase().startsWith(supplierSearch.toLowerCase()) ||
-    (s.name||s.customerName||'').toLowerCase().includes(supplierSearch.toLowerCase())
-  ).sort((a, b) => (a.name||a.customerName||'').localeCompare(b.name||b.customerName||''));
+  const itemTotal = rows.reduce((sum, r) =>
+    sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
 
   const takePhoto = async () => {
     if (!Capacitor.isNativePlatform()) {
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.capture = 'camera';
-      input.onchange = (e) => {
+      input.onchange = e => {
         const file = e.target.files[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = (ev) => setReceiptPhoto(ev.target.result);
+          reader.onload = ev => setReceiptPhoto(ev.target.result);
           reader.readAsDataURL(file);
         }
       };
@@ -124,14 +107,15 @@ function AddPurchaseModal({ onSave, onClose }) {
   };
 
   const handleSave = async () => {
-    if (!supplierId) { alert('Please select a supplier from the list.'); return; }
+    if (!supplierId) { alert('Please select a supplier.'); return; }
     if (!purchaseDate) { alert('Please select a purchase date.'); return; }
     if (paymentType === 'credit' && !creditorId) {
-      alert('For credit purchases, please select the creditor (who you owe payment to).'); return;
+      alert('For credit purchases, please select the creditor.'); return;
     }
     const validRows = rows.filter(r => r.description.trim() && parseFloat(r.qty) > 0);
-    if (validRows.length === 0) { alert('Please add at least one item with a description and quantity.'); return; }
-
+    if (validRows.length === 0) {
+      alert('Please add at least one item with a description and quantity.'); return;
+    }
     setSaving(true);
     try {
       const items = validRows.map(r => ({
@@ -139,20 +123,36 @@ function AddPurchaseModal({ onSave, onClose }) {
         description: r.description.trim(),
         costPrice: parseFloat(r.costPrice) || 0,
         subtotal: (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0),
+        packUnit: r.packUnit || '',
         packSize: r.packSize || '',
+        packDisplay: r.packUnit ? `${r.packUnit}\u00d7${r.packSize||'?'}` : '',
       }));
       const total = items.reduce((s, i) => s + i.subtotal, 0);
 
+      // Increase inventory stock by packUnit qty for each matched item
+      try {
+        const allGoods = await dataService.getGoods();
+        let changed = false;
+        items.forEach(item => {
+          const units = parseFloat(item.packUnit) || 0;
+          if (units > 0) {
+            const good = allGoods.find(g =>
+              (g.name||'').toLowerCase() === item.description.toLowerCase());
+            if (good) {
+              good.stock_quantity = (parseFloat(good.stock_quantity) || 0) + units;
+              changed = true;
+            }
+          }
+        });
+        if (changed) await dataService.setGoods(allGoods);
+      } catch (e) { console.error('Stock update error:', e); }
+
       await dataService.addPurchase({
-        supplierName: supplierName,
-        supplierId: supplierId || null,
-        paymentType,
-        creditorId: paymentType === 'credit' ? creditorId : null,
+        supplierName, supplierId: supplierId || null,
+        paymentType, creditorId: paymentType === 'credit' ? creditorId : null,
         date: new Date(purchaseDate + 'T12:00:00').toISOString(),
-        items,
-        total,
-        notes: notes.trim(),
-        invoiceRef: invoiceRef.trim(),
+        items, total,
+        notes: notes.trim(), invoiceRef: invoiceRef.trim(),
         receiptPhoto: receiptPhoto || null,
       });
       onSave();
@@ -172,14 +172,11 @@ function AddPurchaseModal({ onSave, onClose }) {
 
         <div className="pr-modal-body">
 
-          {/* Supplier — search-only dropdown */}
+          {/* Supplier */}
           <div className="pr-field">
             <label>Supplier Name *</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                className="pr-input"
-                placeholder="Search a supplier"
+            <div style={{position:'relative'}}>
+              <input type="text" className="pr-input" placeholder="Search a supplier…"
                 value={supplierSearch}
                 onChange={e => { setSupplierSearch(e.target.value); setSupplierId(null); setShowSupplierDrop(true); }}
                 onFocus={() => setShowSupplierDrop(true)}
@@ -191,21 +188,16 @@ function AddPurchaseModal({ onSave, onClose }) {
                 </div>
               )}
               {showSupplierDrop && (
-                <div style={{
-                  position:'absolute', top:'100%', left:0, right:0, zIndex:1000,
-                  background:'white', border:'1px solid #ccc', borderRadius:'6px',
-                  maxHeight:'160px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'
-                }}>
-                  {filteredSuppliers.length === 0 ? (
-                    <div style={{padding:'10px 12px',color:'#9ca3af',fontSize:'13px'}}>No suppliers found</div>
-                  ) : filteredSuppliers.map(s => (
-                    <div key={s.id}
-                      onMouseDown={() => { setSupplierId(s.id); setSupplierSearch(''); setShowSupplierDrop(false); }}
-                      style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'14px' }}
-                    >
-                      {s.name || s.customerName}
-                    </div>
-                  ))}
+                <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'white',border:'1px solid #ccc',borderRadius:'6px',maxHeight:'160px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
+                  {filteredSuppliers.length === 0
+                    ? <div style={{padding:'10px 12px',color:'#9ca3af',fontSize:'13px'}}>No suppliers found</div>
+                    : filteredSuppliers.map(s => (
+                        <div key={s.id}
+                          onMouseDown={() => { setSupplierId(s.id); setSupplierSearch(''); setShowSupplierDrop(false); }}
+                          style={{padding:'10px 12px',cursor:'pointer',borderBottom:'1px solid #eee',fontSize:'14px'}}>
+                          {s.name || s.customerName}
+                        </div>
+                      ))}
                 </div>
               )}
             </div>
@@ -214,142 +206,156 @@ function AddPurchaseModal({ onSave, onClose }) {
             )}
           </div>
 
-          {/* Payment Type */}
+          {/* Payment Type — narrower, float apart */}
           <div className="pr-field">
             <label>Payment Type *</label>
-            <div style={{ display:'flex', gap:'8px' }}>
+            <div className="pr-pay-type-row">
               {[['cash','💵 Cash Paid'],['credit','📋 Buy on Credit']].map(([pt, lbl]) => (
-                <button key={pt}
-                  type="button"
+                <button key={pt} type="button"
+                  className={`pr-pay-type-btn${paymentType===pt?(pt==='cash'?' pr-pay-cash-active':' pr-pay-credit-active'):''}`}
                   onClick={() => setPaymentType(pt)}
-                  style={{
-                    flex:1, padding:'9px', borderRadius:'8px', border:'2px solid',
-                    borderColor: paymentType === pt ? (pt === 'cash' ? '#16a34a' : '#dc2626') : '#d1d5db',
-                    background: paymentType === pt ? (pt === 'cash' ? '#f0fdf4' : '#fff5f5') : 'white',
-                    fontWeight: paymentType === pt ? 700 : 400,
-                    color: paymentType === pt ? (pt === 'cash' ? '#16a34a' : '#dc2626') : '#6b7280',
-                    cursor:'pointer', fontSize:'13px',
-                  }}
-                >
-                  {lbl}
-                </button>
+                >{lbl}</button>
               ))}
             </div>
-            <p style={{ fontSize:'11px', marginTop:'4px', color: paymentType === 'credit' ? '#dc2626' : '#6b7280' }}>
-              {paymentType === 'cash'
+            <p style={{fontSize:'11px',marginTop:'4px',color:paymentType==='credit'?'#4f46e5':'#6b7280'}}>
+              {paymentType==='cash'
                 ? 'Cash paid now — a Cash OUT entry will be recorded.'
-                : 'Goods received, pay later — no cash out now. Creditor balance updated.'}
+                : 'Goods received, pay later — creditor balance updated.'}
             </p>
           </div>
 
-          {/* Creditor — only for credit purchases */}
+          {/* Creditor (credit only) */}
           {paymentType === 'credit' && (
             <div className="pr-field">
               <label>Creditor (who you will pay) *</label>
-              <div style={{ position:'relative' }}>
-                <div
-                  onClick={() => setShowCreditorDrop(d => !d)}
-                  style={{
-                    width:'100%', padding:'8px 36px 8px 10px',
-                    border:`1.5px solid ${creditorId ? '#dc2626' : '#ccc'}`,
-                    borderRadius:'6px', minHeight:'36px',
-                    background: creditorId ? '#fff5f5' : 'white',
-                    cursor:'pointer', userSelect:'none', boxSizing:'border-box',
-                    fontSize:'14px', color: creditorName ? '#1f2937' : '#9ca3af',
-                    display:'flex', alignItems:'center',
-                  }}
-                >
-                  {creditorName || (creditors.length === 0 ? 'No creditors registered yet' : 'Tap to select creditor…')}
+              <div style={{position:'relative'}}>
+                <div onClick={() => setShowCreditorDrop(d => !d)}
+                  style={{width:'100%',padding:'8px 36px 8px 10px',border:`1.5px solid ${creditorId?'#4f46e5':'#ccc'}`,borderRadius:'6px',minHeight:'36px',background:creditorId?'#eef2ff':'white',cursor:'pointer',userSelect:'none',boxSizing:'border-box',fontSize:'14px',color:creditorName?'#1f2937':'#9ca3af',display:'flex',alignItems:'center'}}>
+                  {creditorName || (creditors.length===0?'No creditors registered yet':'Tap to select creditor…')}
                 </div>
-                <span style={{ position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#9ca3af', fontSize:'12px', pointerEvents:'none' }}>▼</span>
+                <span style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',color:'#9ca3af',fontSize:'12px',pointerEvents:'none'}}>▼</span>
                 {showCreditorDrop && creditors.length > 0 && (
-                  <div style={{
-                    position:'absolute', top:'100%', left:0, right:0, zIndex:1000,
-                    background:'white', border:'1px solid #ccc', borderRadius:'6px',
-                    maxHeight:'160px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'
-                  }}>
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'white',border:'1px solid #ccc',borderRadius:'6px',maxHeight:'160px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
                     {creditors.map(c => (
                       <div key={c.id}
                         onMouseDown={() => { setCreditorId(c.id); setCreditorName(c.name||c.customerName); setShowCreditorDrop(false); }}
-                        style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'14px' }}
-                      >
-                        <div style={{ fontWeight:600 }}>{c.name||c.customerName}</div>
-                        <div style={{ fontSize:'11px', color:'#888' }}>Current balance: {fmt(c.balance||0)}</div>
+                        style={{padding:'10px 12px',cursor:'pointer',borderBottom:'1px solid #eee',fontSize:'14px'}}>
+                        <div style={{fontWeight:600}}>{c.name||c.customerName}</div>
+                        <div style={{fontSize:'11px',color:'#888'}}>Balance: {fmt(c.balance||0)}</div>
                       </div>
                     ))}
                   </div>
                 )}
-                {showCreditorDrop && (
-                  <div style={{ position:'fixed', inset:0, zIndex:999 }} onClick={() => setShowCreditorDrop(false)} />
-                )}
+                {showCreditorDrop && <div style={{position:'fixed',inset:0,zIndex:999}} onClick={() => setShowCreditorDrop(false)} />}
               </div>
-              {creditors.length === 0 && (
-                <p style={{ fontSize:'12px', color:'#c00', marginTop:'4px' }}>
-                  No creditors registered. Add one in the Creditors section first.
-                </p>
-              )}
             </div>
           )}
 
-          {/* Date */}
-          <div className="pr-field">
-            <label>Purchase Date *</label>
-            <input type="date" className="pr-input" value={purchaseDate}
-              max={getTodayStr()} onChange={e => setPurchaseDate(e.target.value)} />
+          {/* Purchase Date — inline */}
+          <div className="pr-date-inline">
+            <label className="pr-date-inline-label">Purchase Date *</label>
+            <input type="date" className="pr-date-inline-input"
+              value={purchaseDate} max={getTodayStr()}
+              onChange={e => setPurchaseDate(e.target.value)} />
           </div>
 
-          {/* Items */}
+          {/* Items Purchased */}
           <div className="pr-field">
             <label>Items Purchased *</label>
-            <div className="pr-items-header pr-items-header-v2">
-              <span>Qty</span>
-              <span>Description</span>
-              <span>Pack Size</span>
-              <span>Cost</span>
-              <span>Subtotal</span>
-              <span></span>
+            <div className="pr-items-table-wrapper">
+              <table className="pr-items-tbl">
+                <thead>
+                  <tr>
+                    <th className="pr-ith pr-ith-qty">QTY</th>
+                    <th className="pr-ith pr-ith-desc">DESCRIPTION</th>
+                    <th className="pr-ith pr-ith-pack">PACKSIZE</th>
+                    <th className="pr-ith pr-ith-cost">COST</th>
+                    <th className="pr-ith" style={{width:'24px'}}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(row => {
+                    const results = descResults(row.descSearch);
+                    return (
+                      <tr key={row.id}>
+                        {/* QTY */}
+                        <td className="pr-itd pr-itd-qty">
+                          <input type="number" className="pr-it-input pr-it-qty"
+                            placeholder="0" min="0" step="1"
+                            value={row.qty}
+                            onChange={e => updateRow(row.id, 'qty', e.target.value)} />
+                        </td>
+
+                        {/* DESCRIPTION — inventory search */}
+                        <td className="pr-itd pr-itd-desc" style={{position:'relative'}}>
+                          <input type="text" className="pr-it-input pr-it-desc"
+                            placeholder="Search inventory…"
+                            value={row.descSearch !== undefined ? row.descSearch : row.description}
+                            onChange={e => {
+                              updateRow(row.id, 'descSearch', e.target.value);
+                              updateRow(row.id, 'showDescDrop', true);
+                            }}
+                            onFocus={() => updateRow(row.id, 'showDescDrop', true)}
+                            onBlur={() => setTimeout(() => {
+                              setRows(prev => prev.map(r => r.id === row.id
+                                ? { ...r, showDescDrop: false,
+                                    descSearch: r.description || r.descSearch }
+                                : r));
+                            }, 180)}
+                          />
+                          {row.showDescDrop && results.length > 0 && (
+                            <div className="pr-desc-drop">
+                              {results.map(g => (
+                                <div key={g.id} className="pr-desc-drop-item"
+                                  onMouseDown={() => {
+                                    updateRow(row.id, 'description', g.name || '');
+                                    updateRow(row.id, 'descSearch', g.name || '');
+                                    updateRow(row.id, 'showDescDrop', false);
+                                  }}>
+                                  {g.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* PACKSIZE — unit × size */}
+                        <td className="pr-itd pr-itd-pack">
+                          <div className="pr-pack-pair">
+                            <input type="text" className="pr-it-input pr-it-pack-unit"
+                              placeholder="unit" value={row.packUnit}
+                              onChange={e => updateRow(row.id, 'packUnit', e.target.value)} />
+                            <span className="pr-pack-x">&times;</span>
+                            <input type="text" className="pr-it-input pr-it-pack-size"
+                              placeholder="size" value={row.packSize}
+                              onChange={e => updateRow(row.id, 'packSize', e.target.value)} />
+                          </div>
+                        </td>
+
+                        {/* COST */}
+                        <td className="pr-itd pr-itd-cost">
+                          <input type="number" className="pr-it-input pr-it-cost"
+                            placeholder="0.00" min="0" step="0.01"
+                            value={row.costPrice}
+                            onChange={e => updateRow(row.id, 'costPrice', e.target.value)} />
+                        </td>
+
+                        {/* Remove */}
+                        <td className="pr-itd pr-itd-del">
+                          {rows.length > 1 && (
+                            <button className="pr-item-remove" onClick={() => removeRow(row.id)}>
+                              <Trash2 size={14}/>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            {rows.map(row => (
-              <div key={row.id} className="pr-item-row pr-item-row-v2">
-                <input type="number" className="pr-item-input pr-item-qty"
-                  placeholder="0" value={row.qty} min="0" step="1"
-                  onChange={e => updateRow(row.id, 'qty', e.target.value)} />
-                <input type="text" className="pr-item-input pr-item-desc"
-                  placeholder="Item name…" value={row.description}
-                  onChange={e => updateRow(row.id, 'description', e.target.value)} />
-                <button
-                  type="button"
-                  className="pr-packsize-btn"
-                  disabled={!row.description.trim()}
-                  title={!row.description.trim() ? 'Enter product name first' : 'Set pack size'}
-                  onClick={() => row.description.trim() && setPackSizeRowId(row.id)}
-                  style={{
-                    opacity: row.description.trim() ? 1 : 0.4,
-                    cursor: row.description.trim() ? 'pointer' : 'not-allowed',
-                    fontSize: '11px', padding: '4px 6px',
-                    background: row.packSize ? '#e0f2fe' : '#f3f4f6',
-                    border: '1px solid #d1d5db', borderRadius: '4px',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    maxWidth: '70px',
-                  }}
-                >
-                  {row.packSize || 'Set…'}
-                </button>
-                <input type="number" className="pr-item-input pr-item-cost"
-                  placeholder="0.00" value={row.costPrice} min="0" step="0.01"
-                  onChange={e => updateRow(row.id, 'costPrice', e.target.value)} />
-                <span className="pr-item-subtotal">
-                  {fmt((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0))}
-                </span>
-                {rows.length > 1 && (
-                  <button className="pr-item-remove" onClick={() => removeRow(row.id)}>
-                    <Trash2 size={14}/>
-                  </button>
-                )}
-              </div>
-            ))}
             <button className="pr-add-row-btn" onClick={addRow}>
-              <Plus size={14}/> Add Next Product
+              <Plus size={14}/> Add New Product
             </button>
           </div>
 
@@ -359,19 +365,18 @@ function AddPurchaseModal({ onSave, onClose }) {
             <span className="pr-total-val">{fmt(itemTotal)}</span>
           </div>
 
-          {/* Invoice / Reference */}
-          <div className="pr-field">
-            <label>Invoice / Reference Number (optional)</label>
-            <input type="text" className="pr-input"
-              placeholder="Invoice number, receipt ref…"
+          {/* Ref — inline */}
+          <div className="pr-ref-inline">
+            <label className="pr-ref-label">Ref:</label>
+            <input type="text" className="pr-ref-input"
+              placeholder="Invoice / receipt number…"
               value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} />
           </div>
 
           {/* Notes */}
           <div className="pr-field">
             <label>Notes (optional)</label>
-            <input type="text" className="pr-input"
-              placeholder="Extra notes…"
+            <input type="text" className="pr-input" placeholder="Extra notes…"
               value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
 
@@ -395,18 +400,6 @@ function AddPurchaseModal({ onSave, onClose }) {
           </button>
         </div>
       </div>
-
-      {/* PackSize child modal */}
-      {packSizeRowId !== null && (() => {
-        const row = rows.find(r => r.id === packSizeRowId);
-        return row ? (
-          <PackSizeModal
-            productName={row.description}
-            onSave={(ps) => { updateRow(packSizeRowId, 'packSize', ps); setPackSizeRowId(null); }}
-            onClose={() => setPackSizeRowId(null)}
-          />
-        ) : null;
-      })()}
     </div>
   );
 }
@@ -416,35 +409,28 @@ function AddPurchaseModal({ onSave, onClose }) {
 // ─────────────────────────────────────────────────────────────
 function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImage }) {
   const { fmt } = useCurrency();
-  const editable = isWithin2Hours(purchase);
+  const editable = isWithin30Mins(purchase);
   const [supplierName, setSupplierName] = useState(purchase.supplierName || '');
-  const [notes, setNotes] = useState(purchase.notes || '');
-  const [invoiceRef, setInvoiceRef] = useState(purchase.invoiceRef || '');
-  const [paymentType, setPaymentType] = useState(purchase.paymentType || purchase.payment_type || 'cash');
-  const [rows, setRows] = useState((purchase.items || []).map((it, i) => ({ id: i + 1, ...it })));
-  const nextId = React.useRef((purchase.items || []).length + 1);
-  const [saving, setSaving] = useState(false);
+  const [notes, setNotes]               = useState(purchase.notes || '');
+  const [invoiceRef, setInvoiceRef]     = useState(purchase.invoiceRef || '');
+  const [paymentType, setPaymentType]   = useState(purchase.paymentType || purchase.payment_type || 'cash');
+  const [rows, setRows]                 = useState((purchase.items || []).map((it, i) => ({ id: i+1, ...it })));
+  const nextId = useRef((purchase.items || []).length + 1);
+  const [saving, setSaving]   = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+  const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
+  const addRow = () => setRows(prev => [...prev, { id: nextId.current++, qty:'', description:'', costPrice:'', packUnit:'', packSize:'' }]);
+  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0)*(parseFloat(r.costPrice)||0), 0);
 
   const handleDelete = async () => {
     if (!window.confirm('Delete this purchase record? This cannot be undone.')) return;
     setDeleting(true);
-    try {
-      await dataService.deletePurchase(purchase.id);
-      onDeleted();
-    } catch (e) { alert(e.message); }
+    try { await dataService.deletePurchase(purchase.id); onDeleted(); }
+    catch (e) { alert(e.message); }
     finally { setDeleting(false); }
   };
-
-  if (!purchase) return null;
-  const d = new Date(purchase.date || purchase.createdAt || 0);
-  const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const timeStr = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true });
-
-  const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
-  const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
-  const addRow = () => { setRows(prev => [...prev, { id: nextId.current++, qty: '', description: '', costPrice: '', packSize: '' }]); };
-  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
 
   const handleSave = async () => {
     if (!supplierName.trim()) { alert('Supplier name is required.'); return; }
@@ -454,22 +440,25 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
         qty: parseFloat(r.qty) || 0,
         description: r.description?.trim() || '',
         costPrice: parseFloat(r.costPrice) || 0,
+        packUnit: r.packUnit || '',
         packSize: r.packSize || '',
+        packDisplay: r.packUnit ? `${r.packUnit}\u00d7${r.packSize||'?'}` : '',
         subtotal: (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0),
       }));
       await dataService.updatePurchase(purchase.id, {
-        supplierName: supplierName.trim(),
-        notes: notes.trim(),
-        invoiceRef: invoiceRef.trim(),
-        paymentType,
-        payment_type: paymentType,
-        items,
-        total: itemTotal,
+        supplierName: supplierName.trim(), notes: notes.trim(),
+        invoiceRef: invoiceRef.trim(), paymentType, payment_type: paymentType,
+        items, total: itemTotal,
       });
       onSaved();
     } catch (e) { alert(e.message); }
     finally { setSaving(false); }
   };
+
+  if (!purchase) return null;
+  const d = new Date(purchase.date || purchase.createdAt || 0);
+  const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const timeStr = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
 
   return (
     <div className="pr-modal-overlay">
@@ -482,28 +471,28 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
           <div className="pr-detail-row"><span>Date</span><span>{dateStr}</span></div>
           <div className="pr-detail-row"><span>Time</span><span>{timeStr}</span></div>
 
-          <div className="pr-field" style={{ marginTop:'10px' }}>
+          <div className="pr-field" style={{marginTop:'10px'}}>
             <label>Supplier</label>
             {editable
               ? <input className="pr-input" value={supplierName} onChange={e => setSupplierName(e.target.value)} />
-              : <div style={{ padding:'8px 0', fontWeight:600 }}>{purchase.supplierName || '—'}</div>}
+              : <div style={{padding:'8px 0',fontWeight:600}}>{purchase.supplierName || '—'}</div>}
           </div>
 
           <div className="pr-field">
             <label>Payment Type</label>
             {editable ? (
-              <div style={{ display:'flex', gap:'8px' }}>
-                {[['cash','💵 Cash'],['credit','📋 Credit']].map(([pt, lbl]) => (
+              <div style={{display:'flex',gap:'8px'}}>
+                {[['cash','💵 Cash'],['credit','📋 Credit']].map(([pt,lbl]) => (
                   <button key={pt} type="button" onClick={() => setPaymentType(pt)} style={{
-                    flex:1, padding:'7px', borderRadius:'7px', border:'2px solid',
-                    borderColor: paymentType===pt ? (pt==='cash'?'#16a34a':'#dc2626') : '#d1d5db',
-                    background: paymentType===pt ? (pt==='cash'?'#f0fdf4':'#fff5f5') : 'white',
-                    fontWeight: paymentType===pt ? 700 : 400, cursor:'pointer', fontSize:'13px',
+                    flex:1,padding:'7px',borderRadius:'7px',border:'2px solid',
+                    borderColor:paymentType===pt?(pt==='cash'?'#16a34a':'#4f46e5'):'#d1d5db',
+                    background:paymentType===pt?(pt==='cash'?'#f0fdf4':'#eef2ff'):'white',
+                    fontWeight:paymentType===pt?700:400,cursor:'pointer',fontSize:'13px',
                   }}>{lbl}</button>
                 ))}
               </div>
             ) : (
-              <div style={{ fontWeight:700, textTransform:'uppercase', color: paymentType==='cash'?'#16a34a':'#dc2626' }}>{paymentType}</div>
+              <div style={{fontWeight:700,textTransform:'uppercase',color:paymentType==='cash'?'#16a34a':'#4f46e5'}}>{paymentType}</div>
             )}
           </div>
 
@@ -511,41 +500,42 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
             <label>Items</label>
             {editable ? (
               <>
-                <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'340px' }}>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px',minWidth:'340px'}}>
                     <thead>
-                      <tr style={{ background:'#f3f4f6' }}>
-                        <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'52px' }}>Qty</th>
-                        <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Description</th>
-                        <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'56px' }}>Pack</th>
-                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Cost</th>
-                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Subtotal</th>
-                        <th style={{ width:'28px' }}></th>
+                      <tr style={{background:'#f3f4f6'}}>
+                        <th style={{padding:'6px 8px',textAlign:'center',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase',width:'52px'}}>Qty</th>
+                        <th style={{padding:'6px 8px',textAlign:'left',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase'}}>Description</th>
+                        <th style={{padding:'6px 8px',textAlign:'left',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase',width:'80px'}}>PackSize</th>
+                        <th style={{padding:'6px 8px',textAlign:'right',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase',width:'72px'}}>Cost</th>
+                        <th style={{width:'28px'}}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map(row => (
                         <tr key={row.id}>
-                          <td style={{ padding:'4px 8px' }}>
+                          <td style={{padding:'4px 8px'}}>
                             <input type="number" className="pr-item-input pr-item-qty" placeholder="0" value={row.qty||''} min="0"
                               onChange={e => updateRow(row.id,'qty',e.target.value)} />
                           </td>
-                          <td style={{ padding:'4px 8px' }}>
+                          <td style={{padding:'4px 8px'}}>
                             <input type="text" className="pr-item-input pr-item-desc" placeholder="Item name…" value={row.description||''}
                               onChange={e => updateRow(row.id,'description',e.target.value)} />
                           </td>
-                          <td style={{ padding:'4px 8px' }}>
-                            <input type="text" className="pr-item-input" placeholder="Pack" value={row.packSize||''} style={{ width:'52px' }}
-                              onChange={e => updateRow(row.id,'packSize',e.target.value)} />
+                          <td style={{padding:'4px 8px'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:'2px'}}>
+                              <input type="text" className="pr-item-input" placeholder="unit" value={row.packUnit||''} style={{width:'34px',padding:'6px 4px',fontSize:'12px'}}
+                                onChange={e => updateRow(row.id,'packUnit',e.target.value)} />
+                              <span style={{fontSize:'12px',color:'#6b7280'}}>&times;</span>
+                              <input type="text" className="pr-item-input" placeholder="size" value={row.packSize||''} style={{width:'38px',padding:'6px 4px',fontSize:'12px'}}
+                                onChange={e => updateRow(row.id,'packSize',e.target.value)} />
+                            </div>
                           </td>
-                          <td style={{ padding:'4px 8px' }}>
+                          <td style={{padding:'4px 8px'}}>
                             <input type="number" className="pr-item-input pr-item-cost" placeholder="0.00" value={row.costPrice||''} min="0" step="0.01"
                               onChange={e => updateRow(row.id,'costPrice',e.target.value)} />
                           </td>
-                          <td style={{ padding:'4px 8px', textAlign:'right', fontSize:'13px', fontWeight:500 }}>
-                            {fmt((parseFloat(row.qty)||0)*(parseFloat(row.costPrice)||0))}
-                          </td>
-                          <td style={{ padding:'4px 4px' }}>
+                          <td style={{padding:'4px 4px'}}>
                             {rows.length > 1 && <button className="pr-item-remove" onClick={() => removeRow(row.id)}><Trash2 size={14}/></button>}
                           </td>
                         </tr>
@@ -558,23 +548,23 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
               </>
             ) : (
               <>
-                <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'260px' }}>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px',minWidth:'260px'}}>
                     <thead>
-                      <tr style={{ background:'#f3f4f6' }}>
-                        <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'40px' }}>Qty</th>
-                        <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Description</th>
-                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Price</th>
-                        <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'72px' }}>Subtotal</th>
+                      <tr style={{background:'#f3f4f6'}}>
+                        <th style={{padding:'6px 8px',textAlign:'center',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase',width:'40px'}}>Qty</th>
+                        <th style={{padding:'6px 8px',textAlign:'left',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase'}}>Description</th>
+                        <th style={{padding:'6px 8px',textAlign:'left',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase',width:'72px'}}>PackSize</th>
+                        <th style={{padding:'6px 8px',textAlign:'right',fontWeight:600,fontSize:'11px',color:'#6b7280',textTransform:'uppercase',width:'72px'}}>Cost</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(purchase.items || []).map((item, i) => (
                         <tr key={i}>
-                          <td style={{ padding:'6px 8px', textAlign:'center' }}>{item.qty}×</td>
-                          <td style={{ padding:'6px 8px' }}>{item.description}</td>
-                          <td style={{ padding:'6px 8px', textAlign:'right' }}>{fmt(item.costPrice||0)}</td>
-                          <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:500 }}>{fmt(item.subtotal||0)}</td>
+                          <td style={{padding:'6px 8px',textAlign:'center'}}>{item.qty}&times;</td>
+                          <td style={{padding:'6px 8px'}}>{item.description}</td>
+                          <td style={{padding:'6px 8px',fontSize:'12px',color:'#6b7280'}}>{item.packDisplay || (item.packUnit?`${item.packUnit}\u00d7${item.packSize||'?'}`:item.packSize||'—')}</td>
+                          <td style={{padding:'6px 8px',textAlign:'right'}}>{fmt(item.costPrice||0)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -589,40 +579,37 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
             <label>Invoice / Reference</label>
             {editable
               ? <input className="pr-input" value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} placeholder="Invoice ref…" />
-              : <div style={{ padding:'4px 0' }}>{purchase.invoiceRef || '—'}</div>}
+              : <div style={{padding:'4px 0'}}>{purchase.invoiceRef || '—'}</div>}
           </div>
 
           <div className="pr-field">
             <label>Notes</label>
             {editable
               ? <input className="pr-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes…" />
-              : <div style={{ padding:'4px 0' }}>{purchase.notes || '—'}</div>}
+              : <div style={{padding:'4px 0'}}>{purchase.notes || '—'}</div>}
           </div>
 
           {purchase.receiptPhoto && (
             <div className="pr-field">
               <label>Receipt Photo</label>
-              <img
-                src={purchase.receiptPhoto}
-                alt="Receipt"
-                className="pr-photo-preview"
+              <img src={purchase.receiptPhoto} alt="Receipt" className="pr-photo-preview"
                 onClick={() => onViewImage && onViewImage(purchase.receiptPhoto)}
-                style={{ cursor: 'zoom-in' }}
-                title="Tap to view full screen"
-              />
+                style={{cursor:'zoom-in'}} title="Tap to view full screen" />
             </div>
           )}
         </div>
-        <div className="pr-modal-footer">
+
+        <div className="pr-modal-footer" style={{flexDirection:'column',gap:'8px'}}>
           {editable ? (
             <>
-              <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
+              <div style={{display:'flex',gap:'8px',width:'100%'}}>
                 <button className="pr-btn-cancel" onClick={onClose}>Cancel</button>
                 <button className="pr-btn-save" onClick={handleSave} disabled={saving}>
                   {saving ? 'Saving…' : 'Update Record'}
                 </button>
               </div>
-              <button onClick={handleDelete} disabled={deleting} style={{ width:'100%', padding:'10px', borderRadius:'8px', border:'none', background:'#fee2e2', color:'#dc2626', cursor:'pointer', fontWeight:700, fontSize:'14px' }}>
+              <button onClick={handleDelete} disabled={deleting}
+                style={{width:'100%',padding:'10px',borderRadius:'8px',border:'none',background:'#fee2e2',color:'#dc2626',cursor:'pointer',fontWeight:700,fontSize:'14px'}}>
                 {deleting ? 'Deleting…' : 'Delete Record'}
               </button>
             </>
@@ -647,12 +634,11 @@ function PurchaseRecord() {
   const [viewPurchase, setViewPurchase] = useState(null);
   const [viewImg, setViewImg]           = useState(null);
 
-  const [paymentFilter, setPaymentFilter] = useState('all');
-  const [dateFilter, setDateFilter]     = useState('today');
-  const [selectedDate, setSelectedDate] = useState('');
-  const [startDate, setStartDate]       = useState('');
-  const [endDate, setEndDate]           = useState('');
-
+  const [paymentFilter, setPaymentFilter]   = useState('all');
+  const [dateFilter, setDateFilter]         = useState('today');
+  const [selectedDate, setSelectedDate]     = useState('');
+  const [startDate, setStartDate]           = useState('');
+  const [endDate, setEndDate]               = useState('');
   const [appliedPaymentFilter, setAppliedPaymentFilter] = useState('all');
   const [appliedDateFilter, setAppliedDateFilter]       = useState('today');
   const [appliedSelectedDate, setAppliedSelectedDate]   = useState('');
@@ -671,8 +657,8 @@ function PurchaseRecord() {
 
   const loadPurchases = async () => {
     const data = await dataService.getPurchases();
-    const sorted = (data || []).sort((a, b) =>
-      new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0));
+    const sorted = (data || []).sort((a,b) =>
+      new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0));
     setPurchases(sorted);
   };
 
@@ -683,24 +669,23 @@ function PurchaseRecord() {
     const d = new Date(raw);
     return isNaN(d.getTime()) ? null : d;
   };
-
   const toMidnight = (d) => { const c = new Date(d); c.setHours(0,0,0,0); return c; };
 
   const applyFilters = () => {
     let f = [...purchases];
     if (appliedPaymentFilter !== 'all')
-      f = f.filter(p => (p.paymentType || p.payment_type || 'cash') === appliedPaymentFilter);
-    const today    = toMidnight(new Date());
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+      f = f.filter(p => (p.paymentType||p.payment_type||'cash') === appliedPaymentFilter);
+    const today = toMidnight(new Date());
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
     if (appliedDateFilter === 'today')
       f = f.filter(p => { const d = resolveDate(p); return d && d >= today && d < tomorrow; });
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
-      const s = toMidnight(new Date(appliedSelectedDate)), e2 = new Date(s); e2.setDate(e2.getDate() + 1);
+      const s = toMidnight(new Date(appliedSelectedDate)), e2 = new Date(s); e2.setDate(e2.getDate()+1);
       f = f.filter(p => { const d = resolveDate(p); return d && d >= s && d < e2; });
     }
     if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
       const s = toMidnight(new Date(appliedStartDate));
-      const e2 = new Date(toMidnight(new Date(appliedEndDate))); e2.setDate(e2.getDate() + 1);
+      const e2 = new Date(toMidnight(new Date(appliedEndDate))); e2.setDate(e2.getDate()+1);
       f = f.filter(p => { const d = resolveDate(p); return d && d >= s && d < e2; });
     }
     setFiltered(f);
@@ -711,40 +696,40 @@ function PurchaseRecord() {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
   const formatDisplayDate = (ds) =>
-    new Date(ds).toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+    new Date(ds).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isYesterday = (ds) => {
     if (!ds) return false;
     const y = new Date(); y.setDate(y.getDate()-1);
     return toMidnight(new Date(ds)).getTime() === toMidnight(y).getTime();
   };
   const getTableTitle = () => {
-    if (appliedDateFilter === 'today') return 'Purchases Today';
-    if (appliedDateFilter === 'single' && appliedSelectedDate) {
+    if (appliedDateFilter==='today') return 'Purchases Today';
+    if (appliedDateFilter==='single' && appliedSelectedDate) {
       if (isYesterday(appliedSelectedDate)) return 'Purchases Yesterday';
       return `Purchases on ${formatDisplayDate(appliedSelectedDate)}`;
     }
-    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate)
+    if (appliedDateFilter==='range' && appliedStartDate && appliedEndDate)
       return `Purchases from ${formatDisplayDate(appliedStartDate)} to ${formatDisplayDate(appliedEndDate)}`;
     return 'Purchases Today';
   };
   const formatDateTime = (p) => {
     const d = resolveDate(p);
-    if (!d) return { date: 'N/A', time: 'N/A' };
+    if (!d) return { date:'N/A', time:'N/A' };
     return {
-      date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
-      time: d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true }),
+      date: d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      time: d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
     };
   };
 
   const isFilterComplete = () => {
-    if (dateFilter === 'today')  return true;
-    if (dateFilter === 'single') return !!selectedDate;
-    if (dateFilter === 'range')  return !!(startDate && endDate);
+    if (dateFilter==='today')  return true;
+    if (dateFilter==='single') return !!selectedDate;
+    if (dateFilter==='range')  return !!(startDate && endDate);
     return false;
   };
   const hasChanged = () =>
-    paymentFilter !== appliedPaymentFilter || dateFilter !== appliedDateFilter ||
-    selectedDate !== appliedSelectedDate || startDate !== appliedStartDate || endDate !== appliedEndDate;
+    paymentFilter!==appliedPaymentFilter || dateFilter!==appliedDateFilter ||
+    selectedDate!==appliedSelectedDate || startDate!==appliedStartDate || endDate!==appliedEndDate;
   const showApply = isFilterComplete() && hasChanged();
 
   const handleClose = () => {
@@ -763,8 +748,8 @@ function PurchaseRecord() {
     else handleClose();
   };
 
-  const cashTotal   = filtered.filter(p => (p.paymentType||p.payment_type||'cash') === 'cash').reduce((s,p) => s+(p.total||0), 0);
-  const creditTotal = filtered.filter(p => (p.paymentType||p.payment_type) === 'credit').reduce((s,p) => s+(p.total||0), 0);
+  const cashTotal   = filtered.filter(p => (p.paymentType||p.payment_type||'cash')==='cash').reduce((s,p) => s+(p.total||0),0);
+  const creditTotal = filtered.filter(p => (p.paymentType||p.payment_type)==='credit').reduce((s,p) => s+(p.total||0),0);
   const btnLabel = !showFilters ? 'Filter Purchases' : showApply ? 'Apply Filter' : 'Close Filter';
 
   return (
@@ -792,14 +777,14 @@ function PurchaseRecord() {
                 ))}
               </div>
             </div>
-            {dateFilter === 'single' && (
+            {dateFilter==='single' && (
               <div className="pr-filter-group">
                 <label>Select Date</label>
                 <input type="date" value={selectedDate} max={getTodayStr()}
                   onChange={e => setSelectedDate(e.target.value)} className="pr-date-input" />
               </div>
             )}
-            {dateFilter === 'range' && (
+            {dateFilter==='range' && (
               <div className="pr-filter-group">
                 <label>Date Range</label>
                 <div className="pr-date-range-inputs">
@@ -824,7 +809,7 @@ function PurchaseRecord() {
 
         <div className="pr-top-row">
           <button
-            className={`pr-filter-action-btn${!showFilters ? ' prfab-open' : showApply ? ' prfab-apply' : ' prfab-close'}`}
+            className={`pr-filter-action-btn${!showFilters?' prfab-open':showApply?' prfab-apply':' prfab-close'}`}
             onClick={handleFilterButtonClick}>{btnLabel}</button>
           {!showFilters && (
             <button className="pr-add-btn" onClick={() => setShowAddModal(true)}>+ Add Purchase</button>
@@ -838,13 +823,13 @@ function PurchaseRecord() {
             <div className="pr-stat-label">Total Records</div>
             <div className="pr-stat-value">{filtered.length}</div>
           </div>
-          <div className="pr-stat-box pr-stat-red">
+          <div className="pr-stat-box pr-stat-green">
             <div className="pr-stat-label">Cash Paid</div>
-            <div className="pr-stat-value">{fmt(cashTotal)}</div>
+            <div className="pr-stat-value pr-stat-green-val">{fmt(cashTotal)}</div>
           </div>
-          <div className="pr-stat-box" style={{ background:'#fff5f5' }}>
-            <div className="pr-stat-label" style={{ color:'#dc2626' }}>On Credit</div>
-            <div className="pr-stat-value" style={{ color:'#dc2626' }}>{fmt(creditTotal)}</div>
+          <div className="pr-stat-box pr-stat-indigo">
+            <div className="pr-stat-label pr-stat-indigo-lbl">On Credit</div>
+            <div className="pr-stat-value pr-stat-indigo-val">{fmt(creditTotal)}</div>
           </div>
         </div>
       </div>
@@ -855,26 +840,27 @@ function PurchaseRecord() {
             title="Purchase Record"
             columns={[
               {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Supplier',key:'supplier'},
-              {header:'Items',key:'items'},{header:'Pay',key:'pay'},
+              {header:'Items',key:'items'},{header:'Cost',key:'cost'},{header:'Pay',key:'pay'},
               {header:'Total',key:'total'},{header:'Ref',key:'ref'}
             ]}
             rows={filtered.map(p => {
-              const rawTs = p.date || p.timestamp || p.createdAt;
-              const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
+              const rawTs = p.date||p.timestamp||p.createdAt;
+              const d = rawTs?(rawTs.seconds?new Date(rawTs.seconds*1000):new Date(rawTs)):null;
               return {
-                date: d ? d.toLocaleDateString('en-GB') : 'N/A',
-                time: d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A',
-                supplier: p.supplierName || '—',
-                items: (p.items||[]).map(i=>i.description||i.name||'').join(', ') || '—',
-                pay: p.paymentType || 'cash',
+                date: d?d.toLocaleDateString('en-GB'):'N/A',
+                time: d?d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}):'N/A',
+                supplier: p.supplierName||'—',
+                items: (p.items||[]).map(i=>i.description||i.name||'').join(', ')||'—',
+                cost: (p.items||[]).map(i=>fmt(i.costPrice||0)).join(', ')||'—',
+                pay: p.paymentType||'cash',
                 total: fmt(p.total||0),
-                ref: p.invoiceRef || p.notes || '—',
+                ref: p.invoiceRef||p.notes||'—',
               };
             })}
             summary={[
-              {label:'Cash Total', value: fmt(cashTotal)},
-              {label:'Credit Total', value: fmt(creditTotal)},
-              {label:'Grand Total', value: fmt(cashTotal + creditTotal)},
+              {label:'Cash Total', value:fmt(cashTotal)},
+              {label:'Credit Total', value:fmt(creditTotal)},
+              {label:'Grand Total', value:fmt(cashTotal+creditTotal)},
             ]}
           />
           <table className="pr-table">
@@ -886,6 +872,7 @@ function PurchaseRecord() {
                 <th>QTY</th>
                 <th>PACKSIZE</th>
                 <th>Items</th>
+                <th>Cost</th>
                 <th>Pay</th>
                 <th className="pr-col-right">Total</th>
                 <th>Ref</th>
@@ -894,67 +881,57 @@ function PurchaseRecord() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan="10" className="pr-empty-cell">No purchases found</td></tr>
+                <tr><td colSpan="11" className="pr-empty-cell">No purchases found</td></tr>
               ) : (
                 filtered.map(p => {
                   const { date, time } = formatDateTime(p);
                   const items = p.items || [];
                   const payType = p.paymentType || p.payment_type || 'cash';
-                  const canEdit = isWithin2Hours(p);
+                  const canEdit = isWithin30Mins(p);
 
                   if (items.length === 0) {
                     return (
-                      <tr key={p.id} className="pr-row" style={{ cursor: canEdit ? 'pointer' : 'default' }} onClick={() => setViewPurchase(p)}>
-                        <td rowSpan="1">{date}</td>
-                        <td rowSpan="1">{time}</td>
-                        <td rowSpan="1" className="pr-supplier-cell">{p.supplierName || '—'}</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td rowSpan="1">
-                          <span style={{fontSize:'11px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',textTransform:'uppercase',
-                            background:payType==='cash'?'#dcfce7':'#fee2e2',color:payType==='cash'?'#16a34a':'#dc2626'}}>
-                            {payType}
-                          </span>
-                        </td>
-                        <td rowSpan="1" className="pr-col-right pr-total-cell">{fmt(p.total||0)}</td>
-                        <td rowSpan="1" className="pr-notes-cell">{p.invoiceRef || p.notes || '—'}</td>
-                        <td rowSpan="1" className="pr-col-center">
-                          {canEdit ? (
+                      <tr key={p.id} className="pr-row" onClick={() => setViewPurchase(p)}>
+                        <td>{date}</td><td>{time}</td>
+                        <td className="pr-supplier-cell">{p.supplierName||'—'}</td>
+                        <td>—</td><td>—</td><td>—</td><td>—</td>
+                        <td><span className={`pr-pay-badge pr-pay-${payType}`}>{payType}</span></td>
+                        <td className="pr-col-right pr-total-cell">{fmt(p.total||0)}</td>
+                        <td className="pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>
+                        <td className="pr-col-center">
+                          {canEdit && (
                             <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
-                              style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
-                              title="Edit purchase"><Edit2 size={15} /></button>
-                          ) : null}
+                              style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
+                              title="Edit purchase"><Edit2 size={15}/></button>
+                          )}
                         </td>
                       </tr>
                     );
                   }
 
                   return items.map((item, idx) => (
-                    <tr key={`${p.id}-${idx}`} className="pr-row" style={{ cursor: canEdit ? 'pointer' : 'default' }} onClick={() => setViewPurchase(p)}>
-                      {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell">{date}</td>}
-                      {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell">{time}</td>}
-                      {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell pr-supplier-cell">{p.supplierName || '—'}</td>}
-                      <td className="pr-subrow-cell">{item.qty || '—'}</td>
-                      <td className="pr-subrow-cell">{item.packSize || '—'}</td>
-                      <td className="pr-subrow-cell pr-items-cell">{item.description || '—'}</td>
-                      {idx === 0 && (
+                    <tr key={`${p.id}-${idx}`} className="pr-row" onClick={() => setViewPurchase(p)}>
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell">{date}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell">{time}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-supplier-cell">{p.supplierName||'—'}</td>}
+                      <td className="pr-subrow-cell">{item.qty||'—'}</td>
+                      <td className="pr-subrow-cell">{item.packDisplay||(item.packUnit?`${item.packUnit}\u00d7${item.packSize||'?'}`:item.packSize||'—')}</td>
+                      <td className="pr-subrow-cell pr-items-cell">{item.description||'—'}</td>
+                      <td className="pr-subrow-cell pr-col-right">{item.costPrice?fmt(item.costPrice):'—'}</td>
+                      {idx===0 && (
                         <td rowSpan={items.length} className="pr-merged-cell">
-                          <span style={{fontSize:'11px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',textTransform:'uppercase',
-                            background:payType==='cash'?'#dcfce7':'#fee2e2',color:payType==='cash'?'#16a34a':'#dc2626'}}>
-                            {payType}
-                          </span>
+                          <span className={`pr-pay-badge pr-pay-${payType}`}>{payType}</span>
                         </td>
                       )}
-                      {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell pr-col-right pr-total-cell">{fmt(p.total||0)}</td>}
-                      {idx === 0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell">{p.invoiceRef || p.notes || '—'}</td>}
-                      {idx === 0 && (
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-col-right pr-total-cell">{fmt(p.total||0)}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>}
+                      {idx===0 && (
                         <td rowSpan={items.length} className="pr-merged-cell pr-col-center">
-                          {canEdit ? (
+                          {canEdit && (
                             <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
-                              style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
-                              title="Edit purchase"><Edit2 size={15} /></button>
-                          ) : null}
+                              style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
+                              title="Edit purchase"><Edit2 size={15}/></button>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -978,7 +955,7 @@ function PurchaseRecord() {
           onClose={() => setViewPurchase(null)}
           onSaved={async () => { setViewPurchase(null); await loadPurchases(); }}
           onDeleted={async () => { setViewPurchase(null); await loadPurchases(); }}
-          onViewImage={(src) => setViewImg(src)}
+          onViewImage={src => setViewImg(src)}
         />
       )}
       {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Receipt photo" />}
