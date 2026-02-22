@@ -497,9 +497,7 @@ class DataService {
           // If local has a more recent createdAt, keep local
           const fbTime  = new Date(fbSale.createdAt || 0).getTime();
           const locTime = new Date(local.createdAt || 0).getTime();
-          const base = locTime >= fbTime ? local : fbSale;
-          // Preserve local photo data (not synced to Firebase due to size limits)
-          return base.photoUrl ? base : { ...base, photoUrl: local.photoUrl || base.photoUrl || null };
+          return locTime >= fbTime ? local : fbSale;
         });
         // Add any sales that exist only locally (created offline)
         for (const local of localSales) {
@@ -1561,10 +1559,7 @@ class DataService {
         const merged = fbPurchases.map(fb => {
           const loc = localMap.get(fb.id);
           if (!loc) return fb;
-          // Always keep local version if it has a receiptPhoto that Firebase doesn't
-          // (photos are stored only in localforage, not Firebase, to avoid size limits)
-          const base = new Date(loc.createdAt||0) >= new Date(fb.createdAt||0) ? loc : fb;
-          return base.receiptPhoto ? base : { ...base, receiptPhoto: loc.receiptPhoto || base.receiptPhoto || null };
+          return new Date(loc.createdAt||0) >= new Date(fb.createdAt||0) ? loc : fb;
         });
         for (const loc of local) {
           if (!merged.find(p => p.id === loc.id)) merged.push(loc);
@@ -1612,8 +1607,35 @@ class DataService {
           isUnrecorded: true,  // time is not relevant for a purchase date entry
         });
       } else {
-        // Credit purchase — update the linked creditor's balance
+        // Credit purchase — create or update Creditor card, then record the debt
         if (newPurchase.creditorId) {
+          // Ensure the creditor card exists (create if missing)
+          const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
+          const exists = creditors.find(c => c.id === newPurchase.creditorId);
+          if (!exists) {
+            const suppliers = await localforage.getItem(DATA_KEYS.SUPPLIERS) || [];
+            const supplier = suppliers.find(s => s.id === newPurchase.supplierId);
+            const stubName = newPurchase.supplierName || (supplier && (supplier.name || supplier.customerName)) || 'Unknown';
+            const newCreditor = {
+              id: newPurchase.creditorId,
+              name: stubName,
+              customerName: stubName,
+              totalDue: 0,
+              totalPaid: 0,
+              balance: 0,
+              deposits: [],
+              purchaseIds: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            creditors.push(newCreditor);
+            await localforage.setItem(DATA_KEYS.CREDITORS, creditors);
+            if (this.isOnline && auth.currentUser) {
+              await setDoc(doc(db, 'creditors', newCreditor.id.toString()), {
+                ...newCreditor, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+              }, { merge: true }).catch(e => console.error('Creditor stub sync error:', e));
+            }
+          }
           await this.addCreditorDebt(newPurchase.creditorId, newPurchase.total, newPurchase.id);
         }
       }
@@ -1646,12 +1668,11 @@ class DataService {
         console.error('Error updating stock after purchase:', stockErr);
       }
 
-      // Sync to Firebase purchases collection (strip base64 photo — too large for Firestore)
+      // Sync to Firebase purchases collection
       if (this.isOnline && auth.currentUser) {
         try {
-          const { receiptPhoto: _rp, ...purchaseForFirestore } = newPurchase;
           await setDoc(doc(db, 'purchases', newPurchase.id), {
-            ...purchaseForFirestore,
+            ...newPurchase,
             createdAt: serverTimestamp(),
           });
         } catch (err) {
@@ -1764,16 +1785,15 @@ class DataService {
         lang: 'en',
         darkMode: false,
         currency: '$',
-        notifDebtReminder: false,
-        notifLowStock: false,
-        notifDailySales: false,
-        notifCreditorOwed: false,
+        notifDebtReminder: true,
+        notifLowStock: true,
+        notifDailySales: true,
         openingBalance: null,  // one-time starting cash on hand
         ...(saved || {}),
       };
     } catch (err) {
       console.error('Error getting settings:', err);
-      return { lang: 'en', darkMode: false, currency: '$', notifDebtReminder: false, notifLowStock: false, notifDailySales: false, notifCreditorOwed: false, openingBalance: null };
+      return { lang: 'en', darkMode: false, currency: '$', notifDebtReminder: true, notifLowStock: true, notifDailySales: true, openingBalance: null };
     }
   }
 
