@@ -819,8 +819,6 @@ Kadaele Services`;
                   })}
                   summary={[{label:'Total Purchases', value: fmt(historyRows.filter(r=>r.kind==='sale').reduce((s,r)=>s+(r.sale?.total||0),0))}]}
                 />
-                <div className="d-history-actions" style={{justifyContent:'center'}}>
-
                 <div className="d-history-scroll">
                   <table className="d-history-table">
                     <thead>
@@ -899,7 +897,6 @@ Kadaele Services`;
                     </tbody>
                   </table>
                 </div>
-              </div>
             )}
           </div>
         </div>
