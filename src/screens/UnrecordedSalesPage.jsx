@@ -1,3 +1,4 @@
+
 /**
  * UnrecordedSalesPage.jsx
  * A full-page checkout screen for entering past (unrecorded) sales.
@@ -13,6 +14,7 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import { Camera as CapCamera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
+import ImageViewer from '../components/ImageViewer';
 import './UnrecordedSalesPage.css';
 
 // Utility: date string YYYY-MM-DD
@@ -50,6 +52,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
   const [filteredDebtors, setFilteredDebtors] = useState([]);
   const [repaymentDate, setRepaymentDate]     = useState('');
   const [capturedPhoto, setCapturedPhoto]     = useState(null);
+  const [viewImg, setViewImg]                 = useState(null);
 
   // Quantity modal
   const [showQuantityModal, setShowQuantityModal] = useState(false);
@@ -438,7 +441,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
               <button className="us-camera-btn" type="button" onClick={handleTakePhoto}>
                 📷 {capturedPhoto ? 'Retake Photo' : 'Take Photo'}
               </button>
-              {capturedPhoto && <img src={capturedPhoto} alt="Credit book" style={{width:'100%',maxHeight:'120px',objectFit:'cover',borderRadius:'8px',marginTop:'8px'}} />}
+              {capturedPhoto && <img src={capturedPhoto} alt="Credit book" style={{width:'100%',maxHeight:'120px',objectFit:'cover',borderRadius:'8px',marginTop:'8px',cursor:'zoom-in'}} onClick={() => setViewImg(capturedPhoto)} title="Tap to view full screen" />}
             </div>
 
             <p className="us-confirm-total">Total: <strong>{fmt(total)}</strong></p>
@@ -452,6 +455,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
           </div>
         </div>
       )}
+      {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Credit book photo" />}
     </div>
   );
 }
