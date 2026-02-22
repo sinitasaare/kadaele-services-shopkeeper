@@ -5,6 +5,7 @@ import { Camera as CapCamera } from '@capacitor/camera';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
+import ImageViewer from '../components/ImageViewer';
 import './PurchaseRecord.css';
 
 // ── Shared 2-hour edit window helper ──────────────────────────────────────
@@ -413,7 +414,7 @@ function AddPurchaseModal({ onSave, onClose }) {
 // ─────────────────────────────────────────────────────────────
 // Purchase Detail / Edit modal
 // ─────────────────────────────────────────────────────────────
-function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted }) {
+function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImage }) {
   const { fmt } = useCurrency();
   const editable = isWithin2Hours(purchase);
   const [supplierName, setSupplierName] = useState(purchase.supplierName || '');
@@ -601,7 +602,14 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted }) {
           {purchase.receiptPhoto && (
             <div className="pr-field">
               <label>Receipt Photo</label>
-              <img src={purchase.receiptPhoto} alt="Receipt" className="pr-photo-preview" />
+              <img
+                src={purchase.receiptPhoto}
+                alt="Receipt"
+                className="pr-photo-preview"
+                onClick={() => onViewImage && onViewImage(purchase.receiptPhoto)}
+                style={{ cursor: 'zoom-in' }}
+                title="Tap to view full screen"
+              />
             </div>
           )}
         </div>
@@ -637,6 +645,7 @@ function PurchaseRecord() {
   const [showFilters, setShowFilters]   = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewPurchase, setViewPurchase] = useState(null);
+  const [viewImg, setViewImg]           = useState(null);
 
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [dateFilter, setDateFilter]     = useState('today');
@@ -969,8 +978,10 @@ function PurchaseRecord() {
           onClose={() => setViewPurchase(null)}
           onSaved={async () => { setViewPurchase(null); await loadPurchases(); }}
           onDeleted={async () => { setViewPurchase(null); await loadPurchases(); }}
+          onViewImage={(src) => setViewImg(src)}
         />
       )}
+      {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Receipt photo" />}
     </div>
   );
 }
