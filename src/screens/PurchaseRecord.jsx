@@ -878,22 +878,22 @@ function PurchaseRecord() {
 
                   return items.map((item, idx) => (
                     <tr key={`${p.id}-${idx}`} className="pr-row" onClick={() => setViewPurchase(p)}>
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell">{date}</td>}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell">{time}</td>}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-supplier-cell">{p.supplierName||'—'}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{date}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{time}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left',whiteSpace:'nowrap'}}>{p.supplierName||'—'}</td>}
                       <td className="pr-subrow-cell">{item.qty||'—'}</td>
-                      <td className="pr-subrow-cell">{item.packDisplay||(item.packUnit?`${item.packUnit}\u00d7${item.packSize||'?'}`:item.packSize||'—')}</td>
-                      <td className="pr-subrow-cell pr-items-cell">{item.description||'—'}</td>
+                      <td className="pr-subrow-cell">{item.packDisplay||(item.packUnit?`${item.packUnit}×${item.packSize||'?'}`:item.packSize||'—')}</td>
+                      <td className="pr-subrow-cell pr-items-cell" style={{whiteSpace:'nowrap'}}>{item.description||'—'}</td>
                       <td className="pr-subrow-cell pr-col-right">{item.costPrice?fmt(item.costPrice):'—'}</td>
                       {idx===0 && (
-                        <td rowSpan={items.length} className="pr-merged-cell">
+                        <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>
                           <span className={`pr-pay-badge pr-pay-${payType}`}>{payType}</span>
                         </td>
                       )}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-col-right pr-total-cell">{fmt(p.total||0)}</td>}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-total-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{fmt(p.total||0)}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{p.invoiceRef||p.notes||'—'}</td>}
                       {idx===0 && (
-                        <td rowSpan={items.length} className="pr-merged-cell pr-col-center">
+                        <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>
                           {canEdit && (
                             <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
                               style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
