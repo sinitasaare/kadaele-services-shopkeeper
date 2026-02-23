@@ -93,7 +93,7 @@
 
 .pr-table-title {
   text-align: center;
-  font-size: 15px;
+  font-size: 17.25px;
   font-weight: 700;
   color: var(--text-primary, #333);
   margin: 0;
@@ -452,13 +452,20 @@
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 1100;
+  z-index: 9999;
   background: white;
   border: 1px solid #ccc;
   border-radius: 6px;
   max-height: 150px;
   overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+}
+/* Float version — breaks out of table overflow clipping */
+.pr-desc-drop-float {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  max-width: 280px;
 }
 .pr-desc-drop-item {
   padding: 8px 10px;
