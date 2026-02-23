@@ -5,11 +5,11 @@ import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './Debtors.css';
 
-// ── Shared 30-minute edit window helper ──────────────────────────────────────
-function isWithin30Mins(entry) {
+// ── Shared 2-hour edit window helper ──────────────────────────────────────
+function isWithin2Hours(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
+  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
 }
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
@@ -887,47 +887,49 @@ Kadaele Services`;
             {/* ── Debt History tab ── */}
             {activeTab === 'history' && (
               <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
-                <PdfTableButton
-                  title={`Debt History — ${selectedDebtor?.name||selectedDebtor?.customerName||''}`}
-                  columns={[
-                    {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Image',key:'img'},
-                    {header:'Items',key:'items'},{header:'Qty',key:'qty'},{header:'Price',key:'price'},
-                    {header:'Subtotal',key:'sub'},{header:'Sale Total',key:'saleTotal'},
-                    {header:'Deposited',key:'deposited'},{header:'Balance',key:'balance'}
-                  ]}
-                  rows={historyRows.flatMap(row => {
-                    if (row.kind === 'deposit') {
-                      const dep = row.deposit;
-                      const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
-                      return [{
-                        date: d ? d.toLocaleDateString('en-GB') : 'N/A',
-                        time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
-                        img:'—', items:'Deposited Cash to repay Debt', qty:'—', price:'—', sub:'—', saleTotal:'—',
-                        deposited: fmt(parseFloat(dep.amount)), balance: fmt(Math.abs(row.runningBalance)),
-                      }];
-                    }
-                    const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
-                    const rawTs = sale.date||sale.timestamp||sale.createdAt;
-                    const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
-                    return items.map((item,idx) => ({
-                      date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
-                      time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
-                      img: idx===0 ? (sale.photoUrl ? '[photo]':'—') : '',
-                      items: item ? (item.name||'N/A') : 'N/A',
-                      qty: item ? String(item.quantity||item.qty||0) : '—',
-                      price: item ? fmt(item.price||0) : '—',
-                      sub: item ? fmt(item.subtotal||(item.price||0)*(item.quantity||item.qty||0)) : '—',
-                      saleTotal: idx===0 ? fmt(sale.total||sale.total_amount||0) : '',
-                      deposited: '—',
-                      balance: idx===0 ? fmt(Math.abs(row.runningBalance)) : '',
-                    }));
-                  })}
-                  summary={[{label:'Total Outstanding', value: fmt(Math.abs(historyRows.length>0 ? historyRows[0].runningBalance : (selectedDebtor?.balance||0)))}]}
-                />
                 <div className="d-history-actions">
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
                   </button>
+                  <div style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
+                    <PdfTableButton
+                      title={`Debt History — ${selectedDebtor?.name||selectedDebtor?.customerName||''}`}
+                      columns={[
+                        {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Image',key:'img'},
+                        {header:'Items',key:'items'},{header:'Qty',key:'qty'},{header:'Price',key:'price'},
+                        {header:'Subtotal',key:'sub'},{header:'Sale Total',key:'saleTotal'},
+                        {header:'Deposited',key:'deposited'},{header:'Balance',key:'balance'}
+                      ]}
+                      rows={historyRows.flatMap(row => {
+                        if (row.kind === 'deposit') {
+                          const dep = row.deposit;
+                          const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
+                          return [{
+                            date: d ? d.toLocaleDateString('en-GB') : 'N/A',
+                            time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
+                            img:'—', items:'Deposited Cash to repay Debt', qty:'—', price:'—', sub:'—', saleTotal:'—',
+                            deposited: fmt(parseFloat(dep.amount)), balance: fmt(Math.abs(row.runningBalance)),
+                          }];
+                        }
+                        const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
+                        const rawTs = sale.date||sale.timestamp||sale.createdAt;
+                        const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
+                        return items.map((item,idx) => ({
+                          date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
+                          time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
+                          img: idx===0 ? (sale.photoUrl ? '[photo]':'—') : '',
+                          items: item ? (item.name||'N/A') : 'N/A',
+                          qty: item ? String(item.quantity||item.qty||0) : '—',
+                          price: item ? fmt(item.price||0) : '—',
+                          sub: item ? fmt(item.subtotal||(item.price||0)*(item.quantity||item.qty||0)) : '—',
+                          saleTotal: idx===0 ? fmt(sale.total||sale.total_amount||0) : '',
+                          deposited: '—',
+                          balance: idx===0 ? fmt(Math.abs(row.runningBalance)) : '',
+                        }));
+                      })}
+                      summary={[{label:'Total Outstanding', value: fmt(Math.abs(historyRows.length>0 ? historyRows[0].runningBalance : (selectedDebtor?.balance||0)))}]}
+                    />
+                  </div>
                   <button className="d-deposit-btn" onClick={() => setShowPaymentModal(true)}>
                     <DollarSign size={16} /> Deposit
                   </button>
@@ -1014,7 +1016,7 @@ Kadaele Services`;
                               )}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin30Mins(sale) ? (
+                                  {isWithin2Hours(sale) ? (
                                     <button onClick={() => setEditSale(sale)}
                                       style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
                                       title="Edit sale"><Edit2 size={15} /></button>
@@ -1093,7 +1095,7 @@ Kadaele Services`;
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
-              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" onClick={() => setEnlargedPhoto(paymentPhoto)} style={{cursor:'zoom-in'}} title="Tap to view full screen" />}
+              {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
               <div className="d-form-actions">
                 <button className="d-btn-cancel" onClick={() => setShowPaymentModal(false)}>Cancel</button>
                 <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
