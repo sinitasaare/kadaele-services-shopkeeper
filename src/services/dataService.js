@@ -1649,9 +1649,16 @@ class DataService {
           const good = purchasedItem.goodId
             ? goods.find(g => String(g.id) === String(purchasedItem.goodId))
             : goods.find(g => (g.name||'').toLowerCase().trim() === (purchasedItem.description||'').toLowerCase().trim());
-          if (good && typeof good.stock_quantity === 'number') {
-            good.stock_quantity = good.stock_quantity + (purchasedItem.qty || 0);
-            stockChanged = true;
+          if (good) {
+            // stockToAdd = qty × packUnit (cartons × units per carton)
+            // Falls back to just qty if packUnit wasn't set
+            const stockToAdd = typeof purchasedItem.stockToAdd === 'number'
+              ? purchasedItem.stockToAdd
+              : (parseFloat(purchasedItem.qty) || 0) * (parseFloat(purchasedItem.packUnit) || 1);
+            if (stockToAdd > 0) {
+              good.stock_quantity = (parseFloat(good.stock_quantity) || 0) + stockToAdd;
+              stockChanged = true;
+            }
           }
         });
         if (stockChanged) {
