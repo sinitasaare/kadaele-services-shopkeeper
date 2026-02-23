@@ -11,6 +11,11 @@ function isWithin2Hours(entry) {
   if (!ts) return false;
   return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
 }
+function isDepositEditable(dep) {
+  const ts = dep.createdAt || dep.date;
+  if (!ts) return false;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
+}
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
 function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
@@ -146,6 +151,10 @@ function Debtors() {
   const historyRef                      = useRef(null);  // ref for debt history section → PDF
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [enlargedPhoto, setEnlargedPhoto] = useState(null);
+  const [editDepositModal, setEditDepositModal] = useState(null); // { debtorId, deposit }
+  const [editDepositAmount, setEditDepositAmount] = useState('');
+  const [savingDeposit, setSavingDeposit] = useState(false);
+
 
   useEffect(() => { loadDebtors(); }, []);
 
@@ -727,7 +736,32 @@ Kadaele Services`;
 
   // ── Build merged history rows: interleave sales + deposit rows, then compute
   //    running balance after each event. Sorted oldest → newest.
-  const buildHistoryRows = () => {
+  const handleSaveDepositEdit = async () => {
+    if (!editDepositModal) return;
+    const amount = parseFloat(editDepositAmount);
+    if (!amount || amount <= 0) { alert('Enter a valid amount.'); return; }
+    setSavingDeposit(true);
+    try {
+      const debtors = await dataService.getDebtors();
+      const debtor = debtors.find(d => d.id === editDepositModal.debtorId);
+      if (!debtor) throw new Error('Debtor not found');
+      const dep = debtor.deposits?.find(d => d.id === editDepositModal.deposit.id);
+      if (!dep) throw new Error('Deposit not found');
+      const oldAmount = parseFloat(dep.amount) || 0;
+      const diff = amount - oldAmount;
+      dep.amount = amount;
+      debtor.totalPaid = (debtor.totalPaid || 0) + diff;
+      debtor.balance = (debtor.totalDue || 0) - debtor.totalPaid;
+      if (debtor.balance < 0) debtor.balance = 0;
+      await dataService.setDebtors(debtors);
+      setSelectedDebtor({...debtor});
+      setEditDepositModal(null);
+      await loadDebtors();
+    } catch(e) { alert(e.message); }
+    finally { setSavingDeposit(false); }
+  };
+
+    const buildHistoryRows = () => {
     if (!selectedDebtor) return [];
 
     // Sales events
@@ -887,7 +921,7 @@ Kadaele Services`;
             {/* ── Debt History tab ── */}
             {activeTab === 'history' && (
               <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
-                <div className="d-history-actions">
+                <div className="d-history-actions" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
                   </button>
@@ -935,6 +969,31 @@ Kadaele Services`;
                   </button>
                 </div>
 
+                {/* ── Edit Deposit Modal ── */}
+                {editDepositModal && (
+                  <div className="d-overlay" style={{zIndex:4000}} onClick={() => setEditDepositModal(null)}>
+                    <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxWidth:'320px'}}>
+                      <div className="d-modal-header">
+                        <h2 className="d-modal-title">Edit Deposit</h2>
+                        <button className="d-close-btn" onClick={() => setEditDepositModal(null)}><X size={22}/></button>
+                      </div>
+                      <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'12px'}}>
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Deposit Amount</label>
+                        <input type="number" min="0.01" step="0.01"
+                          value={editDepositAmount}
+                          onChange={e => setEditDepositAmount(e.target.value)}
+                          style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
+                      </div>
+                      <div className="d-form-actions" style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
+                        <button className="d-btn-cancel" onClick={() => setEditDepositModal(null)}>Cancel</button>
+                        <button className="d-btn-save" onClick={handleSaveDepositEdit} disabled={savingDeposit}>
+                          {savingDeposit ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="d-history-scroll">
                   <table className="d-history-table">
                     <thead>
@@ -975,6 +1034,14 @@ Kadaele Services`;
                                 <td className="d-deposited-amount">{fmt(parseFloat(dep.amount))}</td>
                                 <td className={`d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
                                   {fmt(Math.abs(row.runningBalance))}
+                                </td>
+                                <td className="d-merged" style={{textAlign:'center'}}>
+                                  {isDepositEditable(dep) && (
+                                    <button
+                                      onClick={() => { setEditDepositModal({debtorId:selectedDebtor.id, deposit:dep}); setEditDepositAmount(String(dep.amount)); }}
+                                      style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
+                                      title="Edit deposit"><Edit2 size={14}/></button>
+                                  )}
                                 </td>
                               </tr>
                             );
