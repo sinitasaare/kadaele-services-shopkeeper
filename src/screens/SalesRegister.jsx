@@ -5,7 +5,6 @@ import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
-import ImageViewer from '../components/ImageViewer';
 import './SalesRegister.css';
 
 // ── Barcode beep (Web Audio API — no file needed) ──────────────────────────
@@ -39,7 +38,6 @@ function SalesRegister() {
   const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
-  const [viewImg, setViewImg] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Debtor search states
@@ -385,7 +383,7 @@ function SalesRegister() {
     const isLocked = !!existingDueDate && balance > 0;
     const finalRepaymentDate = isLocked ? existingDueDate : repaymentDate;
     if (!finalRepaymentDate) { alert('Please select a repayment date.'); return; }
-    if (!capturedPhoto) { alert('Please take a photo of the credit book.'); return; }
+    // Photo is optional — skip validation
     setIsProcessing(true);
     try {
       const total = calculateTotal();
@@ -870,14 +868,14 @@ function SalesRegister() {
               </div>
 
               <div className="sr-photo-section">
-                <label>Photo of Credit Book <span style={{color:'#dc2626'}}>*</span></label>
+                <label>Photo of Credit Book <span style={{color:'#888',fontWeight:400,fontSize:'12px'}}>(optional)</span></label>
                 <button type="button" className="sr-btn-photo" onClick={takeCreditPhoto}>
                   {capturedPhoto ? '📷 Retake Photo' : '📷 Take Photo'}
                 </button>
                 {capturedPhoto && (
-                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" onClick={() => setViewImg(capturedPhoto)} style={{cursor:'zoom-in'}} title="Tap to view full screen" />
+                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />
                 )}
-                {!capturedPhoto && <p style={{fontSize:'11px',color:'#dc2626',marginTop:'4px'}}>Photo is required</p>}
+
               </div>
 
               <div className="sr-modal-buttons">
@@ -888,7 +886,6 @@ function SalesRegister() {
           </div>
         </div>
       )}
-      {viewImg && <ImageViewer src={viewImg} onClose={() => setViewImg(null)} alt="Credit book photo" />}
     </div>
   );
 }
