@@ -109,8 +109,8 @@ function AddPurchaseModal({ onSave, onClose }) {
   const handleSave = async () => {
     if (!supplierId) { alert('Please select a supplier.'); return; }
     if (!purchaseDate) { alert('Please select a purchase date.'); return; }
-    if (paymentType === 'credit' && !creditorId) {
-      alert('For credit purchases, please select the creditor.'); return;
+    if (paymentType === 'credit' && !supplierId) {
+      alert('Please select a supplier for the credit purchase.'); return;
     }
     const validRows = rows.filter(r => r.description.trim() && parseFloat(r.qty) > 0);
     if (validRows.length === 0) {
@@ -126,30 +126,14 @@ function AddPurchaseModal({ onSave, onClose }) {
         packUnit: r.packUnit || '',
         packSize: r.packSize || '',
         packDisplay: r.packUnit ? `${r.packUnit}\u00d7${r.packSize||'?'}` : '',
+        // stockToAdd = qty × packUnit (units per carton × number of cartons)
+        stockToAdd: (parseFloat(r.qty)||0) * (parseFloat(r.packUnit)||0),
       }));
       const total = items.reduce((s, i) => s + i.subtotal, 0);
 
-      // Increase inventory stock by packUnit qty for each matched item
-      try {
-        const allGoods = await dataService.getGoods();
-        let changed = false;
-        items.forEach(item => {
-          const units = parseFloat(item.packUnit) || 0;
-          if (units > 0) {
-            const good = allGoods.find(g =>
-              (g.name||'').toLowerCase() === item.description.toLowerCase());
-            if (good) {
-              good.stock_quantity = (parseFloat(good.stock_quantity) || 0) + units;
-              changed = true;
-            }
-          }
-        });
-        if (changed) await dataService.setGoods(allGoods);
-      } catch (e) { console.error('Stock update error:', e); }
-
       await dataService.addPurchase({
         supplierName, supplierId: supplierId || null,
-        paymentType, creditorId: paymentType === 'credit' ? creditorId : null,
+        paymentType, creditorId: paymentType === 'credit' ? supplierId : null,
         date: new Date(purchaseDate + 'T12:00:00').toISOString(),
         items, total,
         notes: notes.trim(), invoiceRef: invoiceRef.trim(),
@@ -224,32 +208,6 @@ function AddPurchaseModal({ onSave, onClose }) {
             </p>
           </div>
 
-          {/* Creditor (credit only) */}
-          {paymentType === 'credit' && (
-            <div className="pr-field">
-              <label>Creditor (who you will pay) *</label>
-              <div style={{position:'relative'}}>
-                <div onClick={() => setShowCreditorDrop(d => !d)}
-                  style={{width:'100%',padding:'8px 36px 8px 10px',border:`1.5px solid ${creditorId?'#4f46e5':'#ccc'}`,borderRadius:'6px',minHeight:'36px',background:creditorId?'#eef2ff':'white',cursor:'pointer',userSelect:'none',boxSizing:'border-box',fontSize:'14px',color:creditorName?'#1f2937':'#9ca3af',display:'flex',alignItems:'center'}}>
-                  {creditorName || (creditors.length===0?'No creditors registered yet':'Tap to select creditor…')}
-                </div>
-                <span style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',color:'#9ca3af',fontSize:'12px',pointerEvents:'none'}}>▼</span>
-                {showCreditorDrop && creditors.length > 0 && (
-                  <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'white',border:'1px solid #ccc',borderRadius:'6px',maxHeight:'160px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
-                    {creditors.map(c => (
-                      <div key={c.id}
-                        onMouseDown={() => { setCreditorId(c.id); setCreditorName(c.name||c.customerName); setShowCreditorDrop(false); }}
-                        style={{padding:'10px 12px',cursor:'pointer',borderBottom:'1px solid #eee',fontSize:'14px'}}>
-                        <div style={{fontWeight:600}}>{c.name||c.customerName}</div>
-                        <div style={{fontSize:'11px',color:'#888'}}>Balance: {fmt(c.balance||0)}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {showCreditorDrop && <div style={{position:'fixed',inset:0,zIndex:999}} onClick={() => setShowCreditorDrop(false)} />}
-              </div>
-            </div>
-          )}
 
           {/* Purchase Date — inline */}
           <div className="pr-date-inline">
@@ -283,6 +241,7 @@ function AddPurchaseModal({ onSave, onClose }) {
                           <input type="number" className="pr-it-input pr-it-qty"
                             placeholder="0" min="0" step="1"
                             value={row.qty}
+                            required
                             onChange={e => updateRow(row.id, 'qty', e.target.value)} />
                         </td>
 
@@ -295,16 +254,24 @@ function AddPurchaseModal({ onSave, onClose }) {
                               updateRow(row.id, 'descSearch', e.target.value);
                               updateRow(row.id, 'showDescDrop', true);
                             }}
-                            onFocus={() => updateRow(row.id, 'showDescDrop', true)}
+                            onFocus={e => {
+                              updateRow(row.id, 'showDescDrop', true);
+                              const rect = e.target.getBoundingClientRect();
+                              updateRow(row.id, 'dropTop', rect.bottom + 2);
+                              updateRow(row.id, 'dropLeft', rect.left);
+                              updateRow(row.id, 'dropWidth', rect.width);
+                            }}
                             onBlur={() => setTimeout(() => {
                               setRows(prev => prev.map(r => r.id === row.id
                                 ? { ...r, showDescDrop: false,
                                     descSearch: r.description || r.descSearch }
                                 : r));
                             }, 180)}
+                            required
                           />
                           {row.showDescDrop && results.length > 0 && (
-                            <div className="pr-desc-drop">
+                            <div className="pr-desc-drop pr-desc-drop-float"
+                              style={{top: row.dropTop||0, left: row.dropLeft||0, width: row.dropWidth||180}}>
                               {results.map(g => (
                                 <div key={g.id} className="pr-desc-drop-item"
                                   onMouseDown={() => {
