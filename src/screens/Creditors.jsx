@@ -817,44 +817,6 @@ Kadaele Services`;
             {/* ── Credit History tab ── */}
             {activeTab === 'history' && (
               <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
-                <PdfTableButton
-                  title={`Credit History — ${selectedCreditor?.name||selectedCreditor?.customerName||''}`}
-                  columns={[
-                    {header:'Date',key:'date'},{header:'Ref',key:'ref'},
-                    {header:'Items',key:'items'},{header:'Qty',key:'qty'},
-                    {header:'Unit Cost',key:'unitCost'},{header:'Debit',key:'debit'},
-                    {header:'Credit',key:'credit'},{header:'Balance',key:'balance'}
-                  ]}
-                  rows={historyRows.flatMap(row => {
-                    if (row.kind === 'deposit') {
-                      const dep = row.deposit;
-                      const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
-                      return [{
-                        date: d ? d.toLocaleDateString('en-GB') : 'N/A',
-                        ref: '—',
-                        items: 'Payment Made', qty: '—', unitCost: '—',
-                        debit: '—',
-                        credit: fmt(parseFloat(dep.amount)),
-                        balance: fmt(Math.abs(row.runningBalance)),
-                      }];
-                    }
-                    const sale = row.sale;
-                    const items = sale.items && sale.items.length > 0 ? sale.items : [null];
-                    const rawTs = sale.date||sale.timestamp||sale.createdAt;
-                    const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
-                    return items.map((item, idx) => ({
-                      date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
-                      ref: idx===0 ? (sale.invoiceRef || sale.notes || '—') : '',
-                      items: item ? (item.name||item.description||'N/A') : 'N/A',
-                      qty: item ? String(item.quantity||item.qty||0) : '—',
-                      unitCost: item ? fmt(item.price||item.costPrice||0) : '—',
-                      debit: idx===0 ? fmt(sale.total||0) : '',
-                      credit: '—',
-                      balance: idx===0 ? fmt(Math.abs(row.runningBalance)) : '',
-                    }));
-                  })}
-                  summary={[{label:'Total Owed', value: fmt(Math.abs(historyRows.length>0 ? historyRows[0].runningBalance : (selectedCreditor?.balance||0)))}]}
-                />
 
                 {/* Action bar — PDF left, Record Payment right */}
                 <div className="d-history-actions">
@@ -875,7 +837,7 @@ Kadaele Services`;
                         <th>QTY</th>
                         <th>PACKSIZE</th>
                         <th>Items</th>
-                        <th>Unit Cost</th>
+                        <th>Cost</th>
                         <th>Debit</th>
                         <th>Credit</th>
                         <th>Balance</th>

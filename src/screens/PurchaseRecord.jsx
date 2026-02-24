@@ -266,18 +266,31 @@ function AddPurchaseModal({ onSave, onClose }) {
                               updateRow(row.id, 'showDescDrop', true);
                             }}
                             onFocus={e => {
+                              const input = e.target;
                               updateRow(row.id, 'showDescDrop', true);
-                              const rect = e.target.getBoundingClientRect();
-                              updateRow(row.id, 'dropTop', rect.bottom + 2);
-                              updateRow(row.id, 'dropLeft', rect.left);
-                              updateRow(row.id, 'dropWidth', rect.width);
+                              const reposition = () => {
+                                const rect = input.getBoundingClientRect();
+                                updateRow(row.id, 'dropTop', rect.bottom + 2);
+                                updateRow(row.id, 'dropLeft', rect.left);
+                                updateRow(row.id, 'dropWidth', rect.width);
+                              };
+                              setTimeout(reposition, 350);
+                              input._scrollHandler = reposition;
+                              window.addEventListener('scroll', reposition, true);
                             }}
-                            onBlur={() => setTimeout(() => {
-                              setRows(prev => prev.map(r => r.id === row.id
-                                ? { ...r, showDescDrop: false,
-                                    descSearch: r.description || r.descSearch }
-                                : r));
-                            }, 180)}
+                            onBlur={e => {
+                              const input = e.target;
+                              if (input._scrollHandler) {
+                                window.removeEventListener('scroll', input._scrollHandler, true);
+                                input._scrollHandler = null;
+                              }
+                              setTimeout(() => {
+                                setRows(prev => prev.map(r => r.id === row.id
+                                  ? { ...r, showDescDrop: false,
+                                      descSearch: r.description || r.descSearch }
+                                  : r));
+                              }, 180);
+                            }}
                             required
                           />
                           {row.showDescDrop && results.length > 0 && (
@@ -302,10 +315,12 @@ function AddPurchaseModal({ onSave, onClose }) {
                           <div className="pr-pack-pair">
                             <input type="text" className="pr-it-input pr-it-pack-unit"
                               placeholder="unit" value={row.packUnit}
+                              disabled={!row.description}
                               onChange={e => updateRow(row.id, 'packUnit', e.target.value)} />
                             <span className="pr-pack-x">&times;</span>
                             <input type="text" className="pr-it-input pr-it-pack-size"
                               placeholder="size" value={row.packSize}
+                              disabled={!row.description}
                               onChange={e => updateRow(row.id, 'packSize', e.target.value)} />
                           </div>
                         </td>
@@ -315,6 +330,7 @@ function AddPurchaseModal({ onSave, onClose }) {
                           <input type="number" className="pr-it-input pr-it-cost"
                             placeholder="0.00" min="0" step="0.01"
                             value={row.costPrice}
+                            disabled={!row.description}
                             onChange={e => updateRow(row.id, 'costPrice', e.target.value)} />
                         </td>
 

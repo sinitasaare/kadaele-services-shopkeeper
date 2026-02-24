@@ -605,3 +605,12 @@
 .pr-item-qty  { text-align: center; width: 52px; }
 .pr-item-desc { min-width: 80px; }
 .pr-item-cost { text-align: right; }
+
+/* Locked input fields — disabled until description is selected */
+.pr-it-input:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+  border-color: #e5e7eb;
+}
