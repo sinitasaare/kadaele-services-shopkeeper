@@ -177,28 +177,40 @@ const PAGES = [
     name: 'DEBTORS',          
     component: Debtors,
     helpContent: `
-      <h3>Debtors - How to Use</h3>
-      <p><strong>Manage customers who buy on credit and track payments.</strong></p>
-      
-      <h4>Adding a New Debtor</h4>
-      <ol>
-        <li>Tap "+ Add Debtor" button</li>
-        <li>Fill in required fields: Full Name, Gender, Phone, WhatsApp/Email, Address</li>
-        <li>Tap "Save"</li>
-      </ol>
-      
-      <h4>Recording Payments</h4>
-      <ol>
-        <li>Open debtor profile → "Debt History" tab</li>
-        <li>Tap "Deposit" → Enter amount → Take receipt photo (optional)</li>
-        <li>Tap "Confirm Payment"</li>
-      </ol>
-      
-      <h4>Tips</h4>
+      <h3>Debtors – How to Use</h3>
+      <p><strong>Keep track of customers who take goods on credit and manage what they owe you.</strong></p>
+
+      <h4>Adding a Debtor</h4>
+      <p>Tap <strong>+ Add Debtor</strong> and fill in their name, phone, WhatsApp or email, and address. For example, if John Banda buys rice on credit, add him here so you can track his debt separately from other customers.</p>
+
+      <h4>Viewing a Debtor's Profile</h4>
+      <p>Tap any debtor card to open their profile. You'll see two tabs:</p>
       <ul>
-        <li>Balances update automatically when credit sales are made</li>
-        <li>Use "Notify" button to send payment reminders via WhatsApp/Email/SMS</li>
+        <li><strong>Details</strong> – their contact info. Tap the pencil icon to edit it.</li>
+        <li><strong>Debt History</strong> – every sale and deposit listed in order, with a running balance so you always know exactly what they owe.</li>
       </ul>
+
+      <h4>How Debts Are Added</h4>
+      <p>When you record a credit sale in the Sales Register, the amount is automatically added to that customer's debt. For example: John buys K500 of maize flour on credit → his balance goes up by K500.</p>
+
+      <h4>Recording a Deposit (Payment)</h4>
+      <p>When the debtor pays you back, open their profile → <strong>Debt History</strong> tab → tap <strong>Deposit</strong>. Enter the amount they paid. For example: John pays K200 → his balance drops from K500 to K300. You can also take a photo of the receipt as proof.</p>
+      <p><em>Note: Deposits can be edited within 30 minutes of recording. After that, they are locked.</em></p>
+
+      <h4>Sending a Payment Reminder (Notify)</h4>
+      <p>Tap <strong>Notify</strong> in the Debt History tab to send a polite reminder message to the debtor. Choose WhatsApp, Email, or SMS. The message is pre-written with their name and balance — you just pick the channel and send. For example: John's due date is tomorrow → tap Notify → WhatsApp → the message opens in WhatsApp ready to send.</p>
+
+      <h4>Sharing a PDF Statement</h4>
+      <p>Tap the <strong>PDF</strong> button (between Notify and Deposit) to generate a full statement of the debtor's debt history as a PDF file. The share sheet opens so you can send it directly — via WhatsApp, email, Bluetooth, or any other app on your phone. For example: John asks for proof of what he owes → tap PDF → share via WhatsApp → he receives the document instantly.</p>
+
+      <h4>Sorting and Searching</h4>
+      <p>Use the search bar to find a debtor by name. Use the sort button (↕) to order by highest balance, due date, or most recently updated. For example: sort by <em>Balance: High to Low</em> to see who owes you the most at a glance.</p>
+
+      <h4>Editing Sales Entries</h4>
+      <p>If you made a mistake when recording a credit sale, open the Debt History tab. Within 2 hours of the sale, a pencil icon appears on that row — tap it to correct the item name, quantity, or price. After 2 hours the entry is locked.</p>
+
+      <h4>Setting a Repayment Due Date</h4>
+      <p>When adding or editing a debtor, you can record an agreed repayment date. The Notify message will automatically say "your debt is due tomorrow" or "your debt is X days overdue" based on that date.</p>
     `
   },
   { 
