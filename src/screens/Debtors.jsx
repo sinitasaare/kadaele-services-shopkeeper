@@ -928,7 +928,7 @@ Kadaele Services`;
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
                   </button>
-                  <div style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
+                  <div style={{position:'relative', width:'32px', height:'32px', flexShrink:0}}>
                     <PdfTableButton
                       title={`Debt History — ${selectedDebtor?.name||selectedDebtor?.customerName||''}`}
                       columns={[
