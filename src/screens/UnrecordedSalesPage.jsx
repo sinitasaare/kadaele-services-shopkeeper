@@ -81,7 +81,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
     const t = searchTerm.toLowerCase();
     return goods.filter(g => {
       const w = (g.name||'').toLowerCase().split(/\s+/);
-      return w[0]?.startsWith(t) || (w[1] && w[1].startsWith(t));
+      return w[0]?.startsWith(t) || (w[1] && w[1].startsWith(t)) || (w[2] && w[2].startsWith(t));
     }).slice(0, 8);
   })();
 
