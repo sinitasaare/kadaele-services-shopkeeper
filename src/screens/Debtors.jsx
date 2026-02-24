@@ -628,30 +628,32 @@ Kadaele Services`;
     try {
       const pdf = await generateA4PDF();
       if (!pdf) throw new Error('PDF generation failed');
-      const pdfInfo = await savePDFAndGetURI(pdf, debtorName);
-      setShowWaPdfModal(false);
-      setWaPdfPending(null);
       const isNative = window.Capacitor?.isNativePlatform?.();
-      if (isNative && pdfInfo?.uri) {
-        // Target WhatsApp ONLY — no share sheet — using capacitor-filesharer
-        // which supports Android targetPackage to lock destination app
-        try {
-          const { FileSharer } = await import('@byteowls/capacitor-filesharer');
-          const { Filesystem, Directory } = await import('@capacitor/filesystem');
-          const file = await Filesystem.readFile({ path: pdfInfo.fileName, directory: Directory.Cache });
-          await FileSharer.share({
-            filename: pdfInfo.fileName,
-            base64Data: file.data,
-            contentType: 'application/pdf',
-            android: { chooserTitle: '', targetPackage: 'com.whatsapp' },
-          });
-        } catch (shareErr) {
-          console.error('FileSharer error, falling back to whatsapp:// deep link', shareErr);
-          // Deep link fallback — opens WhatsApp directly (file won't attach but WhatsApp opens)
-          window.open(`whatsapp://send?phone=${clean}`, '_blank');
-        }
+      if (isNative) {
+        // Save PDF to the public Downloads folder so it appears in WhatsApp's file picker
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const fileName = `statement_${debtorName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+        const base64 = await new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload  = () => res(reader.result.split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(pdf.output('blob'));
+        });
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64,
+          directory: Directory.Documents, // visible in Files app & WhatsApp file picker
+        });
+        setShowWaPdfModal(false);
+        setWaPdfPending(null);
+        // Open WhatsApp directly to the debtor's chat — no share sheet
+        // PDF is now in Documents/Downloads ready for them to attach via the attachment icon
+        window.open(`whatsapp://send?phone=${clean}`, '_blank');
       } else {
-        // Web fallback — download PDF then open wa.me
+        // Web fallback — auto-download PDF then open WhatsApp chat
+        const pdfInfo = await savePDFAndGetURI(pdf, debtorName);
+        setShowWaPdfModal(false);
+        setWaPdfPending(null);
         if (pdfInfo?.uri) {
           const link = document.createElement('a');
           link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
@@ -1236,8 +1238,11 @@ Kadaele Services`;
               </button>
             </div>
             <div style={{padding:'16px 20px 8px',fontSize:'14px',color:'#444',lineHeight:'1.5'}}>
-              Would you also like to send{' '}
-              <strong>{waPdfPending?.debtorName}</strong>'s PDF statement via WhatsApp?
+              Would you also like to send <strong>{waPdfPending?.debtorName}</strong>'s PDF statement?
+              <br/><br/>
+              <span style={{fontSize:'13px',color:'#666'}}>
+                The PDF will be saved to your Documents folder and WhatsApp will open directly to their chat — just tap the 📎 attachment icon to attach it.
+              </span>
             </div>
             <div style={{display:'flex',gap:'10px',padding:'12px 20px 20px',justifyContent:'center'}}>
               <button
