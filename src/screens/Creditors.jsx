@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
+import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
@@ -130,6 +130,7 @@ function Creditors() {
   const sortMenuRef                     = useRef(null);
   const historyRef                      = useRef(null);  // ref for debt history section → PDF
   const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [pdfSharing, setPdfSharing] = useState(false);
 
   useEffect(() => { loadCreditors(); }, []);
 
@@ -499,6 +500,37 @@ Kadaele Services`;
     return { uri: blobUrl, fileName, blob: pdfBlob, isWeb: true };
   };
 
+  // ── Share PDF directly (native share sheet or web download) ──────────────
+  const handleSharePDF = async () => {
+    if (!selectedCreditor) return;
+    setPdfSharing(true);
+    try {
+      const pdf = await generateA4PDF();
+      if (!pdf) { alert('Could not generate PDF'); return; }
+      const creditorName = selectedCreditor.name || selectedCreditor.customerName || 'creditor';
+      const pdfInfo = await savePDFAndGetURI(pdf, creditorName);
+      if (!pdfInfo) { alert('Could not save PDF'); return; }
+      const isNative = window.Capacitor?.isNativePlatform?.();
+      if (isNative && pdfInfo.uri) {
+        const { Share } = await import('@capacitor/share');
+        await Share.share({ title: `Credit Statement — ${creditorName}`, url: pdfInfo.uri, dialogTitle: 'Share Credit Statement' });
+      } else {
+        const link = document.createElement('a');
+        link.href = pdfInfo.uri;
+        link.download = pdfInfo.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
+      }
+    } catch (err) {
+      console.error('PDF share error:', err);
+      alert('Failed to share PDF');
+    } finally {
+      setPdfSharing(false);
+    }
+  };
+
   const handleNotify = async (method) => {
     const creditor = selectedCreditor;
     const { subject, body } = buildNotifyMessage();
@@ -688,13 +720,14 @@ Kadaele Services`;
             </div>
           )}
         </div>
+        <button className="d-add-btn" onClick={openAddCreditorModal}>+ Add Creditor</button>
       </div>
 
       {/* ── Creditor cards ── */}
       <div className="d-grid">
         {filteredCreditors.length === 0 ? (
           <div className="d-empty">
-            {searchTerm ? 'No creditors match your search.' : 'No creditors yet. Credit purchases will automatically create creditor cards.'}
+            {searchTerm ? 'No creditors match your search.' : 'No creditors yet. Click "+ Add Creditor" to get started.'}
           </div>
         ) : (
           filteredCreditors.map(creditor => (
@@ -787,10 +820,10 @@ Kadaele Services`;
                 <PdfTableButton
                   title={`Credit History — ${selectedCreditor?.name||selectedCreditor?.customerName||''}`}
                   columns={[
-                    {header:'Date',key:'date'},{header:'Time',key:'time'},
-                    {header:'Items',key:'items'},{header:'Qty',key:'qty'},{header:'Price',key:'price'},
-                    {header:'Subtotal',key:'sub'},{header:'Total',key:'saleTotal'},
-                    {header:'Paid',key:'deposited'},{header:'Balance',key:'balance'}
+                    {header:'Date',key:'date'},{header:'Ref',key:'ref'},
+                    {header:'Items',key:'items'},{header:'Qty',key:'qty'},
+                    {header:'Unit Cost',key:'unitCost'},{header:'Debit',key:'debit'},
+                    {header:'Credit',key:'credit'},{header:'Balance',key:'balance'}
                   ]}
                   rows={historyRows.flatMap(row => {
                     if (row.kind === 'deposit') {
@@ -798,29 +831,36 @@ Kadaele Services`;
                       const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
                       return [{
                         date: d ? d.toLocaleDateString('en-GB') : 'N/A',
-                        time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
-                        items:'Payment Made', qty:'—', price:'—', sub:'—', saleTotal:'—',
-                        deposited: fmt(parseFloat(dep.amount)), balance: fmt(Math.abs(row.runningBalance)),
+                        ref: '—',
+                        items: 'Payment Made', qty: '—', unitCost: '—',
+                        debit: '—',
+                        credit: fmt(parseFloat(dep.amount)),
+                        balance: fmt(Math.abs(row.runningBalance)),
                       }];
                     }
-                    const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
+                    const sale = row.sale;
+                    const items = sale.items && sale.items.length > 0 ? sale.items : [null];
                     const rawTs = sale.date||sale.timestamp||sale.createdAt;
                     const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
-                    return items.map((item,idx) => ({
+                    return items.map((item, idx) => ({
                       date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
-                      time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
+                      ref: idx===0 ? (sale.invoiceRef || sale.notes || '—') : '',
                       items: item ? (item.name||item.description||'N/A') : 'N/A',
                       qty: item ? String(item.quantity||item.qty||0) : '—',
-                      price: item ? fmt(item.price||0) : '—',
-                      sub: item ? fmt(item.subtotal||(item.price||0)*(item.quantity||item.qty||0)) : '—',
-                      saleTotal: idx===0 ? fmt(sale.total||0) : '',
-                      deposited: '—',
+                      unitCost: item ? fmt(item.price||item.costPrice||0) : '—',
+                      debit: idx===0 ? fmt(sale.total||0) : '',
+                      credit: '—',
                       balance: idx===0 ? fmt(Math.abs(row.runningBalance)) : '',
                     }));
                   })}
                   summary={[{label:'Total Owed', value: fmt(Math.abs(historyRows.length>0 ? historyRows[0].runningBalance : (selectedCreditor?.balance||0)))}]}
                 />
+
+                {/* Action bar — PDF left, Record Payment right */}
                 <div className="d-history-actions">
+                  <button className="d-pdf-btn" onClick={handleSharePDF} disabled={pdfSharing}>
+                    <FileText size={16} /> {pdfSharing ? 'Generating…' : 'PDF'}
+                  </button>
                   <button className="d-deposit-btn" onClick={() => setShowPaymentModal(true)}>
                     <DollarSign size={16} /> Record Payment Made
                   </button>
@@ -831,21 +871,20 @@ Kadaele Services`;
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th>Time</th>
-                        <th>Supplier</th>
+                        <th>Ref</th>
                         <th>QTY</th>
                         <th>PACKSIZE</th>
                         <th>Items</th>
-                        <th>Cost</th>
-                        <th>Pay</th>
-                        <th>Total</th>
-                        <th>Ref</th>
+                        <th>Unit Cost</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
+                        <th>Balance</th>
                         <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {historyRows.length === 0 ? (
-                        <tr><td colSpan="11" className="d-empty-cell">No credit purchases yet</td></tr>
+                        <tr><td colSpan="10" className="d-empty-cell">No credit purchases yet</td></tr>
                       ) : (
                         historyRows.map((row, rowIdx) => {
                           if (row.kind === 'deposit') {
@@ -854,14 +893,15 @@ Kadaele Services`;
                             return (
                               <tr key={`dep-${dep.id}`} className="d-deposit-row">
                                 <td className="d-merged">{formatDate(dep.date)}</td>
-                                <td className="d-merged">{formatTime(dep.date, dep)}</td>
-                                <td colSpan="7" className="d-deposit-merged-cell">
+                                <td className="d-merged">—</td>
+                                <td colSpan="5" className="d-deposit-merged-cell">
                                   P&nbsp;a&nbsp;y&nbsp;m&nbsp;e&nbsp;n&nbsp;t&nbsp;&nbsp;&nbsp;M&nbsp;a&nbsp;d&nbsp;e
                                 </td>
                                 <td className="d-deposited-amount">{fmt(parseFloat(dep.amount))}</td>
                                 <td className={`d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
                                   {fmt(Math.abs(row.runningBalance))}
                                 </td>
+                                <td>—</td>
                               </tr>
                             );
                           }
@@ -871,21 +911,18 @@ Kadaele Services`;
                           const items = sale.items && sale.items.length > 0 ? sale.items : [null];
                           const rowSpan = items.length;
                           const rawTs = sale.date || sale.createdAt;
-                          const supplierName = sale.supplierName || '—';
                           const packDisplay = (item) => item ? (item.packDisplay || (item.packUnit ? `${item.packUnit}×${item.packSize||'?'}` : (item.packSize || '—'))) : '—';
 
                           return items.map((item, idx) => (
                             <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left'}}>{formatDate(rawTs)}</td>}
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left'}}>{formatTime(rawTs, sale)}</td>}
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left',whiteSpace:'nowrap'}}>{supplierName}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left',whiteSpace:'nowrap'}}>{sale.invoiceRef || sale.notes || '—'}</td>}
                               <td className="d-qty">{item ? (item.qty || item.quantity || '—') : '—'}</td>
                               <td>{item ? packDisplay(item) : '—'}</td>
                               <td style={{whiteSpace:'nowrap'}}>{item ? (item.name || 'N/A') : 'N/A'}</td>
                               <td>{item ? fmt(item.price || item.costPrice || 0) : '—'}</td>
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle'}}>Credit</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total" style={{verticalAlign:'middle',textAlign:'left'}}>{fmt(sale.total || 0)}</td>}
-                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left'}}>{sale.invoiceRef || sale.notes || '—'}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left',color:'#9ca3af'}}>—</td>}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className={`d-merged d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`} style={{verticalAlign:'middle'}}>
                                   {fmt(Math.abs(row.runningBalance))}
@@ -906,6 +943,85 @@ Kadaele Services`;
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Creditor Modal ── */}
+      {showAddCreditorModal && (
+        <div className="d-overlay" onClick={closeAddCreditorModal}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Add New Creditor</h2>
+              <button className="d-close-btn" onClick={closeAddCreditorModal}><X size={22} /></button>
+            </div>
+            <form className="d-add-form" onSubmit={handleAddCreditor}>
+              {/* Name of Creditor — supplier picker */}
+              <div className="d-form-group">
+                <label>Name of Creditor *</label>
+                <div className="d-supplier-pick-row" onClick={() => setShowSupplierPicker(true)}
+                  style={{cursor:'pointer',padding:'10px 12px',border:'1.5px solid #e5e7eb',borderRadius:'10px',
+                    background:'#f9fafb',fontSize:'14px',color: newCreditor.fullName ? '#1f2937':'#9ca3af',
+                    display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <span>{newCreditor.fullName || 'Select from suppliers list'}</span>
+                  <span style={{fontSize:'18px',color:'#667eea'}}>▾</span>
+                </div>
+              </div>
+              {[['Phone *','tel','phone','Phone number'],
+                ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
+                <div className="d-form-group" key={field}>
+                  <label>{lbl}</label>
+                  <input type={type} value={newCreditor[field]||''} placeholder={ph}
+                    onChange={e => setNewCreditor({...newCreditor,[field]:e.target.value})} />
+                </div>
+              ))}
+              <div className="d-form-group">
+                <label>Address *</label>
+                <textarea rows="2" value={newCreditor.address||''} placeholder="Enter address"
+                  onChange={e => setNewCreditor({...newCreditor,address:e.target.value})} />
+              </div>
+              <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
+              <div className="d-form-actions">
+                <button type="button" className="d-btn-cancel" onClick={closeAddCreditorModal}>Cancel</button>
+                <button type="submit" className="d-btn-save">Save</button>
+              </div>
+            </form>
+
+            {/* ── Supplier Picker child modal ── */}
+            {showSupplierPicker && (
+              <div className="d-overlay" style={{zIndex:3000}} onClick={() => setShowSupplierPicker(false)}>
+                <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxHeight:'70vh',display:'flex',flexDirection:'column'}}>
+                  <div className="d-modal-header">
+                    <h2 className="d-modal-title">Select Supplier</h2>
+                    <button className="d-close-btn" onClick={() => setShowSupplierPicker(false)}><X size={22}/></button>
+                  </div>
+                  <div style={{overflowY:'auto',flex:1}}>
+                    {supplierList.length === 0
+                      ? <p style={{padding:'16px',color:'#9ca3af',textAlign:'center'}}>No suppliers saved yet</p>
+                      : supplierList.map(s => {
+                          const name = s.name || s.customerName || '—';
+                          return (
+                            <div key={s.id} onClick={() => {
+                              setNewCreditor({...newCreditor, fullName: name, phone: s.phone||s.customerPhone||newCreditor.phone||'',
+                                whatsapp: s.whatsapp||newCreditor.whatsapp||'', email: s.email||newCreditor.email||'',
+                                address: s.address||newCreditor.address||'', gender: s.gender||''});
+                              setShowSupplierPicker(false);
+                            }} style={{padding:'12px 16px',borderBottom:'1px solid #f0f0f0',cursor:'pointer',
+                              fontSize:'14px',color:'#1f2937',display:'flex',alignItems:'center',gap:'10px'}}>
+                              <span style={{width:32,height:32,borderRadius:'50%',background:'#667eea',
+                                color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',
+                                fontWeight:700,fontSize:'13px',flexShrink:0}}>
+                                {name[0]?.toUpperCase()}
+                              </span>
+                              {name}
+                            </div>
+                          );
+                        })
+                    }
+                  </div>
                 </div>
               </div>
             )}
