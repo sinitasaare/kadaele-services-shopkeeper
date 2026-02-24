@@ -258,7 +258,7 @@ function Suppliers() {
         phone: newSupplier.phone, customerPhone: newSupplier.phone, gender: '',
         whatsapp: newSupplier.whatsapp, email: newSupplier.email, address: newSupplier.address,
         totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
-        createdAt: new Date().toISOString(), lastSale: null
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null
       };
       const current = await dataService.getSuppliers();
       current.push(supplierData);
@@ -928,7 +928,7 @@ Kadaele Services`;
               <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
               <div className="d-form-actions">
                 <button type="button" className="d-btn-cancel" onClick={closeAddSupplierModal}>Cancel</button>
-                <button type="submit" className="d-btn-save">Save</button>
+                <button type="submit" className="d-btn-save" onClick={handleAddSupplier}>Save</button>
               </div>
             </form>
           </div>

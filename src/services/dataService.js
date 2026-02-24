@@ -1175,7 +1175,10 @@ class DataService {
 
   async setSuppliers(suppliers) {
     await localforage.setItem(DATA_KEYS.SUPPLIERS, suppliers);
-    if (this.isOnline && auth.currentUser) {
+    const user = auth.currentUser || await new Promise(resolve => {
+      const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
+    });
+    if (this.isOnline && user) {
       try {
         const batch = writeBatch(db);
         suppliers.forEach(supplier => {
@@ -1197,6 +1200,7 @@ class DataService {
     }
     return true;
   }
+
 
   // Inventory operations
   async getInventory() {
