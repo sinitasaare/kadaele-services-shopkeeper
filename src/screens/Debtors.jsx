@@ -153,6 +153,10 @@ function Debtors() {
   const [editDepositModal, setEditDepositModal] = useState(null); // { debtorId, deposit }
   const [editDepositAmount, setEditDepositAmount] = useState('');
   const [savingDeposit, setSavingDeposit] = useState(false);
+  const [showWaPdfModal, setShowWaPdfModal]     = useState(false);
+  const [waPdfPending, setWaPdfPending]         = useState(null); // { phone, body, debtorName, debtor }
+  const [waPdfGenerating, setWaPdfGenerating]   = useState(false);
+  const waAppListenerRef = useRef(null);
 
 
   useEffect(() => { loadDebtors(); }, []);
@@ -615,21 +619,61 @@ Kadaele Services`;
     return { uri: blobUrl, fileName, blob: pdfBlob, isWeb: true };
   };
 
+  // ── Send PDF via WhatsApp after user returns from sending the message ────
+  const handleSendWaPdf = async () => {
+    if (!waPdfPending) return;
+    const { phone, debtorName } = waPdfPending;
+    const clean = phone.replace(/\D/g, '');
+    setWaPdfGenerating(true);
+    try {
+      const pdf = await generateA4PDF();
+      if (!pdf) throw new Error('PDF generation failed');
+      const pdfInfo = await savePDFAndGetURI(pdf, debtorName);
+      setShowWaPdfModal(false);
+      setWaPdfPending(null);
+      const isNative = window.Capacitor?.isNativePlatform?.();
+      if (isNative && pdfInfo?.uri) {
+        // Target WhatsApp ONLY — no share sheet — using capacitor-filesharer
+        // which supports Android targetPackage to lock destination app
+        try {
+          const { FileSharer } = await import('@byteowls/capacitor-filesharer');
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          const file = await Filesystem.readFile({ path: pdfInfo.fileName, directory: Directory.Cache });
+          await FileSharer.share({
+            filename: pdfInfo.fileName,
+            base64Data: file.data,
+            contentType: 'application/pdf',
+            android: { chooserTitle: '', targetPackage: 'com.whatsapp' },
+          });
+        } catch (shareErr) {
+          console.error('FileSharer error, falling back to whatsapp:// deep link', shareErr);
+          // Deep link fallback — opens WhatsApp directly (file won't attach but WhatsApp opens)
+          window.open(`whatsapp://send?phone=${clean}`, '_blank');
+        }
+      } else {
+        // Web fallback — download PDF then open wa.me
+        if (pdfInfo?.uri) {
+          const link = document.createElement('a');
+          link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
+        }
+        window.open(`https://wa.me/${clean}`, '_blank');
+      }
+    } catch (err) {
+      console.error('WA PDF send error:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setWaPdfGenerating(false);
+    }
+  };
+
   const handleNotify = async (method) => {
     const debtor = selectedDebtor;
     const { subject, body } = buildNotifyMessage();
     const debtorName = debtor.name || debtor.customerName || 'debtor';
 
-    // ── Generate PDF first, then immediately close modal and open app ──────
-    setPdfGenerating(true);
-    let pdfInfo = null;
-    try {
-      const pdf = await generateA4PDF();
-      if (pdf) pdfInfo = await savePDFAndGetURI(pdf, debtorName);
-    } catch (err) { console.error('PDF error:', err); }
-    finally { setPdfGenerating(false); }
-
-    // Close notify modal NOW — user should only see the target app next
+    // Close notify modal right away
     setShowNotifyModal(false);
 
     const isNative = window.Capacitor?.isNativePlatform?.();
@@ -638,54 +682,48 @@ Kadaele Services`;
       const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
       const clean = phone.replace(/\D/g, '');
-      if (isNative && pdfInfo?.uri) {
-        try {
-          // Copy the message to clipboard so user can paste it as WhatsApp caption
-          await navigator.clipboard.writeText(body);
-        } catch (_) {
-          // Fallback clipboard copy for older WebViews
-          const ta = document.createElement('textarea');
-          ta.value = body; ta.style.position = 'fixed'; ta.style.opacity = '0';
-          document.body.appendChild(ta); ta.select();
-          document.execCommand('copy'); document.body.removeChild(ta);
+
+      // ── Step 1: Open WhatsApp with message pre-typed ──────────────────────
+      const waUrl = `https://wa.me/${clean}?text=${encodeURIComponent(body)}`;
+
+      if (isNative) {
+        // Listen for app resuming (user returning from WhatsApp)
+        // Remove any existing listener first
+        if (waAppListenerRef.current) {
+          waAppListenerRef.current.remove();
+          waAppListenerRef.current = null;
         }
-        try {
-          const { Share } = await import('@capacitor/share');
-          // Share PDF file ONLY — WhatsApp will open the document preview
-          // directly instead of showing the generic share sheet with many apps.
-          // The message is already on the clipboard for pasting as caption.
-          await Share.share({
-            url: pdfInfo.uri,
-            dialogTitle: 'Send statement via WhatsApp',
-          });
-          return;
-        } catch (err) { console.error('Share error:', err); }
+        const { App: CapApp } = await import('@capacitor/app');
+        const handle = await CapApp.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            // User is back — remove listener and show PDF prompt
+            handle.remove();
+            waAppListenerRef.current = null;
+            setWaPdfPending({ phone, body, debtorName, debtor });
+            setShowWaPdfModal(true);
+          }
+        });
+        waAppListenerRef.current = handle;
+        // Open WhatsApp
+        window.open(waUrl, '_blank');
+      } else {
+        // Web: just open WhatsApp, skip PDF prompt
+        window.open(waUrl, '_blank');
       }
-      // Web fallback: download PDF then open WhatsApp chat with message
-      if (pdfInfo?.isWeb || pdfInfo?.uri) {
-        const link = document.createElement('a');
-        link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-      }
-      window.open(`https://wa.me/${clean}?text=${encodeURIComponent(body)}`, '_blank');
 
     } else if (method === 'email') {
       const email = debtor.email;
       if (!email) { alert('No email address available'); return; }
+      setPdfGenerating(true);
+      let pdfInfo = null;
+      try {
+        const pdf = await generateA4PDF();
+        if (pdf) pdfInfo = await savePDFAndGetURI(pdf, debtorName);
+      } catch (err) { console.error('PDF error:', err); }
+      finally { setPdfGenerating(false); }
       if (isNative && pdfInfo?.uri) {
         try {
-          // Copy recipient email to clipboard so user can paste in To field
-          await navigator.clipboard.writeText(email).catch(() => {
-            const ta = document.createElement('textarea');
-            ta.value = email; ta.style.position = 'fixed'; ta.style.opacity = '0';
-            document.body.appendChild(ta); ta.select();
-            document.execCommand('copy'); document.body.removeChild(ta);
-          });
           const { Share } = await import('@capacitor/share');
-          // title → Subject, text → Body, url → PDF attachment
-          // Pick Gmail from share sheet → compose opens with Subject, Body
-          // and PDF attached. Paste the recipient email into the To field.
           await Share.share({
             title: subject,
             text: body,
@@ -695,8 +733,8 @@ Kadaele Services`;
           return;
         } catch (err) { console.error('Share error:', err); }
       }
-      // Web: auto-download PDF then open compose email pre-filled
-      if (pdfInfo?.isWeb || pdfInfo?.uri) {
+      // Web fallback
+      if (pdfInfo?.uri) {
         const link = document.createElement('a');
         link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
@@ -707,21 +745,7 @@ Kadaele Services`;
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
-      if (isNative && pdfInfo?.uri) {
-        try {
-          const { Share } = await import('@capacitor/share');
-          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `SMS to ${debtorName}` });
-          return;
-        } catch (err) { console.error('Share error:', err); }
-      }
-      // Web: download PDF then open SMS compose pre-filled
-      if (pdfInfo?.isWeb || pdfInfo?.uri) {
-        const link = document.createElement('a');
-        link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-      }
-      // iOS uses '&', Android uses '?' as separator
+      // SMS: just open with message pre-filled, no PDF
       const sep = /iphone|ipad|ipod/i.test(navigator.userAgent) ? '&' : '?';
       window.location.href = `sms:${phone}${sep}body=${encodeURIComponent(body)}`;
     }
@@ -1197,6 +1221,40 @@ Kadaele Services`;
               <pre className="d-notify-preview-text" style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'inherit',margin:0}}>
                 {selectedDebtor ? buildNotifyMessage().body : ''}
               </pre>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── WhatsApp PDF Prompt Modal ── */}
+      {showWaPdfModal && (
+        <div className="d-overlay" style={{zIndex:6000}}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxWidth:'320px',textAlign:'center'}}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Send PDF Statement?</h2>
+              <button className="d-close-btn" onClick={() => { setShowWaPdfModal(false); setWaPdfPending(null); }} disabled={waPdfGenerating}>
+                <X size={22}/>
+              </button>
+            </div>
+            <div style={{padding:'16px 20px 8px',fontSize:'14px',color:'#444',lineHeight:'1.5'}}>
+              Would you also like to send{' '}
+              <strong>{waPdfPending?.debtorName}</strong>'s PDF statement via WhatsApp?
+            </div>
+            <div style={{display:'flex',gap:'10px',padding:'12px 20px 20px',justifyContent:'center'}}>
+              <button
+                onClick={() => { setShowWaPdfModal(false); setWaPdfPending(null); }}
+                disabled={waPdfGenerating}
+                style={{flex:1,padding:'10px',borderRadius:'8px',border:'1.5px solid #ddd',background:'#f5f5f5',fontWeight:600,fontSize:'14px',cursor:'pointer'}}
+              >
+                No, Done
+              </button>
+              <button
+                onClick={handleSendWaPdf}
+                disabled={waPdfGenerating}
+                style={{flex:1,padding:'10px',borderRadius:'8px',border:'none',background:'#25D366',color:'white',fontWeight:700,fontSize:'14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px'}}
+              >
+                <MessageSquare size={16}/>
+                {waPdfGenerating ? 'Generating…' : 'Yes, Send PDF'}
+              </button>
             </div>
           </div>
         </div>
