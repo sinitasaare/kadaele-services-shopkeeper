@@ -676,8 +676,23 @@ Kadaele Services`;
       if (!email) { alert('No email address available'); return; }
       if (isNative && pdfInfo?.uri) {
         try {
+          // Copy recipient email to clipboard so user can paste in To field
+          await navigator.clipboard.writeText(email).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = email; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+          });
           const { Share } = await import('@capacitor/share');
-          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Email to ${debtorName}` });
+          // title → Subject, text → Body, url → PDF attachment
+          // Pick Gmail from share sheet → compose opens with Subject, Body
+          // and PDF attached. Paste the recipient email into the To field.
+          await Share.share({
+            title: subject,
+            text: body,
+            url: pdfInfo.uri,
+            dialogTitle: `Email statement to ${debtorName}`,
+          });
           return;
         } catch (err) { console.error('Share error:', err); }
       }

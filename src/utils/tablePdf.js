@@ -94,22 +94,22 @@ export async function exportTableToPDF({ title, columns, rows, summary = [] }) {
   pdf.setFontSize(6.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(160, 160, 160);
   pdf.text('Kadaele Services — Confidential', pageW / 2, pageH - 6, { align: 'center' });
 
-  // ── 6. Open PDF for viewing (no share sheet) ────────────────────────────
+  // ── 6. Open PDF via "Open with" chooser (Google Drive, PDF viewer, etc.) ─
   const fileName = `${title.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
   const isNative = window.Capacitor?.isNativePlatform?.();
   if (isNative) {
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const { Share } = await import('@capacitor/share');
       const pdfBlob = pdf.output('blob');
       const b64 = await new Promise((res, rej) => {
         const r = new FileReader();
         r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(pdfBlob);
       });
-      // Write to Documents so the system PDF viewer can access it
-      await Filesystem.writeFile({ path: fileName, data: b64, directory: Directory.Documents });
-      const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Documents });
-      // Open directly with the default PDF viewer
-      window.open(uri, '_system');
+      await Filesystem.writeFile({ path: fileName, data: b64, directory: Directory.Cache });
+      const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
+      // Opens Android "Open with" chooser — Google Drive, PDF viewers, etc.
+      await Share.share({ url: uri, dialogTitle: `Open ${title}` });
       return;
     } catch (err) {
       console.error('Native PDF open error:', err);
