@@ -343,7 +343,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
     const t2 = term.toLowerCase();
     return goods.filter(g => {
       const w = (g.name || '').toLowerCase().split(/\s+/);
-      return w[0]?.startsWith(t2) || (w[1] && w[1].startsWith(t2));
+      return w[0]?.startsWith(t2) || (w[1] && w[1].startsWith(t2)) || (w[2] && w[2].startsWith(t2));
     }).slice(0, 8);
   };
   const searchResults = smartSearch(searchTerm);
