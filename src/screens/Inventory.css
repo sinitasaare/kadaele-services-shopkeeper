@@ -87,6 +87,28 @@
 }
 .inv-add-btn:hover { background: #5568d3; }
 
+/* ── Total value banner ── */
+.inv-total-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 4px;
+}
+.inv-total-value-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #14532d;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.inv-total-value-amount {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #1e3a8a;
+}
+[data-theme="dark"] .inv-total-value-label { color: #4ade80; }
+[data-theme="dark"] .inv-total-value-amount { color: #93c5fd; }
+
 /* Meta row */
 .inv-meta-row {
   display: flex;
