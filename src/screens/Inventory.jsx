@@ -119,6 +119,12 @@ function Inventory() {
             </span>
           )}
         </div>
+        <div className="inv-total-value-row">
+          <span className="inv-total-value-label">TOTAL VALUE:</span>
+          <span className="inv-total-value-amount">
+            {fmt(goods.reduce((sum, g) => sum + (parseFloat(g.price || 0) * (parseFloat(g.stock_quantity) || 0)), 0))}
+          </span>
+        </div>
       </div>
 
       <div className="inv-scroll-body">
@@ -137,7 +143,7 @@ function Inventory() {
                   <th className="inv-col-frozen inv-col-name">PRODUCT NAME</th>
                   <th className="inv-col-size">SIZE</th>
                   <th>CATEGORY</th>
-                  <th className="inv-col-right">PRICE</th>
+                  <th className="inv-col-right">SELLING PRICE</th>
                   <th className="inv-col-center">STOCK</th>
                   <th>STATUS</th>
                   <th className="inv-col-center">BARCODE</th>
