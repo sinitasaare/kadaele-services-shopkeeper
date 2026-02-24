@@ -15,6 +15,7 @@ function filterAndSort(goods, term) {
   if (!q) return goods;
   const tier1 = [];
   const tier2 = [];
+  const tier3 = [];
   for (const g of goods) {
     const name = (g.name || '').toLowerCase();
     const words = name.split(/\s+/);
@@ -22,10 +23,12 @@ function filterAndSort(goods, term) {
       tier1.push(g);
     } else if (words.length >= 2 && words[1].startsWith(q)) {
       tier2.push(g);
+    } else if (words.length >= 3 && words[2].startsWith(q)) {
+      tier3.push(g);
     }
   }
   const alpha = (a, b) => (a.name || '').localeCompare(b.name || '');
-  return [...tier1.sort(alpha), ...tier2.sort(alpha)];
+  return [...tier1.sort(alpha), ...tier2.sort(alpha), ...tier3.sort(alpha)];
 }
 
 function Inventory() {
@@ -119,12 +122,6 @@ function Inventory() {
             </span>
           )}
         </div>
-        <div className="inv-total-value-row">
-          <span className="inv-total-value-label">TOTAL VALUE:</span>
-          <span className="inv-total-value-amount">
-            {fmt(goods.reduce((sum, g) => sum + (parseFloat(g.price || 0) * (parseFloat(g.stock_quantity) || 0)), 0))}
-          </span>
-        </div>
       </div>
 
       <div className="inv-scroll-body">
@@ -143,7 +140,7 @@ function Inventory() {
                   <th className="inv-col-frozen inv-col-name">PRODUCT NAME</th>
                   <th className="inv-col-size">SIZE</th>
                   <th>CATEGORY</th>
-                  <th className="inv-col-right">SELLING PRICE</th>
+                  <th className="inv-col-right">PRICE</th>
                   <th className="inv-col-center">STOCK</th>
                   <th>STATUS</th>
                   <th className="inv-col-center">BARCODE</th>
