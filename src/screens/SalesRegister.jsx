@@ -69,6 +69,14 @@ function SalesRegister() {
     return () => stopScanner();
   }, []);
 
+  // ── Subscribe to real-time goods changes from Firebase listener ────────
+  useEffect(() => {
+    const unsubscribe = dataService.onGoodsChange((updatedGoods) => {
+      setGoods(updatedGoods || []);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const loadGoods = async () => {
     const goodsData = await dataService.getGoods();
     setGoods(goodsData);

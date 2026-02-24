@@ -54,6 +54,12 @@ function AddPurchaseModal({ onSave, onClose }) {
     dataService.getSuppliers().then(d => setSuppliers(d || []));
     dataService.getCreditors().then(d => setCreditors(d || []));
     dataService.getGoods().then(d => setGoods(d || []));
+
+    // Subscribe to real-time goods changes from Firebase listener
+    const unsubscribe = dataService.onGoodsChange((updatedGoods) => {
+      setGoods(updatedGoods || []);
+    });
+    return () => unsubscribe();
   }, []);
 
   const getTodayStr = () => {

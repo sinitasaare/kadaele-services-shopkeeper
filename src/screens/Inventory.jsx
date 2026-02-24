@@ -38,6 +38,19 @@ function Inventory() {
 
   useEffect(() => { loadGoods(); }, []);
 
+  // ── Subscribe to real-time goods changes from Firebase listener ────────
+  useEffect(() => {
+    const unsubscribe = dataService.onGoodsChange((updatedGoods) => {
+      const sorted = (updatedGoods || [])
+        .filter(g => (g.name || '').trim() !== '')
+        .slice()
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setGoods(sorted);
+      setLastSynced(new Date());
+    });
+    return () => unsubscribe();
+  }, []);
+
   const loadGoods = async () => {
     setLoading(true);
     try {

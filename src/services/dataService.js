@@ -58,6 +58,11 @@ class DataService {
     this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     this._goodsUnsubscribe = null;   // Firebase real-time listener handle for goods
     
+    // ── Goods change subscribers ──────────────────────────────────────────
+    // UI components register callbacks here so they re-render when the
+    // Firebase real-time listener writes new goods data to localforage.
+    this._goodsSubscribers = new Set();
+    
     // Listen for online/offline events
     window.addEventListener('online', () => {
       this.isOnline = true;
@@ -67,6 +72,22 @@ class DataService {
     window.addEventListener('offline', () => {
       this.isOnline = false;
     });
+  }
+
+  // ── Goods change subscription API ───────────────────────────────────────
+  // Components call onGoodsChange(callback) to be notified whenever the
+  // Firebase real-time listener (or any local write) updates the goods list.
+  // Returns an unsubscribe function.
+  onGoodsChange(callback) {
+    this._goodsSubscribers.add(callback);
+    return () => this._goodsSubscribers.delete(callback);
+  }
+
+  // Notify all subscribers with the latest goods array
+  _notifyGoodsSubscribers(goods) {
+    for (const cb of this._goodsSubscribers) {
+      try { cb(goods); } catch (e) { console.error('Goods subscriber error:', e); }
+    }
   }
 
   // ── Start real-time Firebase listener for Debtors collection ─────────────
@@ -141,33 +162,50 @@ class DataService {
       this._goodsUnsubscribe = onSnapshot(
         collection(db, 'goods'),
         async (snapshot) => {
+          // Skip if nothing actually changed (e.g. initial empty snapshot)
+          if (snapshot.docChanges().length === 0) return;
+
           const localGoods = await localforage.getItem(DATA_KEYS.GOODS) || [];
           const localMap = new Map(localGoods.map(g => [String(g.id), g]));
 
           snapshot.docChanges().forEach((change) => {
             const fbId = String(change.doc.id);
-            const fbData = { id: fbId, ...change.doc.data() };
+            const rawData = change.doc.data();
+            // Normalise Firestore Timestamps to ISO strings for local storage
+            const fbData = { id: fbId, ...rawData };
+            if (rawData.updatedAt?.seconds) {
+              fbData.updatedAt = new Date(rawData.updatedAt.seconds * 1000).toISOString();
+            }
+            if (rawData.createdAt?.seconds) {
+              fbData.createdAt = new Date(rawData.createdAt.seconds * 1000).toISOString();
+            }
 
             if (change.type === 'removed') {
               localMap.delete(fbId);
             } else if (change.type === 'added') {
-              if (!localMap.has(fbId)) {
+              // Always accept remote adds — overwrite only if local doesn't
+              // exist OR if remote is newer (covers Admin-app edits).
+              const local = localMap.get(fbId);
+              if (!local) {
                 localMap.set(fbId, fbData);
+              } else {
+                // If the remote version is newer, prefer it
+                const fbTime  = new Date(fbData.updatedAt || fbData.createdAt || 0).getTime();
+                const locTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
+                if (fbTime > locTime) {
+                  localMap.set(fbId, fbData);
+                }
               }
             } else if (change.type === 'modified') {
-              const local = localMap.get(fbId);
-              const fbTime = fbData.updatedAt?.seconds
-                ? fbData.updatedAt.seconds * 1000
-                : new Date(fbData.updatedAt || 0).getTime();
-              const locTime = new Date(local?.updatedAt || 0).getTime();
-              if (!local || fbTime >= locTime) {
-                localMap.set(fbId, fbData);
-              }
+              // Remote update from Admin app — always accept it
+              localMap.set(fbId, fbData);
             }
           });
 
           const merged = Array.from(localMap.values());
           await localforage.setItem(DATA_KEYS.GOODS, merged);
+          // ── Notify UI components about the update ──────────────────
+          this._notifyGoodsSubscribers(merged);
         },
         (error) => {
           console.error('Goods Firebase listener error:', error);

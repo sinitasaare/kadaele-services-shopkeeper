@@ -67,6 +67,12 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
   useEffect(() => {
     dataService.getGoods().then(g => setGoods(g || []));
     dataService.getDebtors().then(d => setDebtors(d || []));
+
+    // Subscribe to real-time goods changes from Firebase listener
+    const unsubscribe = dataService.onGoodsChange((updatedGoods) => {
+      setGoods(updatedGoods || []);
+    });
+    return () => unsubscribe();
   }, []);
 
   // ── Search / filter goods ──────────────────────────────────────────────────
