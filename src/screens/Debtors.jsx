@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import PdfTableButton from '../components/PdfTableButton';
 import './Debtors.css';
 
 // ── Shared 2-hour edit window helper ──────────────────────────────────────
@@ -958,45 +957,7 @@ Kadaele Services`;
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
                   </button>
-                  <div style={{position:'relative', width:'32px', height:'32px', flexShrink:0}}>
-                    <PdfTableButton
-                      title={`Debt History — ${selectedDebtor?.name||selectedDebtor?.customerName||''}`}
-                      columns={[
-                        {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Image',key:'img'},
-                        {header:'Items',key:'items'},{header:'Qty',key:'qty'},{header:'Price',key:'price'},
-                        {header:'Subtotal',key:'sub'},{header:'Sale Total',key:'saleTotal'},
-                        {header:'Deposited',key:'deposited'},{header:'Balance',key:'balance'}
-                      ]}
-                      rows={historyRows.flatMap(row => {
-                        if (row.kind === 'deposit') {
-                          const dep = row.deposit;
-                          const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
-                          return [{
-                            date: d ? d.toLocaleDateString('en-GB') : 'N/A',
-                            time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
-                            img:'—', items:'Deposited Cash to repay Debt', qty:'—', price:'—', sub:'—', saleTotal:'—',
-                            deposited: fmt(parseFloat(dep.amount)), balance: fmt(Math.abs(row.runningBalance)),
-                          }];
-                        }
-                        const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
-                        const rawTs = sale.date||sale.timestamp||sale.createdAt;
-                        const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
-                        return items.map((item,idx) => ({
-                          date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
-                          time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
-                          img: idx===0 ? (sale.photoUrl ? '[photo]':'—') : '',
-                          items: item ? (item.name||'N/A') : 'N/A',
-                          qty: item ? String(item.quantity||item.qty||0) : '—',
-                          price: item ? fmt(item.price||0) : '—',
-                          sub: item ? fmt(item.subtotal||(item.price||0)*(item.quantity||item.qty||0)) : '—',
-                          saleTotal: idx===0 ? fmt(sale.total||sale.total_amount||0) : '',
-                          deposited: '—',
-                          balance: idx===0 ? fmt(Math.abs(row.runningBalance)) : '',
-                        }));
-                      })}
-                      summary={[{label:'Total Outstanding', value: fmt(Math.abs(historyRows.length>0 ? historyRows[0].runningBalance : (selectedDebtor?.balance||0)))}]}
-                    />
-                  </div>
+
                   <button className="d-deposit-btn" onClick={() => setShowPaymentModal(true)}>
                     <DollarSign size={16} /> Deposit
                   </button>
