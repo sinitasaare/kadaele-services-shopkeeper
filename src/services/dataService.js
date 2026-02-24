@@ -432,7 +432,10 @@ class DataService {
     await localforage.setItem(DATA_KEYS.GOODS, goods);
     
     // Sync to Firebase if online
-    if (this.isOnline && auth.currentUser) {
+    const user = auth.currentUser || await new Promise(resolve => {
+      const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
+    });
+    if (this.isOnline && user) {
       try {
         const batch = writeBatch(db);
         goods.forEach(good => {
@@ -830,7 +833,10 @@ class DataService {
     await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
     
     // Sync to Firebase if online
-    if (this.isOnline && auth.currentUser) {
+    const user = auth.currentUser || await new Promise(resolve => {
+      const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
+    });
+    if (this.isOnline && user) {
       try {
         const batch = writeBatch(db);
         debtors.forEach(debtor => {
@@ -1110,7 +1116,10 @@ class DataService {
 
   async setCreditors(creditors) {
     await localforage.setItem(DATA_KEYS.CREDITORS, creditors);
-    if (this.isOnline && auth.currentUser) {
+    const user = auth.currentUser || await new Promise(resolve => {
+      const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
+    });
+    if (this.isOnline && user) {
       try {
         const batch = writeBatch(db);
         creditors.forEach(creditor => {
@@ -1231,7 +1240,10 @@ class DataService {
     await localforage.setItem(DATA_KEYS.INVENTORY, inventory);
     
     // Sync to Firebase if online
-    if (this.isOnline && auth.currentUser) {
+    const user = auth.currentUser || await new Promise(resolve => {
+      const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
+    });
+    if (this.isOnline && user) {
       try {
         const batch = writeBatch(db);
         inventory.forEach(item => {
