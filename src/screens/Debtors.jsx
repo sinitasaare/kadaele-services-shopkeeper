@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
+import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Debtors.css';
@@ -153,10 +153,7 @@ function Debtors() {
   const [editDepositModal, setEditDepositModal] = useState(null); // { debtorId, deposit }
   const [editDepositAmount, setEditDepositAmount] = useState('');
   const [savingDeposit, setSavingDeposit] = useState(false);
-  const [showWaPdfModal, setShowWaPdfModal]     = useState(false);
-  const [waPdfPending, setWaPdfPending]         = useState(null); // { phone, body, debtorName, debtor }
-  const [waPdfGenerating, setWaPdfGenerating]   = useState(false);
-  const waAppListenerRef = useRef(null);
+  const [pdfSharing, setPdfSharing] = useState(false);
 
 
   useEffect(() => { loadDebtors(); }, []);
@@ -342,9 +339,9 @@ function Debtors() {
 
 This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
 
-Please find attached a PDF of the statement with full details of your debt for your reference.
-
 We kindly remind you that ${duePhrasing}, as you had promised to pay by. We appreciate if you could settle it not later than ${dueDateDisplay}.
+
+If you would like a detailed report of your debt history in PDF, please let us know and we will send it to you.
 
 Thank you for your attention and prompt payment.
 
@@ -360,11 +357,13 @@ Kadaele Services`;
 
 This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
 
-Please find attached a PDF of the statement with full details of your debt for your reference.
-
 We kindly remind you that the due date was ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} ago, as you had promised to pay by.
 
-We appreciate if you could settle it as soon as possible. Thank you for your attention and prompt payment.
+We appreciate if you could settle it as soon as possible.
+
+If you would like a detailed report of your debt history in PDF, please let us know and we will send it to you.
+
+Thank you for your attention and prompt payment.
 
 Best regards,
 Kadaele Services`;
@@ -619,54 +618,47 @@ Kadaele Services`;
     return { uri: blobUrl, fileName, blob: pdfBlob, isWeb: true };
   };
 
-  // ── Send PDF via WhatsApp after user returns from sending the message ────
-  const handleSendWaPdf = async () => {
-    if (!waPdfPending) return;
-    const { phone, debtorName } = waPdfPending;
-    const clean = phone.replace(/\D/g, '');
-    setWaPdfGenerating(true);
+  // ── Share PDF via native Share Sheet ─────────────────────────────────────
+  const handleSharePDF = async () => {
+    if (!selectedDebtor) return;
+    const debtorName = selectedDebtor.name || selectedDebtor.customerName || 'debtor';
+    setPdfSharing(true);
     try {
       const pdf = await generateA4PDF();
       if (!pdf) throw new Error('PDF generation failed');
+      const fileName = `statement_${debtorName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
       const isNative = window.Capacitor?.isNativePlatform?.();
       if (isNative) {
-        // Save PDF to the public Downloads folder so it appears in WhatsApp's file picker
         const { Filesystem, Directory } = await import('@capacitor/filesystem');
-        const fileName = `statement_${debtorName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+        const { Share } = await import('@capacitor/share');
         const base64 = await new Promise((res, rej) => {
           const reader = new FileReader();
           reader.onload  = () => res(reader.result.split(',')[1]);
           reader.onerror = rej;
           reader.readAsDataURL(pdf.output('blob'));
         });
-        await Filesystem.writeFile({
-          path: fileName,
-          data: base64,
-          directory: Directory.Documents, // visible in Files app & WhatsApp file picker
+        await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+        const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
+        await Share.share({
+          title: `${debtorName} – Debt Statement`,
+          text: `Debt statement for ${debtorName}`,
+          url: uri,
+          dialogTitle: `Share statement with ${debtorName}`,
         });
-        setShowWaPdfModal(false);
-        setWaPdfPending(null);
-        // Open WhatsApp directly to the debtor's chat — no share sheet
-        // PDF is now in Documents/Downloads ready for them to attach via the attachment icon
-        window.open(`whatsapp://send?phone=${clean}`, '_blank');
       } else {
-        // Web fallback — auto-download PDF then open WhatsApp chat
-        const pdfInfo = await savePDFAndGetURI(pdf, debtorName);
-        setShowWaPdfModal(false);
-        setWaPdfPending(null);
-        if (pdfInfo?.uri) {
-          const link = document.createElement('a');
-          link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-          document.body.appendChild(link); link.click(); document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-        }
-        window.open(`https://wa.me/${clean}`, '_blank');
+        // Web fallback: download PDF
+        const blob = pdf.output('blob');
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl; link.download = fileName;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
       }
     } catch (err) {
-      console.error('WA PDF send error:', err);
-      alert('Failed to generate PDF. Please try again.');
+      console.error('PDF share error:', err);
+      alert('Failed to generate or share PDF. Please try again.');
     } finally {
-      setWaPdfGenerating(false);
+      setPdfSharing(false);
     }
   };
 
@@ -678,76 +670,21 @@ Kadaele Services`;
     // Close notify modal right away
     setShowNotifyModal(false);
 
-    const isNative = window.Capacitor?.isNativePlatform?.();
-
     if (method === 'whatsapp') {
       const phone = debtor.whatsapp || debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
       const clean = phone.replace(/\D/g, '');
-
-      // ── Step 1: Open WhatsApp with message pre-typed ──────────────────────
       const waUrl = `https://wa.me/${clean}?text=${encodeURIComponent(body)}`;
-
-      if (isNative) {
-        // Listen for app resuming (user returning from WhatsApp)
-        // Remove any existing listener first
-        if (waAppListenerRef.current) {
-          waAppListenerRef.current.remove();
-          waAppListenerRef.current = null;
-        }
-        const { App: CapApp } = await import('@capacitor/app');
-        const handle = await CapApp.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) {
-            // User is back — remove listener and show PDF prompt
-            handle.remove();
-            waAppListenerRef.current = null;
-            setWaPdfPending({ phone, body, debtorName, debtor });
-            setShowWaPdfModal(true);
-          }
-        });
-        waAppListenerRef.current = handle;
-        // Open WhatsApp
-        window.open(waUrl, '_blank');
-      } else {
-        // Web: just open WhatsApp, skip PDF prompt
-        window.open(waUrl, '_blank');
-      }
+      window.open(waUrl, '_blank');
 
     } else if (method === 'email') {
       const email = debtor.email;
       if (!email) { alert('No email address available'); return; }
-      setPdfGenerating(true);
-      let pdfInfo = null;
-      try {
-        const pdf = await generateA4PDF();
-        if (pdf) pdfInfo = await savePDFAndGetURI(pdf, debtorName);
-      } catch (err) { console.error('PDF error:', err); }
-      finally { setPdfGenerating(false); }
-      if (isNative && pdfInfo?.uri) {
-        try {
-          const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject,
-            text: body,
-            url: pdfInfo.uri,
-            dialogTitle: `Email statement to ${debtorName}`,
-          });
-          return;
-        } catch (err) { console.error('Share error:', err); }
-      }
-      // Web fallback
-      if (pdfInfo?.uri) {
-        const link = document.createElement('a');
-        link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-      }
       window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
-      // SMS: just open with message pre-filled, no PDF
       const sep = /iphone|ipad|ipod/i.test(navigator.userAgent) ? '&' : '?';
       window.location.href = `sms:${phone}${sep}body=${encodeURIComponent(body)}`;
     }
@@ -984,6 +921,15 @@ Kadaele Services`;
                     <MessageSquare size={16} /> Notify
                   </button>
 
+                  <button
+                    className="d-pdf-btn"
+                    onClick={handleSharePDF}
+                    disabled={pdfSharing}
+                    title="Generate & share PDF statement"
+                  >
+                    <FileText size={16} /> {pdfSharing ? 'Generating…' : 'PDF'}
+                  </button>
+
                   <button className="d-deposit-btn" onClick={() => setShowPaymentModal(true)}>
                     <DollarSign size={16} /> Deposit
                   </button>
@@ -1194,28 +1140,21 @@ Kadaele Services`;
 
       {/* ── Notify Modal ── */}
       {showNotifyModal && (
-        <div className="d-overlay" onClick={() => !pdfGenerating && setShowNotifyModal(false)}>
+        <div className="d-overlay" onClick={() => setShowNotifyModal(false)}>
           <div className="d-modal d-modal-sm d-notify-modal" onClick={e => e.stopPropagation()}>
             <div className="d-modal-header" style={{ flexShrink: 0 }}>
               <h2 className="d-modal-title">Notify via</h2>
-              <button className="d-close-btn" onClick={() => !pdfGenerating && setShowNotifyModal(false)}><X size={22} /></button>
+              <button className="d-close-btn" onClick={() => setShowNotifyModal(false)}><X size={22} /></button>
             </div>
-            {pdfGenerating && (
-              <div style={{ padding: '10px 16px', background: '#fef3c7', borderRadius: '8px', margin: '0 16px 8px',
-                fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '16px' }}>⏳</span>
-                Generating statement image, please wait…
-              </div>
-            )}
             <div className="d-notify-options" style={{ flexShrink: 0 }}>
-              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')} disabled={pdfGenerating}>
-                <MessageSquare size={20}/> {pdfGenerating ? '…' : 'WhatsApp'}
+              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')}>
+                <MessageSquare size={20}/> WhatsApp
               </button>
-              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')} disabled={pdfGenerating}>
-                <Mail size={20}/> {pdfGenerating ? '…' : 'Email'}
+              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')}>
+                <Mail size={20}/> Email
               </button>
-              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')} disabled={pdfGenerating}>
-                <Phone size={20}/> {pdfGenerating ? '…' : 'SMS'}
+              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')}>
+                <Phone size={20}/> SMS
               </button>
             </div>
             <div className="d-notify-preview d-notify-preview-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -1223,43 +1162,6 @@ Kadaele Services`;
               <pre className="d-notify-preview-text" style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'inherit',margin:0}}>
                 {selectedDebtor ? buildNotifyMessage().body : ''}
               </pre>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ── WhatsApp PDF Prompt Modal ── */}
-      {showWaPdfModal && (
-        <div className="d-overlay" style={{zIndex:6000}}>
-          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxWidth:'320px',textAlign:'center'}}>
-            <div className="d-modal-header">
-              <h2 className="d-modal-title">Send PDF Statement?</h2>
-              <button className="d-close-btn" onClick={() => { setShowWaPdfModal(false); setWaPdfPending(null); }} disabled={waPdfGenerating}>
-                <X size={22}/>
-              </button>
-            </div>
-            <div style={{padding:'16px 20px 8px',fontSize:'14px',color:'#444',lineHeight:'1.5'}}>
-              Would you also like to send <strong>{waPdfPending?.debtorName}</strong>'s PDF statement?
-              <br/><br/>
-              <span style={{fontSize:'13px',color:'#666'}}>
-                The PDF will be saved to your Documents folder and WhatsApp will open directly to their chat — just tap the 📎 attachment icon to attach it.
-              </span>
-            </div>
-            <div style={{display:'flex',gap:'10px',padding:'12px 20px 20px',justifyContent:'center'}}>
-              <button
-                onClick={() => { setShowWaPdfModal(false); setWaPdfPending(null); }}
-                disabled={waPdfGenerating}
-                style={{flex:1,padding:'10px',borderRadius:'8px',border:'1.5px solid #ddd',background:'#f5f5f5',fontWeight:600,fontSize:'14px',cursor:'pointer'}}
-              >
-                No, Done
-              </button>
-              <button
-                onClick={handleSendWaPdf}
-                disabled={waPdfGenerating}
-                style={{flex:1,padding:'10px',borderRadius:'8px',border:'none',background:'#25D366',color:'white',fontWeight:700,fontSize:'14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px'}}
-              >
-                <MessageSquare size={16}/>
-                {waPdfGenerating ? 'Generating…' : 'Yes, Send PDF'}
-              </button>
             </div>
           </div>
         </div>
