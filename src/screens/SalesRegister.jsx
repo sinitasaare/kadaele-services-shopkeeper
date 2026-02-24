@@ -421,7 +421,7 @@ function SalesRegister() {
             title="Current Cart"
             columns={[
               {header:'Product',key:'name'},{header:'Qty',key:'qty'},
-              {header:'Price',key:'price'},{header:'Total',key:'total'}
+              {header:'Selling Price',key:'price'},{header:'Total',key:'total'}
             ]}
             rows={catalogue.map(item => ({
               name: item.name||'—',
@@ -433,7 +433,7 @@ function SalesRegister() {
           />
           <table className="sr-catalogue-table">
             <thead>
-              <tr><th>Qty</th><th>Item</th><th>Price</th><th>Total</th><th>Edit</th></tr>
+              <tr><th>Qty</th><th>Item</th><th>Selling Price</th><th>Total</th><th>Edit</th></tr>
             </thead>
             <tbody>
               {catalogue.length === 0 ? (

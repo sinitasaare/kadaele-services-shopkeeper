@@ -1,11 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Barcode, X, Edit2, Camera, Upload } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { Camera as CapCamera } from '@capacitor/camera';
+import { createPortal } from 'react-dom';
+import { Search, X, ZoomIn } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import PdfTableButton from '../components/PdfTableButton';
 import './Inventory.css';
+
+function Portal({ children }) {
+  return createPortal(children, document.body);
+}
+
+function filterAndSort(goods, term) {
+  if (!term) return goods;
+  const q = term.toLowerCase().trim();
+  if (!q) return goods;
+  const tier1 = [];
+  const tier2 = [];
+  for (const g of goods) {
+    const name = (g.name || '').toLowerCase();
+    const words = name.split(/\s+/);
+    if (name.startsWith(q)) {
+      tier1.push(g);
+    } else if (words.length >= 2 && words[1].startsWith(q)) {
+      tier2.push(g);
+    }
+  }
+  const alpha = (a, b) => (a.name || '').localeCompare(b.name || '');
+  return [...tier1.sort(alpha), ...tier2.sort(alpha)];
+}
 
 function Inventory() {
   const { fmt } = useCurrency();
@@ -13,10 +34,7 @@ function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState(null);
-  const [selectedGood, setSelectedGood] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedGood, setEditedGood] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   useEffect(() => { loadGoods(); }, []);
 
@@ -24,9 +42,10 @@ function Inventory() {
     setLoading(true);
     try {
       const data = await dataService.getGoods();
-      const sorted = (data || []).sort((a, b) =>
-        (a.name || '').localeCompare(b.name || '')
-      );
+      const sorted = (data || [])
+        .filter(g => (g.name || '').trim() !== '')
+        .slice()
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setGoods(sorted);
       setLastSynced(new Date());
     } catch (err) {
@@ -36,173 +55,48 @@ function Inventory() {
     }
   };
 
-  const filtered = goods.filter(g =>
-    (g.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (g.category || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (g.barcode || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = filterAndSort(goods, searchTerm);
 
   const getStockStatus = (qty) => {
     if (qty === undefined || qty === null) return null;
     if (qty <= 0)  return { label: 'Out of Stock', cls: 'out-of-stock' };
     if (qty <= 5)  return { label: 'Low Stock',    cls: 'low-stock'    };
-    return           { label: 'In Stock',       cls: 'in-stock'     };
+    return               { label: 'In Stock',       cls: 'in-stock'     };
   };
 
   const getBarcodeImageUrl = (good) =>
     good.barcodeImage || good.barcode_image || good.barcodeUrl || good.barcode_url || null;
 
-  const openProductModal = (good) => {
-    setSelectedGood(good);
-    setEditedGood({...good});
-    setIsEditing(false);
-  };
-
-  const closeProductModal = () => {
-    setSelectedGood(null);
-    setEditedGood(null);
-    setIsEditing(false);
-  };
-
-  const startEditing = () => {
-    setIsEditing(true);
-  };
-
-  const cancelEditing = () => {
-    setEditedGood({...selectedGood});
-    setIsEditing(false);
-  };
-
-  const handleBarcodeCapture = async () => {
-    if (!Capacitor.isNativePlatform()) {
-      // Web: use file input
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            setEditedGood(prev => ({
-              ...prev,
-              barcodeImage: ev.target.result
-            }));
-          };
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
-    } else {
-      // Mobile: use camera
-      try {
-        const image = await CapCamera.getPhoto({
-          quality: 90,
-          allowEditing: false,
-          resultType: 'dataUrl'
-        });
-        setEditedGood(prev => ({
-          ...prev,
-          barcodeImage: image.dataUrl
-        }));
-      } catch (error) {
-        console.error('Camera error:', error);
-        alert('Failed to capture barcode image');
-      }
-    }
-  };
-
-  const handleGalleryPick = async () => {
-    if (!Capacitor.isNativePlatform()) {
-      // Web: use file input
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            setEditedGood(prev => ({
-              ...prev,
-              barcodeImage: ev.target.result
-            }));
-          };
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
-    } else {
-      // Mobile: pick from gallery
-      try {
-        const image = await CapCamera.getPhoto({
-          quality: 90,
-          allowEditing: false,
-          resultType: 'dataUrl',
-          source: 'PHOTOS'
-        });
-        setEditedGood(prev => ({
-          ...prev,
-          barcodeImage: image.dataUrl
-        }));
-      } catch (error) {
-        console.error('Gallery error:', error);
-        alert('Failed to load image from gallery');
-      }
-    }
-  };
-
-  const saveChanges = async () => {
-    if (!editedGood.name || !editedGood.name.trim()) {
-      alert('Product name is required');
-      return;
-    }
-
-    if (!editedGood.price || parseFloat(editedGood.price) < 0) {
-      alert('Please enter a valid price');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await dataService.updateGood(editedGood.id, {
-        name: editedGood.name.trim(),
-        price: parseFloat(editedGood.price),
-        category: editedGood.category || '',
-        barcode: editedGood.barcode || '',
-        barcodeImage: editedGood.barcodeImage || null,
-        stock_quantity: parseInt(editedGood.stock_quantity) || 0
-      });
-
-      await loadGoods();
-      setSelectedGood(editedGood);
-      setIsEditing(false);
-      alert('Product updated successfully!');
-    } catch (error) {
-      console.error('Save error:', error);
-      alert('Failed to save changes. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="inventory">
+      {lightboxSrc && (
+        <Portal>
+          <div className="inv-lightbox" onClick={() => setLightboxSrc(null)}>
+            <button className="inv-lightbox-close" onClick={() => setLightboxSrc(null)}><X size={28} /></button>
+            <img src={lightboxSrc} alt="Barcode" className="inv-lightbox-img" onClick={e => e.stopPropagation()} />
+          </div>
+        </Portal>
+      )}
 
-      {/* ── Sticky search bar ── */}
       <div className="inv-sticky-bar">
-        <div className="inv-search-box">
-          <Search size={16} className="inv-search-icon" />
-          <input
-            type="text"
-            className="inv-search-input"
-            placeholder="Search name, category or barcode…"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button className="inv-search-clear" onClick={() => setSearchTerm('')}>×</button>
-          )}
+        <div className="inv-toolbar">
+          <div className="inv-search-box">
+            <Search size={16} className="inv-search-icon" />
+            <input
+              type="text"
+              className="inv-search-input"
+              placeholder="Search Product"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+            {searchTerm && (
+              <button
+                className="inv-search-clear"
+                onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setSearchTerm(''); }}
+                onClick={() => setSearchTerm('')}
+              >×</button>
+            )}
+          </div>
         </div>
         <div className="inv-meta-row">
           <span className="inv-count">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
@@ -214,7 +108,6 @@ function Inventory() {
         </div>
       </div>
 
-      {/* ── Table ── */}
       <div className="inv-scroll-body">
         {loading ? (
           <div className="inv-empty">Loading inventory…</div>
@@ -223,139 +116,59 @@ function Inventory() {
             {searchTerm ? `No items matching "${searchTerm}"` : 'No goods found. Go online to sync from Firebase.'}
           </div>
         ) : (
-          <div className="inv-table-wrapper" style={{position:'relative'}}>
-          <PdfTableButton
-            title="Inventory"
-            columns={[
-              {header:'#',key:'num'},{header:'Product Name',key:'name'},{header:'Size',key:'size'},{header:'Category',key:'cat'},
-              {header:'Price',key:'price'},{header:'Stock',key:'stock'},{header:'Status',key:'status'}
-            ]}
-            rows={filtered.map((g,i) => {
-              const s = getStockStatus(g.stock_quantity);
-              return { num:String(i+1), name:g.name||'—', size:g.size||g.packSize||'—', cat:g.category||'—',
-                price:fmt(g.price||0), stock:String(g.stock_quantity??'—'), status: s ? s.label : '—' };
-            })}
-            summary={[{label:'Total Items', value:String(filtered.length)}]}
-          />
-          <table className="inv-table">
-            <thead className="inv-thead">
-              <tr>
-                <th className="inv-col-num">#</th>
-                <th>PRODUCT NAME</th>
-                <th>SIZE</th>
-                <th>Category</th>
-                <th className="inv-col-right">Price</th>
-                <th className="inv-col-center">Stock</th>
-                <th>Status</th>
-                <th className="inv-col-center">Barcode</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((good, idx) => {
-                const status = getStockStatus(good.stock_quantity);
-                const hasBarcode = good.barcode || getBarcodeImageUrl(good);
-                return (
-                  <tr 
-                    key={good.id} 
-                    className="inv-row-clickable"
-                    onClick={() => openProductModal(good)}
-                  >
-                    <td className="inv-col-num inv-num-cell">{idx + 1}</td>
-                    <td className="inv-name-cell">{good.name || '—'}</td>
-                    <td className="inv-size-cell">{good.size || good.packSize || good.pack_size || '—'}</td>
-                    <td className="inv-cat-cell">{good.category || '—'}</td>
-                    <td className="inv-col-right">{fmt(parseFloat(good.price || 0))}</td>
-                    <td className="inv-col-center">{good.stock_quantity ?? '—'}</td>
-                    <td>
-                      {status ? (
-                        <span className={`inv-badge ${status.cls}`}>{status.label}</span>
-                      ) : '—'}
-                    </td>
-                    <td className="inv-col-center">
-                      {hasBarcode ? (
-                        <Barcode size={20} strokeWidth={1.5} className="inv-barcode-indicator" />
-                      ) : (
-                        <span className="inv-barcode-none">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="inv-table-wrapper">
+            <table className="inv-table">
+              <thead className="inv-thead">
+                <tr>
+                  <th className="inv-col-frozen inv-col-num">#</th>
+                  <th className="inv-col-frozen inv-col-name">PRODUCT NAME</th>
+                  <th className="inv-col-size">SIZE</th>
+                  <th>CATEGORY</th>
+                  <th className="inv-col-right">PRICE</th>
+                  <th className="inv-col-center">STOCK</th>
+                  <th>STATUS</th>
+                  <th className="inv-col-center">BARCODE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((good, idx) => {
+                  const status = getStockStatus(good.stock_quantity);
+                  const barcodeImgUrl = getBarcodeImageUrl(good);
+                  return (
+                    <tr key={good.id} className="inv-data-row">
+                      <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
+                      <td className="inv-col-frozen inv-col-name inv-name-cell">
+                        <span className="inv-cell-value">{good.name ?? ''}</span>
+                      </td>
+                      <td className="inv-size-cell">
+                        <span className="inv-cell-value">{good.size ?? ''}</span>
+                      </td>
+                      <td className="inv-cat-cell">{good.category || '—'}</td>
+                      <td className="inv-col-right">
+                        <span className="inv-cell-value">{fmt(parseFloat(good.price || 0))}</span>
+                      </td>
+                      <td className="inv-col-center">
+                        <span className="inv-cell-value">{good.stock_quantity ?? ''}</span>
+                      </td>
+                      <td>
+                        {status ? <span className={`inv-badge ${status.cls}`}>{status.label}</span> : '—'}
+                      </td>
+                      <td className="inv-col-center">
+                        {barcodeImgUrl ? (
+                          <button className="inv-barcode-thumb-btn"
+                            onClick={() => setLightboxSrc(barcodeImgUrl)} title="View barcode image">
+                            <ZoomIn size={18} strokeWidth={1.8} />
+                          </button>
+                        ) : <span className="inv-barcode-none">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
-
-      {/* ── Product Detail Modal ── */}
-      {selectedGood && (
-        <div className="inv-modal-overlay" onClick={closeProductModal}>
-          <div className="inv-modal-content" onClick={e => e.stopPropagation()}>
-            <div className="inv-modal-header">
-              <h2>{selectedGood.name}</h2>
-              <div className="inv-modal-actions">
-                <button className="inv-modal-close" onClick={closeProductModal}>
-                  <X size={24} />
-                </button>
-              </div>
-            </div>
-
-            <div className="inv-modal-body">
-              {/* Read-only view — inventory values are locked */}
-              <div className="inv-view-details">
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Product Name:</span>
-                    <span className="inv-detail-value">{selectedGood.name || '—'}</span>
-                  </div>
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Price:</span>
-                    <span className="inv-detail-value inv-detail-price">
-                      {fmt(parseFloat(selectedGood.price || 0))}
-                    </span>
-                  </div>
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Size:</span>
-                    <span className="inv-detail-value">{selectedGood.size || selectedGood.packSize || '—'}</span>
-                  </div>
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Category:</span>
-                    <span className="inv-detail-value">{selectedGood.category || '—'}</span>
-                  </div>
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Stock Quantity:</span>
-                    <span className="inv-detail-value">{selectedGood.stock_quantity ?? '—'}</span>
-                  </div>
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Status:</span>
-                    <span className="inv-detail-value">
-                      {(() => {
-                        const status = getStockStatus(selectedGood.stock_quantity);
-                        return status ? (
-                          <span className={`inv-badge ${status.cls}`}>{status.label}</span>
-                        ) : '—';
-                      })()}
-                    </span>
-                  </div>
-                  <div className="inv-detail-row">
-                    <span className="inv-detail-label">Barcode:</span>
-                    <span className="inv-detail-value">{selectedGood.barcode || '—'}</span>
-                  </div>
-                  {getBarcodeImageUrl(selectedGood) && (
-                    <div className="inv-detail-barcode-image">
-                      <span className="inv-detail-label">Barcode Image:</span>
-                      <img 
-                        src={getBarcodeImageUrl(selectedGood)} 
-                        alt="Product Barcode" 
-                        className="inv-detail-barcode-img"
-                      />
-                    </div>
-                  )}
-                </div>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
