@@ -515,7 +515,7 @@ function CashJournal() {
                     <td className="cj-ref-cell">{entry.invoiceRef || entry.ref || '—'}</td>
                     <td className="cj-note-cell">{entry.note || '—'}</td>
                     <td className={`cj-col-right cj-amount ${entry.type === TYPE_IN ? 'cj-in' : 'cj-out'}`}>
-                      {entry.type === TYPE_IN ? '+' : '-'}{fmt(entry.amount)}
+                      {(() => { const s = entry.type === TYPE_IN ? '+' : '-'; const r = fmt(entry.amount); const sym = r.match(/^[^\d]+/)?.[0] ?? ''; const num = r.slice(sym.length); return `${s} ${sym} ${num}`; })()}
                     </td>
                     <td className="cj-col-center">
                       <span className={`cj-type-badge cj-badge-${entry.type}`}>

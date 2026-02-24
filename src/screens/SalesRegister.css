@@ -46,11 +46,13 @@
   border-radius: 0.75rem;
   box-shadow: var(--shadow-sm);
   min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── Catalogue table ── */
 .sr-catalogue-table {
-  width: auto;
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
@@ -61,19 +63,19 @@
   top: 0;
   z-index: 10;
   background-color: #f3f4f6;
+  /* sticky header works because wrapper has overflow-y:auto */
 }
 
 .sr-catalogue-table thead th {
-  padding: 1rem 1px;
+  padding: 0.625rem 0.875rem;
   text-align: left;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   color: var(--text-secondary);
   border-bottom: 2px solid var(--border);
   background-color: #f3f4f6;
   white-space: nowrap;
-  width: 1%;
 }
 
 .sr-catalogue-table tbody tr {
@@ -90,11 +92,10 @@
 }
 
 .sr-catalogue-table tbody td {
-  padding: 1rem 1px;
+  padding: 0.625rem 0.875rem;
   color: var(--text-primary);
   font-size: 0.9375rem;
   white-space: nowrap;
-  width: 1%;
   text-align: left;
 }
 
@@ -110,7 +111,6 @@
 /* ── Table cells ── */
 .sr-qty-cell {
   width: 1%;
-  padding: 1rem 1px !important;
   white-space: nowrap;
   text-align: left;
 }
@@ -136,15 +136,11 @@
   font-weight: 600;
   color: var(--primary-color);
   white-space: nowrap;
-  padding: 1rem 1px !important;
-  width: 1%;
   text-align: left;
 }
 
 .sr-edit-cell {
-  width: 1%;
   text-align: left;
-  padding: 1rem 1px !important;
   white-space: nowrap;
 }
 

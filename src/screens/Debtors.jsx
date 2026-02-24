@@ -621,7 +621,7 @@ Kadaele Services`;
     const { subject, body } = buildNotifyMessage();
     const debtorName = debtor.name || debtor.customerName || 'debtor';
 
-    // ── Generate PDF first ─────────────────────────────────────────────────
+    // ── Generate PDF first, then immediately close modal and open app ──────
     setPdfGenerating(true);
     let pdfInfo = null;
     try {
@@ -630,7 +630,9 @@ Kadaele Services`;
     } catch (err) { console.error('PDF error:', err); }
     finally { setPdfGenerating(false); }
 
-    // ── Open the specific contact directly ─────────────────────────────────
+    // Close notify modal NOW — user should only see the target app next
+    setShowNotifyModal(false);
+
     const isNative = window.Capacitor?.isNativePlatform?.();
 
     if (method === 'whatsapp') {
@@ -639,24 +641,20 @@ Kadaele Services`;
       const clean = phone.replace(/\D/g, '');
       if (isNative && pdfInfo?.uri) {
         try {
-          // On Android, share directly to WhatsApp with the PDF + text
           const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject, text: body, url: pdfInfo.uri,
-            dialogTitle: `Send to ${debtorName}`,
-          });
-          setShowNotifyModal(false); return;
+          // Share directly — Android will open WhatsApp intent with PDF + message
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Send to ${debtorName} via WhatsApp` });
+          return;
         } catch (err) { console.error('Share error:', err); }
       }
-      // Web fallback: open WhatsApp directly to the contact with the message
-      window.open(`https://wa.me/${clean}?text=${encodeURIComponent(body)}`, '_blank');
-      // Also download the PDF so user can attach manually
-      if (pdfInfo?.isWeb) {
+      // Web: open WhatsApp with message pre-filled, auto-download PDF for attachment
+      if (pdfInfo?.isWeb || pdfInfo?.uri) {
         const link = document.createElement('a');
         link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
       }
+      window.open(`https://wa.me/${clean}?text=${encodeURIComponent(body)}`, '_blank');
 
     } else if (method === 'email') {
       const email = debtor.email;
@@ -664,35 +662,40 @@ Kadaele Services`;
       if (isNative && pdfInfo?.uri) {
         try {
           const { Share } = await import('@capacitor/share');
-          await Share.share({
-            title: subject, text: body, url: pdfInfo.uri,
-            dialogTitle: `Email to ${debtorName}`,
-          });
-          setShowNotifyModal(false); return;
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Email to ${debtorName}` });
+          return;
         } catch (err) { console.error('Share error:', err); }
       }
-      // Web: open mailto: directly pre-filled with recipient, subject, body
-      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      if (pdfInfo?.isWeb) {
+      // Web: auto-download PDF then open compose email pre-filled
+      if (pdfInfo?.isWeb || pdfInfo?.uri) {
         const link = document.createElement('a');
         link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
       }
+      window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     } else if (method === 'sms') {
       const phone = debtor.phone || debtor.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
-      // SMS cannot carry files — send text only, download PDF separately
-      window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
-      if (pdfInfo?.isWeb) {
+      if (isNative && pdfInfo?.uri) {
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `SMS to ${debtorName}` });
+          return;
+        } catch (err) { console.error('Share error:', err); }
+      }
+      // Web: download PDF then open SMS compose pre-filled
+      if (pdfInfo?.isWeb || pdfInfo?.uri) {
         const link = document.createElement('a');
         link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
       }
+      // iOS uses '&', Android uses '?' as separator
+      const sep = /iphone|ipad|ipod/i.test(navigator.userAgent) ? '&' : '?';
+      window.location.href = `sms:${phone}${sep}body=${encodeURIComponent(body)}`;
     }
-    setShowNotifyModal(false);
   };
 
   const handleTakePhoto = async () => {
@@ -921,7 +924,7 @@ Kadaele Services`;
             {/* ── Debt History tab ── */}
             {activeTab === 'history' && (
               <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
-                <div className="d-history-actions" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div className="d-history-actions">
                   <button className="d-notify-btn" onClick={() => setShowNotifyModal(true)}>
                     <MessageSquare size={16} /> Notify
                   </button>

@@ -137,6 +137,7 @@ function SalesRegister() {
           gender: debtor.gender || '',
           daysOverdue,
           dueDate: repDate,
+          balance,
         });
         return;
       }
@@ -582,7 +583,9 @@ function SalesRegister() {
 
       {/* ── Overdue Debt Blocking Modal ── */}
       {overdueModal && (() => {
-        const { name, gender, daysOverdue } = overdueModal;
+        const { name, gender, daysOverdue, balance } = overdueModal;
+        const prefix = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+        const salutation = prefix ? `${prefix} ${name}` : name;
         const pronoun = gender === 'Male' ? 'his' : gender === 'Female' ? 'her' : 'their';
         return (
           <div className="sr-modal-overlay">
@@ -591,11 +594,11 @@ function SalesRegister() {
               <div style={{ fontSize:'40px', marginBottom:'12px' }}>⛔</div>
               <h2 style={{ color:'#dc2626', marginBottom:'12px' }}>Debt Overdue</h2>
               <p style={{ fontSize:'14px', lineHeight:'1.6', color:'#374151', marginBottom:'20px' }}>
-                <strong>{name}</strong> needs to pay up {pronoun} previous debts which{' '}
-                {daysOverdue === 1 ? 'is' : 'are'} already due{' '}
+                <strong>{salutation}</strong> still needs to pay {pronoun} outstanding debt of{' '}
+                <strong style={{ color:'#dc2626' }}>{fmt(balance)}</strong> which has been due{' '}
                 <strong style={{ color:'#dc2626' }}>{daysOverdue} day{daysOverdue !== 1 ? 's' : ''}</strong> ago.
                 <br/><br/>
-                No new credit can be given until outstanding debts are settled.
+                No new credit can be given until the outstanding debt is settled.
               </p>
               <button
                 onClick={() => setOverdueModal(null)}
@@ -742,150 +745,194 @@ function SalesRegister() {
       })()}
 
       {/* ── Buy on Credit modal ── */}
-      {showCreditModal && (
-        <div className="sr-modal-overlay">
-          <div className="sr-modal-content">
-            <h2>Buy on Credit</h2>
-            <form className="sr-credit-form" onSubmit={confirmCreditSale}>
-              {/* ── Debtor Name — dropdown-only, no typing ── */}
-              <div style={{ position: 'relative', marginBottom: '12px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                  Debtor Name:
-                </label>
-                <div style={{ position: 'relative' }}>
-                  {/* Read-only display button — opens dropdown on tap/click */}
-                  <div
-                    onClick={selectedDebtorId ? undefined : openDebtorDropdown}
-                    style={{
-                      width: '100%', padding: '8px 36px 8px 10px',
-                      border: `1.5px solid ${selectedDebtorId ? '#667eea' : '#ccc'}`,
-                      borderRadius: '6px', minHeight: '36px',
-                      backgroundColor: selectedDebtorId ? '#f0f7ff' : 'white',
-                      cursor: selectedDebtorId ? 'default' : 'pointer',
-                      userSelect: 'none', boxSizing: 'border-box',
-                      fontSize: '14px', lineHeight: '20px',
-                      color: customerName ? '#1f2937' : '#9ca3af',
-                      display: 'flex', alignItems: 'center',
-                    }}
-                  >
-                    {customerName || (existingDebtors.length === 0
-                      ? 'No registered debtors yet'
-                      : 'Tap to select debtor…')}
+      {showCreditModal && (() => {
+        const { existingDueDate } = getDebtorStatus();
+        const balance = selectedDebtorObj ? (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) : 0;
+        const isLocked = !!existingDueDate && balance > 0;
+        const totalAmount = calculateTotal();
+
+        // Ordinal suffix helper
+        const ordinal = (n) => {
+          const s = ['th','st','nd','rd'], v = n % 100;
+          return n + (s[(v-20)%10] || s[v] || s[0]);
+        };
+        const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+        // Build the bold repayment note
+        const buildNote = () => {
+          const finalDate = isLocked ? existingDueDate : repaymentDate;
+          if (!finalDate || !selectedDebtorObj) return null;
+          const prefix = selectedDebtorObj.gender === 'Male' ? 'Mr.' : selectedDebtorObj.gender === 'Female' ? 'Ms.' : '';
+          const dName = selectedDebtorObj.name || selectedDebtorObj.customerName || '';
+          const salutation = prefix ? `${prefix} ${dName}` : dName;
+          const totalOwed = balance + totalAmount;
+          const today = new Date(); today.setHours(0,0,0,0);
+          const due = new Date(finalDate); due.setHours(0,0,0,0);
+          const daysUntil = Math.ceil((due - today) / (1000*60*60*24));
+          const formatted = `${ordinal(due.getDate())} ${MONTHS[due.getMonth()]} ${due.getFullYear()}`;
+          return `If this debt entry is saved then ${salutation} must pay ${fmt(totalOwed)} within ${daysUntil} day${daysUntil !== 1 ? 's' : ''} or not later than ${formatted}`;
+        };
+        const repaymentNote = buildNote();
+
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+        return (
+          <div className="sr-modal-overlay">
+            <div className="sr-modal-content">
+              <h2>Buy on Credit</h2>
+              <form className="sr-credit-form" onSubmit={confirmCreditSale}>
+
+                {/* ── Debtor Name — searchable, only list values selectable ── */}
+                <div style={{ position:'relative', marginBottom:'12px' }}>
+                  <label style={{ display:'block', marginBottom:'4px', fontWeight:600 }}>Debtor Name:</label>
+                  <div style={{ position:'relative' }}>
+                    <input
+                      type="text"
+                      placeholder={selectedDebtorId ? '' : 'Search and select debtor'}
+                      value={selectedDebtorId ? customerName : customerName}
+                      readOnly={!!selectedDebtorId}
+                      onChange={(e) => {
+                        if (selectedDebtorId) return;
+                        const val = e.target.value;
+                        setCustomerName(val);
+                        const f = existingDebtors.filter(d =>
+                          (d.name || d.customerName || '').toLowerCase().includes(val.toLowerCase())
+                        );
+                        setFilteredDebtors(f);
+                        setShowDebtorSuggestions(f.length > 0);
+                      }}
+                      onFocus={() => {
+                        if (!selectedDebtorId) {
+                          setFilteredDebtors(existingDebtors);
+                          setShowDebtorSuggestions(existingDebtors.length > 0);
+                          setCustomerName('');
+                        }
+                      }}
+                      style={{
+                        width:'100%', padding:'8px 36px 8px 10px', boxSizing:'border-box',
+                        border:`1.5px solid ${selectedDebtorId ? '#667eea' : '#ccc'}`,
+                        borderRadius:'6px', fontSize:'14px', color:'#1f2937',
+                        backgroundColor: selectedDebtorId ? '#f0f7ff' : 'white',
+                        cursor: selectedDebtorId ? 'default' : 'text',
+                      }}
+                    />
+                    {selectedDebtorId ? (
+                      <button type="button" onClick={clearDebtorSelection}
+                        style={{ position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)',
+                          background:'none', border:'none', cursor:'pointer', fontSize:'18px', color:'#999', lineHeight:1 }}>×</button>
+                    ) : (
+                      <span style={{ position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)',
+                        color:'#9ca3af', pointerEvents:'none', fontSize:'12px' }}>▼</span>
+                    )}
                   </div>
-                  {/* Chevron / clear button */}
-                  {selectedDebtorId ? (
-                    <button type="button" onClick={clearDebtorSelection}
-                      style={{ position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)',
-                        background:'none', border:'none', cursor:'pointer', fontSize:'18px', color:'#999', lineHeight:1 }}>
-                      ×
-                    </button>
-                  ) : (
-                    <span style={{ position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)',
-                      color:'#9ca3af', pointerEvents:'none', fontSize:'12px' }}>▼</span>
+
+                  {showDebtorSuggestions && filteredDebtors.length > 0 && (
+                    <div style={{
+                      position:'absolute', top:'100%', left:0, right:0, zIndex:1000,
+                      background:'white', border:'1px solid #ccc', borderRadius:'6px',
+                      maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)',
+                    }}>
+                      {filteredDebtors.map((debtor) => {
+                        const bal = debtor.balance || debtor.totalDue || 0;
+                        const rep = debtor.repaymentDate;
+                        let isOverdue = false, daysOD = 0;
+                        if (rep && bal > 0) {
+                          const t = new Date(); t.setHours(0,0,0,0);
+                          const d = new Date(rep); d.setHours(0,0,0,0);
+                          daysOD = Math.floor((t - d) / 86400000);
+                          isOverdue = daysOD > 0;
+                        }
+                        return (
+                          <div key={debtor.id}
+                            onMouseDown={(e) => { e.preventDefault(); selectDebtor(debtor); }}
+                            style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee',
+                              backgroundColor: isOverdue ? '#fff5f5' : 'white' }}
+                            onMouseEnter={e => e.currentTarget.style.background = isOverdue ? '#ffe8e8' : '#f5f5f5'}
+                            onMouseLeave={e => e.currentTarget.style.background = isOverdue ? '#fff5f5' : 'white'}
+                          >
+                            <div style={{ fontWeight:600, color: isOverdue ? '#dc2626' : '#1f2937' }}>
+                              {debtor.name || debtor.customerName}
+                              {isOverdue && <span style={{ fontSize:'11px', marginLeft:'6px', fontWeight:400 }}>⚠️ overdue</span>}
+                            </div>
+                            <div style={{ fontSize:'12px', color:'#888' }}>
+                              Balance: {fmt(bal)}{rep && <span style={{ marginLeft:'8px' }}>· Due: {rep}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {showDebtorSuggestions && (
+                    <div style={{ position:'fixed', inset:0, zIndex:999 }}
+                      onClick={() => setShowDebtorSuggestions(false)} />
+                  )}
+                  {existingDebtors.length === 0 && (
+                    <p style={{ fontSize:'12px', color:'#c00', marginTop:'4px' }}>
+                      No registered debtors found. Add one in the Debtors section first.
+                    </p>
                   )}
                 </div>
 
-                {/* Dropdown list */}
-                {showDebtorSuggestions && filteredDebtors.length > 0 && (
-                  <div style={{
-                    position:'absolute', top:'100%', left:0, right:0, zIndex:1000,
-                    background:'white', border:'1px solid #ccc', borderRadius:'6px',
-                    maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)',
-                  }}>
-                    {filteredDebtors.map((debtor) => {
-                      const bal = debtor.balance || debtor.totalDue || 0;
-                      const rep = debtor.repaymentDate;
-                      let isOverdue = false;
-                      let daysOD = 0;
-                      if (rep && bal > 0) {
-                        const today = new Date(); today.setHours(0,0,0,0);
-                        const due = new Date(rep); due.setHours(0,0,0,0);
-                        daysOD = Math.floor((today - due) / 86400000);
-                        isOverdue = daysOD > 0;
-                      }
-                      return (
-                        <div key={debtor.id}
-                          onMouseDown={(e) => { e.preventDefault(); selectDebtor(debtor); }}
-                          style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee',
-                            backgroundColor: isOverdue ? '#fff5f5' : 'white' }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = isOverdue ? '#ffe8e8' : '#f5f5f5'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = isOverdue ? '#fff5f5' : 'white'}
-                        >
-                          <div style={{ fontWeight:600, color: isOverdue ? '#dc2626' : '#1f2937' }}>
-                            {debtor.name || debtor.customerName}
-                            {isOverdue && <span style={{ fontSize:'11px', marginLeft:'6px', fontWeight:400 }}>⚠️ overdue</span>}
-                          </div>
-                          <div style={{ fontSize:'12px', color:'#888' }}>
-                            Balance: ${fmt(bal)}
-                            {rep && <span style={{ marginLeft:'8px' }}>· Due: {rep}</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {/* Backdrop to close dropdown */}
-                {showDebtorSuggestions && (
-                  <div style={{ position:'fixed', inset:0, zIndex:999 }}
-                    onClick={() => setShowDebtorSuggestions(false)} />
-                )}
-                {existingDebtors.length === 0 && (
-                  <p style={{ fontSize:'12px', color:'#c00', marginTop:'4px' }}>
-                    No registered debtors found. Add one in the Debtors section first.
-                  </p>
-                )}
-              </div>
+                {/* ── Repayment Date ── */}
+                <div style={{ marginBottom:'12px' }}>
+                  <label htmlFor="repayment-date" style={{ display:'block', marginBottom:'4px', fontWeight:600 }}>
+                    Repayment Date:
+                  </label>
+                  <input
+                    type="date"
+                    id="repayment-date"
+                    value={isLocked ? existingDueDate : repaymentDate}
+                    min={todayStr}
+                    max={getRepaymentMaxStr()}
+                    onChange={(e) => !isLocked && setRepaymentDate(e.target.value)}
+                    disabled={!selectedDebtorId || isLocked}
+                    required
+                    style={{
+                      width:'100%', padding:'8px 10px', boxSizing:'border-box',
+                      border:'1.5px solid #ccc', borderRadius:'6px',
+                      backgroundColor: (!selectedDebtorId || isLocked) ? '#f3f4f6' : 'white',
+                      cursor: (!selectedDebtorId || isLocked) ? 'not-allowed' : 'pointer',
+                    }}
+                  />
+                  {!selectedDebtorId && (
+                    <p style={{ fontSize:'11px', color:'#9ca3af', marginTop:'3px' }}>Select a debtor first.</p>
+                  )}
+                  {selectedDebtorId && isLocked && (
+                    <p style={{ fontSize:'11px', color:'#c00', marginTop:'3px' }}>
+                      ⚠️ Locked to existing due date: {existingDueDate}. Debt must be fully cleared before a new date can be set.
+                    </p>
+                  )}
+                  {selectedDebtorId && !isLocked && (
+                    <p style={{ fontSize:'11px', color:'#888', marginTop:'3px' }}>
+                      {balance === 0 ? 'Select any date within 14 days from today.' : 'Select a date up to 14 days from today.'}
+                    </p>
+                  )}
+                  {repaymentNote && (
+                    <p style={{ fontSize:'12px', fontWeight:700, color:'#1e3a8a', marginTop:'8px', lineHeight:1.55,
+                      padding:'8px 10px', background:'#eff6ff', borderRadius:'6px', border:'1px solid #bfdbfe' }}>
+                      {repaymentNote}
+                    </p>
+                  )}
+                </div>
 
-              {/* ── Repayment Date ── */}
-              <div style={{ marginBottom:'12px' }}>
-                <label htmlFor="repayment-date" style={{ display:'block', marginBottom:'4px', fontWeight:600 }}>
-                  Repayment Date:
-                </label>
-                {(() => {
-                  const { existingDueDate } = getDebtorStatus();
-                  const balance = selectedDebtorObj ? (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) : 0;
-                  const isLocked = !!existingDueDate && balance > 0;
-                  const hint = isLocked
-                    ? `⚠️ Locked to existing due date: ${existingDueDate}. Debt must be fully cleared before a new date can be set.`
-                    : 'Select a date up to 14 days from today.';
-                  return (
-                    <>
-                      <input type="date" id="repayment-date" value={isLocked ? existingDueDate : repaymentDate}
-                        min={getTomorrowStr()}
-                        max={getRepaymentMaxStr()}
-                        onChange={(e) => !isLocked && setRepaymentDate(e.target.value)}
-                        disabled={!selectedDebtorId || isLocked}
-                        required
-                        style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #ccc', borderRadius:'6px',
-                          backgroundColor: (!selectedDebtorId || isLocked) ? '#f3f4f6' : 'white',
-                          cursor: isLocked ? 'not-allowed' : 'pointer' }} />
-                      <p style={{ fontSize:'11px', color: isLocked ? '#c00' : '#888', marginTop:'3px' }}>
-                        {selectedDebtorId ? hint : 'Select a debtor first.'}
-                      </p>
-                    </>
-                  );
-                })()}
-              </div>
+                <div className="sr-photo-section">
+                  <label>Photo of Credit Book <span style={{color:'#888',fontWeight:400,fontSize:'12px'}}>(optional)</span></label>
+                  <button type="button" className="sr-btn-photo" onClick={takeCreditPhoto}>
+                    {capturedPhoto ? '📷 Retake Photo' : '📷 Take Photo'}
+                  </button>
+                  {capturedPhoto && <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />}
+                </div>
 
-              <div className="sr-photo-section">
-                <label>Photo of Credit Book <span style={{color:'#888',fontWeight:400,fontSize:'12px'}}>(optional)</span></label>
-                <button type="button" className="sr-btn-photo" onClick={takeCreditPhoto}>
-                  {capturedPhoto ? '📷 Retake Photo' : '📷 Take Photo'}
-                </button>
-                {capturedPhoto && (
-                  <img src={capturedPhoto} alt="Credit book" className="sr-photo-preview" />
-                )}
-
-              </div>
-
-              <div className="sr-modal-buttons">
-                <button type="button" className="sr-btn-cancel" onClick={closeCreditModal}>Cancel</button>
-                <button type="submit" className="sr-btn-confirm" disabled={isProcessing || !selectedDebtorId}>Save</button>
-              </div>
-            </form>
+                <div className="sr-modal-buttons">
+                  <button type="button" className="sr-btn-cancel" onClick={closeCreditModal}>Cancel</button>
+                  <button type="submit" className="sr-btn-confirm" disabled={isProcessing || !selectedDebtorId}>Save</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
