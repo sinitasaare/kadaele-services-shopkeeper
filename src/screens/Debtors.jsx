@@ -641,13 +641,28 @@ Kadaele Services`;
       const clean = phone.replace(/\D/g, '');
       if (isNative && pdfInfo?.uri) {
         try {
+          // Copy the message to clipboard so user can paste it as WhatsApp caption
+          await navigator.clipboard.writeText(body);
+        } catch (_) {
+          // Fallback clipboard copy for older WebViews
+          const ta = document.createElement('textarea');
+          ta.value = body; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        try {
           const { Share } = await import('@capacitor/share');
-          // Share directly — Android will open WhatsApp intent with PDF + message
-          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Send to ${debtorName} via WhatsApp` });
+          // Share PDF file ONLY — WhatsApp will open the document preview
+          // directly instead of showing the generic share sheet with many apps.
+          // The message is already on the clipboard for pasting as caption.
+          await Share.share({
+            url: pdfInfo.uri,
+            dialogTitle: 'Send statement via WhatsApp',
+          });
           return;
         } catch (err) { console.error('Share error:', err); }
       }
-      // Web: open WhatsApp with message pre-filled, auto-download PDF for attachment
+      // Web fallback: download PDF then open WhatsApp chat with message
       if (pdfInfo?.isWeb || pdfInfo?.uri) {
         const link = document.createElement('a');
         link.href = pdfInfo.uri; link.download = pdfInfo.fileName;
