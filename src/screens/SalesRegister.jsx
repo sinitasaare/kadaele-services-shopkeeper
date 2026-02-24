@@ -170,18 +170,19 @@ function SalesRegister() {
   const smartSearchGoods = (items, term) => {
     if (!term.trim()) return [];
     const t = term.toLowerCase();
-    const firstMatches = [], secondMatches = [];
+    const firstMatches = [], secondMatches = [], thirdMatches = [];
     for (const item of items) {
       const words = (item.name || '').toLowerCase().split(/\s+/);
       if (words[0] && words[0].startsWith(t)) firstMatches.push(item);
       else if (words.length > 1 && words[1] && words[1].startsWith(t)) secondMatches.push(item);
+      else if (words.length > 2 && words[2] && words[2].startsWith(t)) thirdMatches.push(item);
     }
-    const sortBy2nd = (arr, wi) => [...arr].sort((a, b) => {
+    const sortBy = (arr, wi) => [...arr].sort((a, b) => {
       const wa = ((a.name||'').toLowerCase().split(/\s+/)[wi]||'');
       const wb = ((b.name||'').toLowerCase().split(/\s+/)[wi]||'');
       return (wa[1]||'').localeCompare(wb[1]||'');
     });
-    return [...sortBy2nd(firstMatches, 0), ...sortBy2nd(secondMatches, 1)].slice(0, 8);
+    return [...sortBy(firstMatches, 0), ...sortBy(secondMatches, 1), ...sortBy(thirdMatches, 2)].slice(0, 8);
   };
   const filteredGoods = smartSearchGoods(goods, searchTerm);
 
