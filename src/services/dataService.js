@@ -971,7 +971,7 @@ class DataService {
       await this.addCashEntry({
         type: 'in',
         amount: paymentAmount,
-        note: `${displayName} paid cash to repay debt`,
+        note: `Received from ${displayName}`,
         date: debtor.lastPayment,
         source: 'deposit',
         debtorId,
