@@ -42,8 +42,6 @@ function AddPurchaseModal({ onSave, onClose }) {
   const [rows, setRows] = useState([{
     id: 1, qty: '', description: '', descSearch: '', showDescDrop: false,
     costPrice: '', packUnit: '', packSize: '',
-    descTouched: false, // has a description been selected?
-    highlight: null,    // field to show arrow on: 'qty'|'description'|'packUnit'|'cost'
   }]);
   const [goods, setGoods]           = useState([]);
   const [invoiceRef, setInvoiceRef] = useState('');
@@ -76,40 +74,24 @@ function AddPurchaseModal({ onSave, onClose }) {
   const addRow = () => setRows(prev => [...prev, {
     id: nextId.current++, qty: '', description: '', descSearch: '',
     showDescDrop: false, costPrice: '', packUnit: '', packSize: '',
-    descTouched: false, highlight: null,
   }]);
   const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
   const updateRow = (id, field, val) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
 
-  // Smart search: first-word matches first, then second-word matches, filtered by typed chars
-  const descResults = (search, currentRowId) => {
+  const descResults = (search) => {
     if (!search.trim()) return [];
     const t = search.toLowerCase();
-    // Collect already-selected descriptions in OTHER rows
-    const usedDescs = rows
-      .filter(r => r.id !== currentRowId && r.description)
-      .map(r => r.description.toLowerCase());
-    const tier1 = [], tier2 = [];
+    const tier1 = [], tier2 = [], tier3 = [];
     for (const g of goods) {
       const name = (g.name || '').toLowerCase();
-      if (usedDescs.includes(name)) continue; // skip already-used products
       const words = name.split(/\s+/);
       if (words[0] && words[0].startsWith(t)) tier1.push(g);
       else if (words.length >= 2 && words[1] && words[1].startsWith(t)) tier2.push(g);
+      else if (words.length >= 3 && words[2] && words[2].startsWith(t)) tier3.push(g);
     }
-    return [...tier1, ...tier2].slice(0, 12);
+    return [...tier1, ...tier2, ...tier3].slice(0, 12);
   };
-
-  // Check if a row is fully filled (desc + qty + unit + cost; size is auto)
-  const isRowComplete = (row) =>
-    row.description.trim() !== '' &&
-    parseFloat(row.qty) > 0 &&
-    row.packUnit.trim() !== '' &&
-    parseFloat(row.costPrice) > 0;
-
-  // All rows above the last row must be complete before "+ Add Next Product" works
-  const allRowsComplete = rows.every(r => isRowComplete(r));
 
   const itemTotal = rows.reduce((sum, r) =>
     sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
@@ -255,47 +237,38 @@ function AddPurchaseModal({ onSave, onClose }) {
                   <tr>
                     <th className="pr-ith pr-ith-qty">QTY</th>
                     <th className="pr-ith pr-ith-desc">DESCRIPTION</th>
-                    <th className="pr-ith pr-ith-pack">UNIT &times; SIZE</th>
+                    <th className="pr-ith pr-ith-pack">PACKSIZE</th>
                     <th className="pr-ith pr-ith-cost">COST</th>
                     <th className="pr-ith" style={{width:'24px'}}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map(row => {
-                    const results = descResults(row.descSearch, row.id);
-                    const locked = !row.descTouched; // unit, cost locked until desc selected
+                    const results = descResults(row.descSearch);
                     return (
-                      <tr key={row.id} style={{position:'relative'}}>
+                      <tr key={row.id}>
                         {/* QTY */}
-                        <td className="pr-itd pr-itd-qty" style={{position:'relative'}}>
-                          {row.highlight === 'qty' && (
-                            <span className="pr-arrow-hint">← fill this</span>
-                          )}
+                        <td className="pr-itd pr-itd-qty">
                           <input type="number" className="pr-it-input pr-it-qty"
                             placeholder="0" min="0" step="1"
                             value={row.qty}
-                            disabled={locked}
-                            style={locked ? {background:'#f3f4f6',color:'#aaa',cursor:'not-allowed'} : {}}
-                            onChange={e => { updateRow(row.id, 'qty', e.target.value); updateRow(row.id, 'highlight', null); }} />
+                            required
+                            onChange={e => updateRow(row.id, 'qty', e.target.value)} />
                         </td>
 
                         {/* DESCRIPTION — inventory search */}
                         <td className="pr-itd pr-itd-desc" style={{position:'relative'}}>
-                          {row.highlight === 'description' && (
-                            <span className="pr-arrow-hint">← fill this</span>
-                          )}
                           <input type="text" className="pr-it-input pr-it-desc"
                             placeholder="Search inventory…"
                             value={row.descSearch !== undefined ? row.descSearch : row.description}
                             onChange={e => {
                               updateRow(row.id, 'descSearch', e.target.value);
                               updateRow(row.id, 'showDescDrop', true);
-                              updateRow(row.id, 'highlight', null);
                             }}
                             onFocus={e => {
                               updateRow(row.id, 'showDescDrop', true);
                               const rect = e.target.getBoundingClientRect();
-                              updateRow(row.id, 'dropTop', rect.bottom);
+                              updateRow(row.id, 'dropTop', rect.bottom + 2);
                               updateRow(row.id, 'dropLeft', rect.left);
                               updateRow(row.id, 'dropWidth', rect.width);
                             }}
@@ -305,81 +278,44 @@ function AddPurchaseModal({ onSave, onClose }) {
                                     descSearch: r.description || r.descSearch }
                                 : r));
                             }, 180)}
+                            required
                           />
                           {row.showDescDrop && results.length > 0 && (
-                            <div className="pr-desc-drop-float"
-                              style={{
-                                position: 'fixed',
-                                top: row.dropTop || 0,
-                                left: row.dropLeft || 0,
-                                width: row.dropWidth || 180,
-                                zIndex: 9999,
-                                background: 'white',
-                                border: '1px solid #ccc',
-                                borderTop: 'none',
-                                borderRadius: '0 0 6px 6px',
-                                maxHeight: '150px',
-                                overflowY: 'auto',
-                                boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-                              }}>
-                              {results.map(g => {
-                                const alreadyUsed = rows.some(r => r.id !== row.id && r.description === g.name);
-                                return (
-                                  <div key={g.id}
-                                    className={`pr-desc-drop-item${alreadyUsed ? ' pr-desc-drop-used' : ''}`}
-                                    onMouseDown={() => {
-                                      if (alreadyUsed) return;
-                                      updateRow(row.id, 'description', g.name || '');
-                                      updateRow(row.id, 'descSearch', g.name || '');
-                                      updateRow(row.id, 'packSize', g.size || '');
-                                      updateRow(row.id, 'descTouched', true);
-                                      updateRow(row.id, 'showDescDrop', false);
-                                      updateRow(row.id, 'highlight', null);
-                                    }}
-                                    title={alreadyUsed ? 'Already added in a previous row' : ''}>
-                                    {g.name}
-                                    {alreadyUsed && <span style={{marginLeft:6,fontSize:'11px',color:'#ef4444'}}>✕ already selected</span>}
-                                  </div>
-                                );
-                              })}
+                            <div className="pr-desc-drop pr-desc-drop-float"
+                              style={{top: row.dropTop||0, left: row.dropLeft||0, width: row.dropWidth||180}}>
+                              {results.map(g => (
+                                <div key={g.id} className="pr-desc-drop-item"
+                                  onMouseDown={() => {
+                                    updateRow(row.id, 'description', g.name || '');
+                                    updateRow(row.id, 'descSearch', g.name || '');
+                                    updateRow(row.id, 'showDescDrop', false);
+                                  }}>
+                                  {g.name}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </td>
 
-                        {/* UNIT × SIZE — unit editable, size locked from inventory */}
+                        {/* PACKSIZE — unit × size */}
                         <td className="pr-itd pr-itd-pack">
                           <div className="pr-pack-pair">
-                            <div style={{position:'relative'}}>
-                              {row.highlight === 'packUnit' && (
-                                <span className="pr-arrow-hint">← fill</span>
-                              )}
-                              <input type="text" className="pr-it-input pr-it-pack-unit"
-                                placeholder="unit" value={row.packUnit}
-                                disabled={locked}
-                                style={locked ? {background:'#f3f4f6',color:'#aaa',cursor:'not-allowed'} : {}}
-                                onChange={e => { updateRow(row.id, 'packUnit', e.target.value); updateRow(row.id, 'highlight', null); }} />
-                            </div>
+                            <input type="text" className="pr-it-input pr-it-pack-unit"
+                              placeholder="unit" value={row.packUnit}
+                              onChange={e => updateRow(row.id, 'packUnit', e.target.value)} />
                             <span className="pr-pack-x">&times;</span>
                             <input type="text" className="pr-it-input pr-it-pack-size"
-                              placeholder="size"
-                              value={row.packSize}
-                              readOnly
-                              style={{background:'#f3f4f6',color:'#6b7280',cursor:'not-allowed'}}
-                              title="Size is pulled automatically from inventory" />
+                              placeholder="size" value={row.packSize}
+                              onChange={e => updateRow(row.id, 'packSize', e.target.value)} />
                           </div>
                         </td>
 
                         {/* COST */}
-                        <td className="pr-itd pr-itd-cost" style={{position:'relative'}}>
-                          {row.highlight === 'cost' && (
-                            <span className="pr-arrow-hint">← fill this</span>
-                          )}
+                        <td className="pr-itd pr-itd-cost">
                           <input type="number" className="pr-it-input pr-it-cost"
                             placeholder="0.00" min="0" step="0.01"
                             value={row.costPrice}
-                            disabled={locked}
-                            style={locked ? {background:'#f3f4f6',color:'#aaa',cursor:'not-allowed'} : {}}
-                            onChange={e => { updateRow(row.id, 'costPrice', e.target.value); updateRow(row.id, 'highlight', null); }} />
+                            onChange={e => updateRow(row.id, 'costPrice', e.target.value)} />
                         </td>
 
                         {/* Remove */}
@@ -396,26 +332,8 @@ function AddPurchaseModal({ onSave, onClose }) {
                 </tbody>
               </table>
             </div>
-            <button
-              className={`pr-add-row-btn${allRowsComplete ? '' : ' pr-add-row-btn-disabled'}`}
-              onClick={() => {
-                if (!allRowsComplete) {
-                  // Highlight the first incomplete field in the first incomplete row
-                  setRows(prev => prev.map(row => {
-                    if (isRowComplete(row)) return row;
-                    let highlight = null;
-                    if (!row.description.trim()) highlight = 'description';
-                    else if (!(parseFloat(row.qty) > 0)) highlight = 'qty';
-                    else if (!row.packUnit.trim()) highlight = 'packUnit';
-                    else if (!(parseFloat(row.costPrice) > 0)) highlight = 'cost';
-                    return { ...row, highlight };
-                  }));
-                  return;
-                }
-                addRow();
-              }}
-            >
-              <Plus size={14}/> + Add Next Product
+            <button className="pr-add-row-btn" onClick={addRow}>
+              <Plus size={14}/> Add New Product
             </button>
           </div>
 
