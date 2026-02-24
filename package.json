@@ -24,6 +24,7 @@
     "@capacitor/filesystem": "^5.1.4",
     "@capacitor/network": "^5.0.6",
     "@capacitor/share": "^5.0.6",
+    "@byteowls/capacitor-filesharer": "^3.0.1",
     "localforage": "^1.10.0",
     "date-fns": "^2.30.0",
     "html2canvas": "^1.4.1",
