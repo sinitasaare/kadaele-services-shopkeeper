@@ -482,10 +482,10 @@ function SalesRegister() {
           </button>
 
           <button
-            className={`sr-btn-scan${scannerActive ? ' sr-btn-scan-active' : ''}`}
-            onClick={() => scannerActive ? stopScanner() : startScanner()}
+            className="sr-btn-scan"
+            onClick={() => alert('🚧 Barcode scanning feature is coming soon!')}
             disabled={isProcessing}
-            title={scannerActive ? 'Stop scanner' : 'Scan barcode'}
+            title="Barcode scanning — coming soon"
           >
             {/* Barcode scanner SVG icon */}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
