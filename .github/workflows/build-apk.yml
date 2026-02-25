@@ -38,6 +38,11 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
+    - name: Set targetSdkVersion to 34
+      run: |
+        sed -i 's/targetSdkVersion 33/targetSdkVersion 34/' android/app/build.gradle
+        sed -i 's/compileSdkVersion 33/compileSdkVersion 34/' android/app/build.gradle
+
     - name: Pin Gradle to stable version
       run: |
         sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2.1-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
