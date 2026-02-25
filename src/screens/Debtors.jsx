@@ -4,11 +4,11 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Debtors.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 function isDepositEditable(dep) {
   const ts = dep.createdAt || dep.date;
@@ -135,6 +135,7 @@ function Debtors() {
   const [debtorSales, setDebtorSales]   = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [receiptNumber, setReceiptNumber] = useState('');
   const [editSale, setEditSale] = useState(null);
   const [paymentPhoto, setPaymentPhoto] = useState(null);
   const [loading, setLoading]           = useState(true);
@@ -152,6 +153,7 @@ function Debtors() {
   const [enlargedPhoto, setEnlargedPhoto] = useState(null);
   const [editDepositModal, setEditDepositModal] = useState(null); // { debtorId, deposit }
   const [editDepositAmount, setEditDepositAmount] = useState('');
+  const [editDepositReceipt, setEditDepositReceipt] = useState('');
   const [savingDeposit, setSavingDeposit] = useState(false);
   const [pdfSharing, setPdfSharing] = useState(false);
 
@@ -485,7 +487,7 @@ Kadaele Services`;
       y += 3;
 
       // ── 5. Build table rows from historyRows ──────────────────────────────
-      const tableHead = [['Date', 'Time', 'Item', 'Qty', 'Price', 'Subtotal', 'Sale Total', 'Deposited', 'Balance']];
+      const tableHead = [['Date', 'Time', 'Item', 'Qty', 'Price', 'Subtotal', 'Debit', 'Credit', 'Balance']];
       const tableBody = [];
 
       historyRows.forEach(row => {
@@ -701,8 +703,9 @@ Kadaele Services`;
 
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
+    if (!receiptNumber.trim()) { alert('Please enter a Receipt Number'); return; }
     try {
-      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount), [], paymentPhoto || null);
+      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount), [], paymentPhoto || null, receiptNumber.trim());
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
       await loadDebtors();
       const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
@@ -712,7 +715,7 @@ Kadaele Services`;
         const allSales = await dataService.getSales();
         setDebtorSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
       }
-      setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null);
+      setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null); setReceiptNumber('');
     } catch (e) { console.error(e); alert('Failed to record payment'); }
   };
 
@@ -745,12 +748,13 @@ Kadaele Services`;
       const oldAmount = parseFloat(dep.amount) || 0;
       const diff = amount - oldAmount;
       dep.amount = amount;
+      if (editDepositReceipt.trim()) dep.receiptNumber = editDepositReceipt.trim();
       debtor.totalPaid = (debtor.totalPaid || 0) + diff;
       debtor.balance = (debtor.totalDue || 0) - debtor.totalPaid;
       if (debtor.balance < 0) debtor.balance = 0;
       await dataService.setDebtors(debtors);
       setSelectedDebtor({...debtor});
-      setEditDepositModal(null);
+      setEditDepositModal(null); setEditDepositReceipt('');
       await loadDebtors();
     } catch(e) { alert(e.message); }
     finally { setSavingDeposit(false); }
@@ -937,11 +941,11 @@ Kadaele Services`;
 
                 {/* ── Edit Deposit Modal ── */}
                 {editDepositModal && (
-                  <div className="d-overlay" style={{zIndex:4000}} onClick={() => setEditDepositModal(null)}>
+                  <div className="d-overlay" style={{zIndex:4000}} onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); }}>
                     <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxWidth:'320px'}}>
                       <div className="d-modal-header">
                         <h2 className="d-modal-title">Edit Deposit</h2>
-                        <button className="d-close-btn" onClick={() => setEditDepositModal(null)}><X size={22}/></button>
+                        <button className="d-close-btn" onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); }}><X size={22}/></button>
                       </div>
                       <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'12px'}}>
                         <label style={{fontWeight:600,fontSize:'13px'}}>Deposit Amount</label>
@@ -949,9 +953,15 @@ Kadaele Services`;
                           value={editDepositAmount}
                           onChange={e => setEditDepositAmount(e.target.value)}
                           style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Receipt Number</label>
+                        <input type="text"
+                          value={editDepositReceipt}
+                          onChange={e => setEditDepositReceipt(e.target.value)}
+                          placeholder="Receipt number…"
+                          style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
                       </div>
                       <div className="d-form-actions" style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
-                        <button className="d-btn-cancel" onClick={() => setEditDepositModal(null)}>Cancel</button>
+                        <button className="d-btn-cancel" onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); }}>Cancel</button>
                         <button className="d-btn-save" onClick={handleSaveDepositEdit} disabled={savingDeposit}>
                           {savingDeposit ? 'Saving…' : 'Save'}
                         </button>
@@ -966,20 +976,21 @@ Kadaele Services`;
                       <tr>
                         <th>Date</th>
                         <th>Time</th>
+                        <th>Ref</th>
                         <th>Image</th>
                         <th>Item</th>
                         <th>Qty</th>
                         <th>Price</th>
                         <th>Subtotal</th>
-                        <th>Sale Total</th>
-                        <th>Deposited</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
                         <th>Balance</th>
                         <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {historyRows.length === 0 ? (
-                        <tr><td colSpan="11" className="d-empty-cell">No history yet</td></tr>
+                        <tr><td colSpan="12" className="d-empty-cell">No history yet</td></tr>
                       ) : (
                         historyRows.map((row, rowIdx) => {
                           if (row.kind === 'deposit') {
@@ -989,6 +1000,7 @@ Kadaele Services`;
                               <tr key={`dep-${dep.id}`} className="d-deposit-row">
                                 <td className="d-merged">{formatDate(dep.date)}</td>
                                 <td className="d-merged">{formatTime(dep.date, dep)}</td>
+                                <td className="d-merged">{dep.receiptNumber || dep.invoiceRef || '—'}</td>
                                 <td className="d-merged">—</td>
                                 {/* Merged grey cell spanning item/qty/price/subtotal/sale-total */}
                                 <td colSpan="5" className="d-deposit-merged-cell">
@@ -1004,9 +1016,9 @@ Kadaele Services`;
                                 <td className="d-merged" style={{textAlign:'center'}}>
                                   {isDepositEditable(dep) && (
                                     <button
-                                      onClick={() => { setEditDepositModal({debtorId:selectedDebtor.id, deposit:dep}); setEditDepositAmount(String(dep.amount)); }}
-                                      style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
-                                      title="Edit deposit"><Edit2 size={14}/></button>
+                                      onClick={() => { setEditDepositModal({debtorId:selectedDebtor.id, deposit:dep}); setEditDepositAmount(String(dep.amount)); setEditDepositReceipt(dep.receiptNumber || ''); }}
+                                      style={{background:'none',border:'none',cursor:'pointer',color:'#22c55e',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center',fontSize:'16px'}}
+                                      title="Edit deposit">✔</button>
                                   )}
                                 </td>
                               </tr>
@@ -1023,6 +1035,7 @@ Kadaele Services`;
                             <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatDate(rawTs)}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{formatTime(rawTs, sale)}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged">{sale.invoiceRef || sale.notes || '—'}</td>}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged d-img-cell">
                                   {sale.photoUrl ? (
@@ -1049,10 +1062,10 @@ Kadaele Services`;
                               )}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin2Hours(sale) ? (
+                                  {isWithin30Mins(sale) ? (
                                     <button onClick={() => setEditSale(sale)}
-                                      style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
-                                      title="Edit sale"><Edit2 size={15} /></button>
+                                      style={{ background:'none', border:'none', cursor:'pointer', color:'#22c55e', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center', fontSize:'16px' }}
+                                      title="Edit sale">✔</button>
                                   ) : null}
                                 </td>
                               )}
@@ -1125,12 +1138,17 @@ Kadaele Services`;
                 <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
                   onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
               </div>
+              <div className="d-form-group">
+                <label>Receipt Number *</label>
+                <input type="text" value={receiptNumber} placeholder="Enter receipt number"
+                  onChange={e => setReceiptNumber(e.target.value)} className="d-payment-input" />
+              </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
               {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
               <div className="d-form-actions">
-                <button className="d-btn-cancel" onClick={() => setShowPaymentModal(false)}>Cancel</button>
+                <button className="d-btn-cancel" onClick={() => { setShowPaymentModal(false); setReceiptNumber(''); }}>Cancel</button>
                 <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
               </div>
             </div>

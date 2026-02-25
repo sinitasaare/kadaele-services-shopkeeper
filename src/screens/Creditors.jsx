@@ -5,11 +5,17 @@ import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './Creditors.css';
 
-// ── Shared 2-hour edit window helper ──────────────────────────────────────
-function isWithin2Hours(entry) {
+// ── Shared 30-minute edit window helper ──────────────────────────────────
+function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date || entry.timestamp;
   if (!ts) return false;
-  return (new Date() - new Date(ts)) / (1000 * 60 * 60) <= 2;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
+}
+
+function isDepositEditable(dep) {
+  const ts = dep.createdAt || dep.date;
+  if (!ts) return false;
+  return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
 
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
@@ -112,6 +118,9 @@ function Creditors() {
   const [selectedCreditor, setSelectedCreditor] = useState(null);
   const [creditorSales, setCreditorSales]   = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [editDepositModal, setEditDepositModal] = useState(null);
+  const [editDepositAmount, setEditDepositAmount] = useState('');
+  const [editDepositReceipt, setEditDepositReceipt] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [editSale, setEditSale] = useState(null);
   const [paymentPhoto, setPaymentPhoto] = useState(null);
@@ -606,8 +615,41 @@ Kadaele Services`;
     } catch (e) { console.error(e); alert('Failed to take photo'); }
   };
 
+  const handleSaveDepositEdit = async () => {
+    if (!editDepositModal) return;
+    const newAmt = parseFloat(editDepositAmount);
+    if (!newAmt || newAmt <= 0) { alert('Please enter a valid amount'); return; }
+    try {
+      const creditors = await dataService.getCreditors();
+      const creditor = creditors.find(c => c.id === editDepositModal.creditorId);
+      if (!creditor) return;
+      const dep = (creditor.deposits || []).find(d => d.id === editDepositModal.deposit.id);
+      if (!dep) return;
+      const oldAmt = parseFloat(dep.amount) || 0;
+      dep.amount = newAmt;
+      if (editDepositReceipt.trim()) dep.receiptNumber = editDepositReceipt.trim();
+      creditor.totalPaid = (creditor.totalPaid || 0) - oldAmt + newAmt;
+      creditor.balance = Math.max(0, (creditor.totalDue || 0) - creditor.totalPaid);
+      creditor.updatedAt = new Date().toISOString();
+      await dataService.setCreditors(creditors);
+      await loadCreditors();
+      const updated = creditors.find(d => d.id === editDepositModal.creditorId);
+      if (updated) {
+        setSelectedCreditor(updated);
+        const allPurchases2 = await dataService.getPurchases();
+        setCreditorSales(allPurchases2.filter(p =>
+          updated.purchaseIds?.includes(p.id) ||
+          p.creditorId === updated.id ||
+          p.supplierId === updated.id
+        ));
+      }
+      setEditDepositModal(null); setEditDepositAmount(''); setEditDepositReceipt('');
+    } catch (e) { console.error(e); alert('Failed to update payment'); }
+  };
+
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
+    if (!receiptNumber.trim()) { alert('Please enter a Receipt Number'); return; }
     try {
       // Use recordCreditorPayment which correctly creates a Cash OUT entry
       await dataService.recordCreditorPayment(selectedCreditor.id, parseFloat(paymentAmount), paymentPhoto || null, receiptNumber || '');
@@ -828,6 +870,35 @@ Kadaele Services`;
                   </button>
                 </div>
 
+                {/* ── Edit Payment Modal ── */}
+                {editDepositModal && (
+                  <div className="d-overlay" style={{zIndex:4000}} onClick={() => setEditDepositModal(null)}>
+                    <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxWidth:'320px'}}>
+                      <div className="d-modal-header">
+                        <h2 className="d-modal-title">Edit Payment</h2>
+                        <button className="d-close-btn" onClick={() => setEditDepositModal(null)}><X size={22}/></button>
+                      </div>
+                      <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'12px'}}>
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Amount Paid</label>
+                        <input type="number" min="0.01" step="0.01"
+                          value={editDepositAmount}
+                          onChange={e => setEditDepositAmount(e.target.value)}
+                          style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Receipt Number</label>
+                        <input type="text"
+                          value={editDepositReceipt}
+                          onChange={e => setEditDepositReceipt(e.target.value)}
+                          placeholder="Receipt number…"
+                          style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
+                      </div>
+                      <div className="d-form-actions" style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
+                        <button className="d-btn-cancel" onClick={() => setEditDepositModal(null)}>Cancel</button>
+                        <button className="d-btn-save" onClick={handleSaveDepositEdit}>Save</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="d-history-scroll">
                   <table className="d-history-table">
                     <thead>
@@ -855,7 +926,7 @@ Kadaele Services`;
                             return (
                               <tr key={`dep-${dep.id}`} className="d-deposit-row">
                                 <td className="d-merged">{formatDate(dep.date)}</td>
-                                <td className="d-merged">—</td>
+                                <td className="d-merged">{dep.receiptNumber || dep.invoiceRef || '—'}</td>
                                 <td colSpan="5" className="d-deposit-merged-cell">
                                   P&nbsp;a&nbsp;y&nbsp;m&nbsp;e&nbsp;n&nbsp;t&nbsp;&nbsp;&nbsp;M&nbsp;a&nbsp;d&nbsp;e
                                 </td>
@@ -863,7 +934,14 @@ Kadaele Services`;
                                 <td className={`d-balance-cell ${row.runningBalance < 0 ? 'd-balance-neg' : ''}`}>
                                   {fmt(Math.abs(row.runningBalance))}
                                 </td>
-                                <td>—</td>
+                                <td style={{textAlign:'center'}}>
+                                  {isDepositEditable(dep) && (
+                                    <button
+                                      onClick={() => { setEditDepositModal({creditorId:selectedCreditor.id, deposit:dep}); setEditDepositAmount(String(dep.amount)); setEditDepositReceipt(dep.receiptNumber || ''); }}
+                                      style={{background:'none',border:'none',cursor:'pointer',color:'#22c55e',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center',fontSize:'16px'}}
+                                      title="Edit payment">✔</button>
+                                  )}
+                                </td>
                               </tr>
                             );
                           }
@@ -892,10 +970,10 @@ Kadaele Services`;
                               )}
                               {idx === 0 && (
                                 <td rowSpan={rowSpan} className="d-merged" style={{ textAlign:'center' }}>
-                                  {isWithin2Hours(sale) ? (
+                                  {isWithin30Mins(sale) ? (
                                     <button onClick={() => setEditSale(sale)}
-                                      style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
-                                      title="Edit sale"><Edit2 size={15} /></button>
+                                      style={{ background:'none', border:'none', cursor:'pointer', color:'#22c55e', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center', fontSize:'16px' }}
+                                      title="Edit sale">✔</button>
                                   ) : null}
                                 </td>
                               )}
@@ -1006,8 +1084,8 @@ Kadaele Services`;
                   onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
               </div>
               <div className="d-form-group">
-                <label>Receipt Number:</label>
-                <input type="text" value={receiptNumber} placeholder="Enter receipt number (optional)"
+                <label>Receipt Number *</label>
+                <input type="text" value={receiptNumber} placeholder="Enter receipt number"
                   onChange={e => setReceiptNumber(e.target.value)} className="d-payment-input" />
               </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>

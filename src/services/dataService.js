@@ -937,7 +937,7 @@ class DataService {
     }
   }
 
-  async recordPayment(debtorId, amount, purchaseIds = [], photo = null) {
+  async recordPayment(debtorId, amount, purchaseIds = [], photo = null, receiptNumber = '') {
     // Read directly from localforage so we always have the latest local state
     const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
     const debtor = debtors.find(d => d.id === debtorId);
@@ -961,7 +961,9 @@ class DataService {
         type: 'deposit',
         amount: paymentAmount,
         date: debtor.lastPayment,
+        createdAt: debtor.lastPayment,
         ...(photo ? { photo } : {}),
+        ...(receiptNumber ? { receiptNumber } : {}),
       };
       debtor.deposits = debtor.deposits || [];
       debtor.deposits.push(depositEntry);
@@ -1778,7 +1780,7 @@ class DataService {
   }
 
   // ── Record a payment MADE to a creditor (Cash OUT) ────────────────────────
-  async recordCreditorPayment(creditorId, amount, photo = null) {
+  async recordCreditorPayment(creditorId, amount, photo = null, receiptNumber = '') {
     try {
       const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
       const creditor = creditors.find(c => c.id === creditorId);
@@ -1794,7 +1796,9 @@ class DataService {
       const depositEntry = {
         id: this.generateId(), type: 'deposit',
         amount: paymentAmount, date: creditor.lastPayment,
+        createdAt: creditor.lastPayment,
         ...(photo ? { photo } : {}),
+        ...(receiptNumber ? { receiptNumber } : {}),
       };
       creditor.deposits = creditor.deposits || [];
       creditor.deposits.push(depositEntry);
