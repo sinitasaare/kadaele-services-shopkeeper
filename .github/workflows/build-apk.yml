@@ -44,7 +44,9 @@ jobs:
         cat android/gradle/wrapper/gradle-wrapper.properties
 
     - name: Install ImageMagick
-      run: sudo apt-get install -y --fix-missing imagemagick
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --fix-missing --no-install-recommends imagemagick
 
     - name: Prepare Kadaele icon (resize logo to 1024x1024 for resources)
       run: |
