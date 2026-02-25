@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
+import kadaeleLogo from '../assets/kadaeleLogo.js';
 import './Debtors.css';
 
 // ── Shared 30-minute edit window helper ──────────────────────────────────
@@ -75,14 +76,14 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
         </div>
 
         <div style={{ marginBottom:'12px' }}>
-          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Products</label>
           <div style={{ overflowX:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'280px' }}>
               <thead>
                 <tr style={{ background:'#f3f4f6' }}>
                   <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Product Name</th>
                   <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'60px' }}>Qty</th>
-                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Price</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Selling Price</th>
                 </tr>
               </thead>
               <tbody>
@@ -387,33 +388,16 @@ Kadaele Services`;
       const margin = 12;
       const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-      // ── 1. Load Kadaele logo ──────────────────────────────────────────────
+      // ── 1 & 2. Purple header bar + Kadaele logo on top ────────────────
       let logoLoaded = false;
+      pdf.setFillColor(102, 126, 234);
+      pdf.rect(0, 0, pageW, 26, 'F');
       try {
-        const logoUrl  = '/kadaele-logo.png';
-        const response = await fetch(logoUrl);
-        if (response.ok) {
-          const blob   = await response.blob();
-          const base64 = await new Promise((res, rej) => {
-            const r = new FileReader();
-            r.onload  = () => res(r.result);
-            r.onerror = rej;
-            r.readAsDataURL(blob);
-          });
-          // Draw logo top-left (max 28mm wide, proportional height)
-          const img  = new Image();
-          await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; img.src = base64; });
-          const ratio  = img.naturalHeight / (img.naturalWidth || 1);
-          const logoW  = 28;
-          const logoH  = Math.min(logoW * ratio, 18);
-          pdf.addImage(base64, 'PNG', margin, 8, logoW, logoH);
+        if (kadaeleLogo) {
+          pdf.addImage(kadaeleLogo, 'PNG', margin, 2, 22, 22);
           logoLoaded = true;
         }
       } catch (_) { /* logo optional — continue without it */ }
-
-      // ── 2. Purple header bar ──────────────────────────────────────────────
-      pdf.setFillColor(102, 126, 234);
-      pdf.rect(0, 0, pageW, 26, 'F');
 
       if (!logoLoaded) {
         // Fallback text logo
@@ -423,14 +407,21 @@ Kadaele Services`;
         pdf.text('Kadaele Services', margin, 12);
       }
 
+      // Company name + contact left, DEBT STATEMENT centre, date right
       pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Kadaele Services', logoLoaded ? margin + 26 : margin, 11);
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Ph: 73057613  |  ritiamti102016@gmail.com', logoLoaded ? margin + 26 : margin, 17);
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('DEBT STATEMENT', logoLoaded ? margin + 30 : margin, logoLoaded ? 12 : 20);
+      pdf.text('DEBT STATEMENT', pageW / 2, 11, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(7);
       const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-      pdf.text(`Generated: ${today}`, pageW - margin, 20, { align: 'right' });
+      pdf.text(`Generated: ${today}`, pageW - margin, 22, { align: 'right' });
 
       // ── 3. Debtor info block ──────────────────────────────────────────────
       let y = 34;
@@ -487,7 +478,7 @@ Kadaele Services`;
       y += 3;
 
       // ── 5. Build table rows from historyRows ──────────────────────────────
-      const tableHead = [['Date', 'Time', 'Item', 'Qty', 'Price', 'Subtotal', 'Debit', 'Credit', 'Balance']];
+      const tableHead = [[{ content: 'Date', styles: { halign: 'center' } }, { content: 'Time', styles: { halign: 'center' } }, { content: 'Ref', styles: { halign: 'center' } }, { content: 'Item', styles: { halign: 'left' } }, { content: 'Qty', styles: { halign: 'center' } }, { content: 'Price', styles: { halign: 'center' } }, { content: 'Subtotal', styles: { halign: 'center' } }, { content: 'Debit', styles: { halign: 'center' } }, { content: 'Credit', styles: { halign: 'center' } }, { content: 'Balance', styles: { halign: 'center' } }]];
       const tableBody = [];
 
       historyRows.forEach(row => {
@@ -498,7 +489,9 @@ Kadaele Services`;
           const dTimeStr = dep.isUnrecorded ? 'UNRECORDED' : (dDate ? dDate.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A');
           tableBody.push([
             dDateStr, dTimeStr,
-            { content: 'Deposited Cash to repay Debt', colSpan: 5, styles: { fillColor: [237,233,254], fontStyle:'italic', halign:'center', textColor:[88,28,135] } },
+            dep.receiptNumber || dep.invoiceRef || '—',
+            { content: 'Deposited Cash to repay Debt', colSpan: 4, styles: { fillColor: [237,233,254], fontStyle:'italic', halign:'center', textColor:[88,28,135] } },
+            '—',
             fmt(parseFloat(dep.amount)),
             fmt(Math.abs(row.runningBalance)),
           ]);
@@ -514,6 +507,7 @@ Kadaele Services`;
             if (idx === 0) {
               tableBody.push([
                 sDateStr, sTimeStr,
+                sale.invoiceRef || sale.notes || '—',
                 item ? (item.name || 'N/A') : 'N/A',
                 item ? String(item.quantity ?? item.qty ?? 0) : '—',
                 item ? fmt(item.price || 0) : '—',
@@ -524,7 +518,7 @@ Kadaele Services`;
               ]);
             } else {
               tableBody.push([
-                '', '',
+                '', '', '',
                 item ? (item.name || 'N/A') : 'N/A',
                 item ? String(item.quantity ?? item.qty ?? 0) : '—',
                 item ? fmt(item.price || 0) : '—',
@@ -537,7 +531,7 @@ Kadaele Services`;
       });
 
       if (tableBody.length === 0) {
-        tableBody.push([{ content: 'No history yet', colSpan: 9, styles: { halign: 'center', textColor: [150,150,150] } }]);
+        tableBody.push([{ content: 'No history yet', colSpan: 10, styles: { halign: 'center', textColor: [150,150,150] } }]);
       }
 
       // ── 6. Draw table via autoTable ───────────────────────────────────────
@@ -557,22 +551,24 @@ Kadaele Services`;
           textColor: [255, 255, 255],
           fontStyle: 'bold',
           fontSize:  7,
+          halign: 'center',
         },
         alternateRowStyles: { fillColor: [248, 248, 252] },
         columnStyles: {
-          0: { cellWidth: 18 },  // Date
-          1: { cellWidth: 20 },  // Time
-          2: { cellWidth: 'auto' }, // Item (flex)
-          3: { cellWidth: 10, halign: 'center' }, // Qty
-          4: { cellWidth: 18, halign: 'right' },  // Price
-          5: { cellWidth: 20, halign: 'right' },  // Subtotal
-          6: { cellWidth: 20, halign: 'right' },  // Sale Total
-          7: { cellWidth: 20, halign: 'right' },  // Deposited
-          8: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }, // Balance
+          0: { cellWidth: 20, halign: 'center' },  // Date
+          1: { cellWidth: 18, halign: 'center' },  // Time
+          2: { cellWidth: 14, halign: 'center' },  // Ref
+          3: { cellWidth: 36, halign: 'left'   },  // Item
+          4: { cellWidth: 10, halign: 'center' },  // Qty
+          5: { cellWidth: 18, halign: 'center' },  // Price
+          6: { cellWidth: 20, halign: 'center' },  // Subtotal
+          7: { cellWidth: 18, halign: 'center' },  // Debit
+          8: { cellWidth: 18, halign: 'center' },  // Credit
+          9: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },  // Balance
         },
         didParseCell: (data) => {
           // Highlight deposit rows with a light purple tint
-          if (data.row.raw?.[2]?.content?.includes?.('Deposited')) {
+          if (data.row.raw?.[3]?.content?.includes?.('Deposited')) {
             data.cell.styles.fillColor = [237, 233, 254];
           }
         },
@@ -978,9 +974,9 @@ Kadaele Services`;
                         <th>Time</th>
                         <th>Ref</th>
                         <th>Image</th>
-                        <th>Item</th>
-                        <th>Qty</th>
-                        <th>Price</th>
+                        <th>QTY</th>
+                        <th>PRODUCT</th>
+                        <th>Selling Price</th>
                         <th>Subtotal</th>
                         <th>Debit</th>
                         <th>Credit</th>
@@ -1049,8 +1045,8 @@ Kadaele Services`;
                                   ) : '—'}
                                 </td>
                               )}
-                              <td>{item ? (item.name || 'N/A') : 'N/A'}</td>
                               <td className="d-qty">{item ? (item.quantity || item.qty || 0) : '—'}</td>
+                              <td>{item ? (item.name || 'N/A') : 'N/A'}</td>
                               <td>{item ? fmt(item.price || 0) : '0.00'}</td>
                               <td>{item ? fmt(item.subtotal || (item.price||0)*(item.quantity||item.qty||0)) : '0.00'}</td>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged d-sale-total">{fmt((sale.total || sale.total_amount || 0))}</td>}

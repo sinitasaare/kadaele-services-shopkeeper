@@ -273,7 +273,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
         <div className="us-catalogue-wrapper">
           <table className="us-catalogue-table">
             <thead>
-              <tr><th>Qty</th><th>Item</th><th>Price</th><th>Total</th><th></th></tr>
+              <tr><th>Qty</th><th>Item</th><th>Selling Price</th><th>Total</th><th></th></tr>
             </thead>
             <tbody>
               {catalogue.length === 0 ? (

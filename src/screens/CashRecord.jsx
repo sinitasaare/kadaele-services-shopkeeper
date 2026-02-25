@@ -3,7 +3,7 @@ import { Edit2 } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
-import './CashJournal.css';
+import './CashRecord.css';
 
 const TYPE_IN  = 'in';
 const TYPE_OUT = 'out';
@@ -154,7 +154,7 @@ function CashOutSubModal({ mode, onSave, onCancel }) {
   );
 }
 
-function CashJournal() {
+function CashRecord() {
   const { fmt } = useCurrency();
   const [entries, setEntries] = useState([]);
   const [filteredEntries, setFilteredEntries] = useState([]);
@@ -701,4 +701,4 @@ function CashJournal() {
   );
 }
 
-export default CashJournal;
+export default CashRecord;

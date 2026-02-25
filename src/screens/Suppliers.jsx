@@ -64,7 +64,7 @@ function PurchaseEditModal({ purchase, onSave, onClose, onDeleted, fmt }) {
         </div>
 
         <div style={{ marginBottom:'12px' }}>
-          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Products</label>
           <div style={{ overflowX:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'280px' }}>
               <thead>
@@ -828,7 +828,7 @@ Kadaele Services`;
                         <th>Supplier</th>
                         <th>QTY</th>
                         <th>PACKSIZE</th>
-                        <th>Items</th>
+                        <th>Products</th>
                         <th>Pay</th>
                         <th>Total</th>
                         <th>Ref</th>

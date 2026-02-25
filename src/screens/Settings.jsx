@@ -113,7 +113,7 @@ const T = {
     saleDate: 'Sale Date',
     cashDate: 'Entry Date',
     addItem: 'Add Item',
-    items: 'Items',
+    items: 'Products',
     total: 'Total',
     paymentType: 'Payment Type',
     cash: 'Cash',
@@ -487,7 +487,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
           {cart.length > 0 && (
             <div className="st-cart">
               <div className="st-cart-header">
-                <span>{t.items}</span><span>{t.qty}</span><span>Price</span><span></span>
+                <span>{t.items}</span><span>{t.qty}</span><span>Selling Price</span><span></span>
               </div>
               {cart.map(item => (
                 <div key={item.id} className="st-cart-row">

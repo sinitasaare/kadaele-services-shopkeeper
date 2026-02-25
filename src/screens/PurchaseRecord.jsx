@@ -48,6 +48,7 @@ function AddPurchaseModal({ onSave, onClose }) {
   const [notes, setNotes]           = useState('');
   const [receiptPhoto, setReceiptPhoto] = useState(null);
   const [saving, setSaving]         = useState(false);
+  const [fieldError, setFieldError]   = useState(null); // {rowId, field, message}
   const nextId = useRef(2);
 
   useEffect(() => {
@@ -119,10 +120,34 @@ function AddPurchaseModal({ onSave, onClose }) {
 
   const handleSave = async () => {
     if (!supplierId) { alert('Please select a supplier.'); return; }
+    if (!invoiceRef.trim()) { alert('Please enter a Ref / invoice number.'); return; }
     if (!purchaseDate) { alert('Please select a purchase date.'); return; }
     if (paymentType === 'credit' && !supplierId) {
       alert('Please select a supplier for the credit purchase.'); return;
     }
+    for (const r of rows) {
+      if (!r.description?.trim()) {
+        setFieldError({ rowId: r.id, field: 'description', message: 'Select an item first' });
+        setTimeout(() => document.getElementById(`desc-input-${r.id}`)?.focus(), 50);
+        return;
+      }
+      if (!parseFloat(r.qty) > 0 && !r.qty) {
+        setFieldError({ rowId: r.id, field: 'qty', message: 'Enter a quantity' });
+        setTimeout(() => document.getElementById(`qty-input-${r.id}`)?.focus(), 50);
+        return;
+      }
+      if (!r.packUnit?.trim()) {
+        setFieldError({ rowId: r.id, field: 'packUnit', message: 'Enter pack unit' });
+        setTimeout(() => document.getElementById(`packunit-input-${r.id}`)?.focus(), 50);
+        return;
+      }
+      if (!parseFloat(r.costPrice) > 0 && !r.costPrice) {
+        setFieldError({ rowId: r.id, field: 'costPrice', message: 'Enter a cost' });
+        setTimeout(() => document.getElementById(`cost-input-${r.id}`)?.focus(), 50);
+        return;
+      }
+    }
+    setFieldError(null);
     const validRows = rows.filter(r => r.description.trim() && parseFloat(r.qty) > 0);
     if (validRows.length === 0) {
       alert('Please add at least one item with a description and quantity.'); return;
@@ -230,7 +255,7 @@ function AddPurchaseModal({ onSave, onClose }) {
 
           {/* Items Purchased */}
           <div className="pr-field">
-            <label>Items Purchased *</label>
+            <label>Products Purchased *</label>
             <div className="pr-items-table-wrapper">
               <table className="pr-items-tbl">
                 <thead>
@@ -250,15 +275,17 @@ function AddPurchaseModal({ onSave, onClose }) {
                         {/* QTY */}
                         <td className="pr-itd pr-itd-qty">
                           <input type="number" className="pr-it-input pr-it-qty"
+                            id={`qty-input-${row.id}`}
                             placeholder="0" min="0" step="1"
                             value={row.qty}
                             required
-                            onChange={e => updateRow(row.id, 'qty', e.target.value)} />
+                            onChange={e => { updateRow(row.id, 'qty', e.target.value); setFieldError(null); }} />
                         </td>
 
                         {/* DESCRIPTION — inventory search */}
                         <td className="pr-itd pr-itd-desc" style={{position:'relative'}}>
                           <input type="text" className="pr-it-input pr-it-desc"
+                            id={`desc-input-${row.id}`}
                             placeholder="Search inventory…"
                             value={row.descSearch !== undefined ? row.descSearch : row.description}
                             onChange={e => {
@@ -301,6 +328,7 @@ function AddPurchaseModal({ onSave, onClose }) {
                                   onMouseDown={() => {
                                     updateRow(row.id, 'description', g.name || '');
                                     updateRow(row.id, 'descSearch', g.name || '');
+                                    updateRow(row.id, 'packSize', g.size || '');
                                     updateRow(row.id, 'showDescDrop', false);
                                   }}>
                                   {g.name}
@@ -310,17 +338,37 @@ function AddPurchaseModal({ onSave, onClose }) {
                           )}
                         </td>
 
+                        {/* Field error tooltip */}
+                        {fieldError?.rowId === row.id && (
+                          <td style={{padding:0,position:'relative',border:'none'}}>
+                            <div style={{
+                              position:'absolute', top:'50%', left:'4px',
+                              transform:'translateY(-50%)',
+                              background:'#ef4444', color:'white',
+                              fontSize:'11px', fontWeight:600,
+                              padding:'4px 8px', borderRadius:'6px',
+                              whiteSpace:'nowrap', zIndex:2000,
+                              display:'flex', alignItems:'center', gap:'4px',
+                              boxShadow:'0 2px 8px rgba(0,0,0,0.2)'
+                            }}>
+                              ← {fieldError.message}
+                            </div>
+                          </td>
+                        )}
                         {/* PACKSIZE — unit × size */}
                         <td className="pr-itd pr-itd-pack">
                           <div className="pr-pack-pair">
                             <input type="text" className="pr-it-input pr-it-pack-unit"
+                              id={`packunit-input-${row.id}`}
                               placeholder="unit" value={row.packUnit}
                               disabled={!row.description}
-                              onChange={e => updateRow(row.id, 'packUnit', e.target.value)} />
+                              onChange={e => { updateRow(row.id, 'packUnit', e.target.value); setFieldError(null); }} />
                             <span className="pr-pack-x">&times;</span>
                             <input type="text" className="pr-it-input pr-it-pack-size"
                               placeholder="size" value={row.packSize}
                               disabled={!row.description}
+                              readOnly
+                              style={{cursor:'default'}}
                               onChange={e => updateRow(row.id, 'packSize', e.target.value)} />
                           </div>
                         </td>
@@ -328,10 +376,11 @@ function AddPurchaseModal({ onSave, onClose }) {
                         {/* COST */}
                         <td className="pr-itd pr-itd-cost">
                           <input type="number" className="pr-it-input pr-it-cost"
+                            id={`cost-input-${row.id}`}
                             placeholder="0.00" min="0" step="0.01"
                             value={row.costPrice}
                             disabled={!row.description}
-                            onChange={e => updateRow(row.id, 'costPrice', e.target.value)} />
+                            onChange={e => { updateRow(row.id, 'costPrice', e.target.value); setFieldError(null); }} />
                         </td>
 
                         {/* Remove */}
@@ -348,9 +397,20 @@ function AddPurchaseModal({ onSave, onClose }) {
                 </tbody>
               </table>
             </div>
-            <button className="pr-add-row-btn" onClick={addRow}>
-              <Plus size={14}/> Add New Product
-            </button>
+            {(() => {
+              const lastRow = rows[rows.length - 1];
+              const lastRowComplete = lastRow &&
+                lastRow.description?.trim() &&
+                parseFloat(lastRow.qty) > 0 &&
+                parseFloat(lastRow.costPrice) > 0 &&
+                lastRow.packUnit?.trim();
+              return (
+                <button className={"pr-add-row-btn" + (lastRowComplete ? "" : " pr-add-row-btn-disabled")}
+                  onClick={addRow} disabled={!lastRowComplete}>
+                  <Plus size={14}/> Add New Product
+                </button>
+              );
+            })()}
           </div>
 
           {/* Total */}
@@ -361,9 +421,10 @@ function AddPurchaseModal({ onSave, onClose }) {
 
           {/* Ref — inline */}
           <div className="pr-ref-inline">
-            <label className="pr-ref-label">Ref:</label>
+            <label className="pr-ref-label">Ref *</label>
             <input type="text" className="pr-ref-input"
               placeholder="Invoice / receipt number…"
+              required
               value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} />
           </div>
 
@@ -491,7 +552,7 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
           </div>
 
           <div className="pr-field">
-            <label>Items</label>
+            <label>Products</label>
             {editable ? (
               <>
                 <div style={{overflowX:'auto'}}>
@@ -861,42 +922,51 @@ function PurchaseRecord() {
             <thead className="pr-thead">
               <tr>
                 <th>Date</th>
-                <th>Time</th>
-                <th>Supplier</th>
-                <th>QTY</th>
-                <th>PACKSIZE</th>
-                <th>Items</th>
-                <th>Cost</th>
-                <th>Pay</th>
-                <th className="pr-col-right">Total</th>
                 <th>Ref</th>
+                <th>Supplier</th>
+                <th className="pr-col-qty">QTY</th>
+                <th>PACKSIZE</th>
+                <th>Products</th>
+                <th>Cost</th>
+                <th className="pr-col-right">Debit</th>
+                <th className="pr-col-right">Credit</th>
+                <th className="pr-col-right">Balance</th>
                 <th className="pr-col-center">Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan="11" className="pr-empty-cell">No purchases found</td></tr>
-              ) : (
-                filtered.map(p => {
+              ) : (() => {
+                let running = 0;
+                return filtered.map(p => {
                   const { date, time } = formatDateTime(p);
                   const items = p.items || [];
                   const payType = p.paymentType || p.payment_type || 'cash';
                   const canEdit = isWithin30Mins(p);
+                  const amt = parseFloat(p.total || 0);
+                  if ((p.paymentType || p.payment_type || 'cash') === 'credit') {
+                    running += amt;
+                  } else {
+                    running -= amt;
+                  }
+                  const runningSnap = running;
 
                   if (items.length === 0) {
                     return (
-                      <tr key={p.id} className="pr-row" onClick={() => setViewPurchase(p)}>
-                        <td>{date}</td><td>{time}</td>
+                      <tr key={p.id} className="pr-row pr-hist-first">
+                        <td>{date}</td>
+                        <td className="pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>
                         <td className="pr-supplier-cell">{p.supplierName||'—'}</td>
                         <td>—</td><td>—</td><td>—</td><td>—</td>
-                        <td><span className={`pr-pay-badge pr-pay-${payType}`}>{payType}</span></td>
-                        <td className="pr-col-right pr-total-cell">{fmt(p.total||0)}</td>
-                        <td className="pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>
+                        <td className="pr-col-right pr-total-cell">{payType==='credit' ? fmt(p.total||0) : '—'}</td>
+                        <td className="pr-col-right pr-credit-cell">{payType==='cash' ? fmt(p.total||0) : '—'}</td>
+                        <td className="pr-col-right pr-running-cell">{fmt(runningSnap)}</td>
                         <td className="pr-col-center">
                           {canEdit && (
                             <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
-                              style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
-                              title="Edit purchase"><Edit2 size={15}/></button>
+                              style={{background:'none',border:'none',cursor:'pointer',color:'#22c55e',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center',fontSize:'16px'}}
+                              title="Edit purchase">✔</button>
                           )}
                         </td>
                       </tr>
@@ -904,34 +974,31 @@ function PurchaseRecord() {
                   }
 
                   return items.map((item, idx) => (
-                    <tr key={`${p.id}-${idx}`} className="pr-row" onClick={() => setViewPurchase(p)}>
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{date}</td>}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{time}</td>}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left',whiteSpace:'nowrap'}}>{p.supplierName||'—'}</td>}
-                      <td className="pr-subrow-cell">{item.qty||'—'}</td>
+                    <tr key={`${p.id}-${idx}`}
+                      className={`pr-row ${idx > 0 ? 'pr-hist-cont' : 'pr-hist-first'}`}>
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell">{date}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-supplier-cell">{p.supplierName||'—'}</td>}
+                      <td className="pr-subrow-cell pr-col-qty">{item.qty||'—'}</td>
                       <td className="pr-subrow-cell">{item.packDisplay||(item.packUnit?`${item.packUnit}×${item.packSize||'?'}`:item.packSize||'—')}</td>
-                      <td className="pr-subrow-cell pr-items-cell" style={{whiteSpace:'nowrap'}}>{item.description||'—'}</td>
+                      <td className="pr-subrow-cell pr-items-cell">{item.description||'—'}</td>
                       <td className="pr-subrow-cell pr-col-right">{item.costPrice?fmt(item.costPrice):'—'}</td>
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-total-cell pr-col-right">{payType==='credit' ? fmt(p.total||0) : '—'}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-credit-cell pr-col-right">{payType==='cash' ? fmt(p.total||0) : '—'}</td>}
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-running-cell pr-col-right">{fmt(runningSnap)}</td>}
                       {idx===0 && (
-                        <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>
-                          <span className={`pr-pay-badge pr-pay-${payType}`}>{payType}</span>
-                        </td>
-                      )}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-total-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{fmt(p.total||0)}</td>}
-                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-notes-cell" style={{verticalAlign:'middle',textAlign:'left'}}>{p.invoiceRef||p.notes||'—'}</td>}
-                      {idx===0 && (
-                        <td rowSpan={items.length} className="pr-merged-cell" style={{verticalAlign:'middle',textAlign:'left'}}>
+                        <td rowSpan={items.length} className="pr-merged-cell pr-col-center">
                           {canEdit && (
-                            <button onClick={e => { e.stopPropagation(); setViewPurchase(p); }}
-                              style={{background:'none',border:'none',cursor:'pointer',color:'#667eea',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center'}}
-                              title="Edit purchase"><Edit2 size={15}/></button>
+                            <button onClick={() => setViewPurchase(p)}
+                              style={{background:'none',border:'none',cursor:'pointer',color:'#22c55e',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center',fontSize:'16px'}}
+                              title="Edit purchase">✔</button>
                           )}
                         </td>
                       )}
                     </tr>
                   ));
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>

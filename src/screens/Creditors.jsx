@@ -63,14 +63,14 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
       <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
         <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Sale Entry</h3>
         <div style={{ marginBottom:'12px' }}>
-          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Items</label>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Products</label>
           <div style={{ overflowX:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px', minWidth:'280px' }}>
               <thead>
                 <tr style={{ background:'#f3f4f6' }}>
                   <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Product Name</th>
                   <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'60px' }}>Qty</th>
-                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Price</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Selling Price</th>
                 </tr>
               </thead>
               <tbody>
@@ -907,7 +907,7 @@ Kadaele Services`;
                         <th>Ref</th>
                         <th>QTY</th>
                         <th>PACKSIZE</th>
-                        <th>Items</th>
+                        <th>Products</th>
                         <th>Cost</th>
                         <th>Debit</th>
                         <th>Credit</th>

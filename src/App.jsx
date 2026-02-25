@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { HelpCircle, Menu, X, LogOut } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
-import SalesRegister from './screens/SalesRegister';
-import SalesJournal from './screens/SalesJournal';
-import CashJournal from './screens/CashJournal';
+import Checkout from './screens/Checkout';
+import SalesRecord from './screens/SalesRecord';
+import CashRecord from './screens/CashRecord';
 import PurchaseRecord from './screens/PurchaseRecord';
 import Debtors from './screens/Debtors';
 import Creditors from './screens/Creditors';
@@ -23,7 +23,7 @@ import './App.css';
 const PAGES = [
   { 
     name: 'CHECKOUT',   
-    component: SalesRegister,
+    component: Checkout,
     helpContent: `
       <h3>Sales and Checkout - How to Use</h3>
       <p><strong>This is your main point-of-sale screen for recording customer sales.</strong></p>
@@ -56,7 +56,7 @@ const PAGES = [
   },
   { 
     name: 'SALES RECORD',     
-    component: SalesJournal,
+    component: SalesRecord,
     helpContent: `
       <h3>Sales Record - How to Use</h3>
       <p><strong>View and filter all your sales transactions.</strong></p>
@@ -92,7 +92,7 @@ const PAGES = [
   },
   { 
     name: 'CASH RECORD',      
-    component: CashJournal,
+    component: CashRecord,
     helpContent: `
       <h3>Cash Journal - How to Use</h3>
       <p><strong>Track all cash coming in and going out of your business.</strong></p>

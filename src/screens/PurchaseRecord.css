@@ -109,7 +109,7 @@
 .pr-stat-box {
   flex: 1;
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   text-align: center;
 }
 
@@ -138,25 +138,33 @@
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--text-secondary, #555); margin-bottom: 2px;
 }
-.pr-stat-value { font-size: 18px; font-weight: 800; color: var(--text-primary, #1f2937); }
+.pr-stat-value { font-size: 15px; font-weight: 800; color: var(--text-primary, #1f2937); }
 
 /* ── Scroll body ── */
 .pr-scroll-body {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pr-table-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  position: relative;
 }
-.pr-table-wrapper { min-width: 100%; overflow-x: auto; }
 .pr-table {
   width: max-content; min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   table-layout: auto;
 }
-.pr-thead { position: sticky; top: 0; z-index: 10; }
+.pr-thead { position: sticky; top: 0; z-index: 20; background: var(--surface, #fff); }
 .pr-thead th {
   background: var(--surface, #fff);
-  padding: 10px 12px;
+  padding: 10px 17px;
   text-align: left;
   font-size: 11px;
   font-weight: 700;
@@ -173,7 +181,7 @@
 }
 .pr-row:hover { background: var(--surface, #fafafa); }
 .pr-row td {
-  padding: 10px 12px;
+  padding: 10px 17px;
   color: var(--text-primary, #374151);
   vertical-align: top;
 }
@@ -182,7 +190,8 @@
 
 .pr-col-right  { text-align: right !important; }
 .pr-col-center { text-align: center !important; }
-.pr-supplier-cell { font-weight: 600; max-width: 100px; }
+.pr-col-qty    { text-align: center !important; }
+.pr-supplier-cell { font-weight: 600; white-space: nowrap; }
 .pr-items-cell    { color: var(--text-secondary, #6b7280); max-width: 140px; font-size: 12px; }
 .pr-total-cell    { font-weight: 700; color: #4f46e5; }
 .pr-notes-cell    { color: var(--text-secondary, #6b7280); font-size: 12px; max-width: 100px; }
@@ -200,7 +209,7 @@
 .pr-pay-credit { background: #e0e7ff; color: #4f46e5; }
 
 /* Merged / sub-row cells */
-.pr-merged-cell { vertical-align: middle; }
+
 .pr-subrow-cell {
   border-top: 1px dashed #e5e7eb;
   vertical-align: middle;
@@ -613,4 +622,22 @@
   cursor: not-allowed;
   opacity: 0.6;
   border-color: #e5e7eb;
+}
+
+/* Creditors-style row classes for Purchase Record table */
+.pr-hist-first td { border-top: 1px solid #e5e7eb; }
+.pr-hist-cont td { border-top: 1px solid #f3f4f6; }
+.pr-hist-cont td.pr-merged-cell { border-top: none; }
+.pr-hist-first td.pr-merged-cell { border-top: 1px solid #e5e7eb; }
+.pr-running-cell {
+  font-weight: 700;
+  color: #667eea;
+  white-space: nowrap;
+}
+.pr-merged-cell {
+  vertical-align: middle !important;
+  text-align: left;
+  white-space: nowrap;
+  border-top: none !important;
+  border-bottom: none !important;
 }

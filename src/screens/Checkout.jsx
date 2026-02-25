@@ -5,7 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
-import './SalesRegister.css';
+import './Checkout.css';
 
 // ── Barcode beep (Web Audio API — no file needed) ──────────────────────────
 function playBeep() {
@@ -24,7 +24,7 @@ function playBeep() {
   } catch (_) {}
 }
 
-function SalesRegister() {
+function Checkout() {
   const { fmt } = useCurrency();
   const [goods, setGoods] = useState([]);
   const [catalogue, setCatalogue] = useState([]);
@@ -946,4 +946,4 @@ function SalesRegister() {
   );
 }
 
-export default SalesRegister;
+export default Checkout;
