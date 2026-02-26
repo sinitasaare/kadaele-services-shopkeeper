@@ -518,7 +518,7 @@ function Checkout() {
               {filteredGoods.map(good => (
                 <div key={good.id} className="sr-search-result-item"
                   onMouseDown={(e) => { e.preventDefault(); handleItemClick(good); }}>
-                  <span className="sr-item-name">{good.name}</span>
+                  <span className="sr-item-name">{good.name}{good.size ? <span className="sr-item-size"> · {good.size}</span> : null}</span>
                   <span className="sr-item-price">{fmt(good.price)}</span>
                 </div>
               ))}

@@ -329,7 +329,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
             <div className="us-search-results">
               {filteredGoods.map(good => (
                 <div key={good.id} className="us-search-item" onMouseDown={() => openQuantityModal(good)}>
-                  <span className="us-search-name">{good.name}</span>
+                  <span className="us-search-name">{good.name}{good.size ? <span className="us-search-size"> · {good.size}</span> : null}</span>
                   <span className="us-search-price">{fmt(good.price)}</span>
                   {typeof good.stock_quantity === 'number' && (
                     <span className={`us-search-stock ${good.stock_quantity === 0 ? 'us-search-stock-out' : ''}`}>

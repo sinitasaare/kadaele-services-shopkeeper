@@ -331,7 +331,7 @@ function AddPurchaseModal({ onSave, onClose }) {
                                     updateRow(row.id, 'packSize', g.size || '');
                                     updateRow(row.id, 'showDescDrop', false);
                                   }}>
-                                  {g.name}
+                                  {g.name}{g.size ? <span style={{color:"#6b7280",fontSize:"0.85em",marginLeft:4}}>{g.size}</span> : null}
                                 </div>
                               ))}
                             </div>
