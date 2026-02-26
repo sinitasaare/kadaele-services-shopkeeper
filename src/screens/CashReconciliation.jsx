@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dataService from '../services/dataService';
+import { auth } from '../services/firebaseConfig';
 import './CashReconciliation.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -152,6 +153,17 @@ function CashReconciliation() {
   }, [today]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Re-load once auth is confirmed (fixes empty Records after reinstall)
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(user => {
+      if (user) {
+        dataService._dailyCashFetched = false;
+        loadData();
+      }
+    });
+    return () => unsub();
+  }, [loadData]);
 
   // ── Open Day ─────────────────────────────────────────────────────────────
 
