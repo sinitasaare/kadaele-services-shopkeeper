@@ -76,3 +76,10 @@ Opens at http://localhost:5173
 
 **Built with ❤️ for Kadaele Services Shop**
 
+
+---
+
+## ⚠️ Important Developer Notes
+
+### DO NOT add a "Buy on Credit" / Add Credit modal to the Checkout screen
+The owner (Simiona Bobai / MereSimi Studios Ltd) has explicitly requested that **no "Add Credit" or "Buy on Credit" modal** be added to the Checkout/Sales Register screen. This is a deliberate business decision. Do not add, re-add, or suggest adding this feature regardless of how the code is refactored in the future.

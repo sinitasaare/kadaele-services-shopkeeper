@@ -38,6 +38,7 @@ const DATA_KEYS = {
   CASH_ENTRIES: 'cash_entries',
   PURCHASES: 'purchases',
   SYNC_QUEUE: 'sync_queue',
+  DAILY_CASH: 'daily_cash',
   LAST_SYNC: 'last_sync',
   SETTINGS: 'app_settings',
 };
@@ -55,6 +56,8 @@ class DataService {
     this._suppliersFetchedFromFirebase = false;
     this._goodsFetchedFromFirebase = false;
     this._cashEntriesFetched = false;
+    this._dailyCashFetched = false;
+    this._dailyCashFetched = false;
     this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     this._goodsUnsubscribe = null;   // Firebase real-time listener handle for goods
     
@@ -826,6 +829,7 @@ class DataService {
     this._goodsFetchedFromFirebase = false;
     this._salesFetchedFromFirebase = false;
     this._purchasesFetchedFromFirebase = false;
+    this._dailyCashFetched = false;
   }
 
   async setDebtors(debtors) {
@@ -1347,6 +1351,22 @@ class DataService {
           }, { merge: true });
           synced++;
         }
+        // Queue items for daily_cash docs
+        if (item.type === 'daily_cash' && item.data?.id) {
+          const { opened_at_server: _oas, closed_at_server: _cas, last_calculated_at_server: _lcas, ...dcRest } = item.data;
+          await setDoc(doc(db, 'daily_cash', item.data.id), {
+            ...dcRest, updatedAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items for daily_cash docs
+        if (item.type === 'daily_cash' && item.data?.id) {
+          const { opened_at_server: _oas, closed_at_server: _cas, last_calculated_at_server: _lcas, ...dcRest } = item.data;
+          await setDoc(doc(db, 'daily_cash', item.data.id), {
+            ...dcRest, updatedAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
         // Queue items added by addCashEntry have { type: 'cash_entry', data: entry }
         if (item.type === 'cash_entry' && item.data) {
           await setDoc(doc(db, 'cash_entries', item.data.id), {
@@ -1516,17 +1536,24 @@ class DataService {
   async addCashEntry(entry) {
     try {
       const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+      const _user = auth.currentUser;
+      const _entryDate = entry.date || new Date().toISOString();
+      const _bd = entry.business_date || _entryDate.slice(0, 10);
       const newEntry = {
         id: this.generateId(),
         type: entry.type,         // 'in' | 'out'
         amount: parseFloat(entry.amount),
         note: entry.note || '',
-        date: entry.date || new Date().toISOString(),
+        date: _entryDate,
         source: entry.source || 'manual',
+        business_date: _bd,
+        created_by_uid:  entry.created_by_uid  || _user?.uid  || null,
+        created_by_name: entry.created_by_name || _user?.email || null,
         createdAt: new Date().toISOString(),
         ...(entry.saleId      ? { saleId:      entry.saleId      } : {}),
         ...(entry.debtorId    ? { debtorId:    entry.debtorId    } : {}),
         ...(entry.purchaseId  ? { purchaseId:  entry.purchaseId  } : {}),
+        ...(entry.creditorId  ? { creditorId:  entry.creditorId  } : {}),
         ...(entry.invoiceRef  ? { invoiceRef:  entry.invoiceRef  } : {}),
         ...(entry.isUnrecorded ? { isUnrecorded: true }           : {}),
       };
@@ -1964,5 +1991,198 @@ class DataService {
     }
   }
 }
+
+  // ════════════════════════════════════════════════════════════════════
+  // DAILY CASH RECONCILIATION
+  // ════════════════════════════════════════════════════════════════════
+
+  _todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  _userName() {
+    const u = auth.currentUser;
+    if (!u) return 'Unknown';
+    if (u.displayName) return u.displayName;
+    if (u.email) return u.email.split('@')[0];
+    return u.uid.slice(0, 8);
+  }
+
+  async getDailyCashRecords() {
+    try {
+      if (this.isOnline && auth.currentUser && !this._dailyCashFetched) {
+        this._dailyCashFetched = true;
+        const snap = await getDocs(collection(db, 'daily_cash'));
+        const fbDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const local  = await localforage.getItem(DATA_KEYS.DAILY_CASH) || [];
+        const localMap = new Map(local.map(r => [r.id, r]));
+        for (const fb of fbDocs) {
+          const loc = localMap.get(fb.id);
+          if (!loc) { localMap.set(fb.id, fb); continue; }
+          const fbT  = new Date(fb.updatedAt  || fb.opened_at_client || 0).getTime();
+          const locT = new Date(loc.updatedAt || loc.opened_at_client || 0).getTime();
+          if (fbT > locT) localMap.set(fb.id, fb);
+        }
+        const merged = Array.from(localMap.values());
+        await localforage.setItem(DATA_KEYS.DAILY_CASH, merged);
+        return merged;
+      }
+    } catch (e) {
+      console.error('getDailyCashRecords Firebase error:', e);
+    }
+    return await localforage.getItem(DATA_KEYS.DAILY_CASH) || [];
+  }
+
+  async getDailyCashByDate(business_date) {
+    const all = await this.getDailyCashRecords();
+    return all.find(r => r.business_date === business_date) || null;
+  }
+
+  async _saveDailyCashDoc(docData) {
+    const all = await localforage.getItem(DATA_KEYS.DAILY_CASH) || [];
+    const idx = all.findIndex(r => r.id === docData.id);
+    if (idx >= 0) all[idx] = docData; else all.push(docData);
+    await localforage.setItem(DATA_KEYS.DAILY_CASH, all);
+
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const { opened_at_server: _oas, closed_at_server: _cas, last_calculated_at_server: _lcas, ...rest } = docData;
+        await setDoc(doc(db, 'daily_cash', docData.id), {
+          ...rest,
+          opened_at_server:          docData.status === 'open'   ? serverTimestamp() : (docData.opened_at_server || null),
+          closed_at_server:          docData.status === 'closed' ? serverTimestamp() : null,
+          last_calculated_at_server: serverTimestamp(),
+          updatedAt:                 serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error('daily_cash Firestore sync error:', err);
+        await this.addToSyncQueue({ type: 'daily_cash', data: docData });
+      }
+    } else {
+      await this.addToSyncQueue({ type: 'daily_cash', data: docData });
+    }
+    return docData;
+  }
+
+  async openDay({ opening_float }) {
+    const user  = auth.currentUser;
+    const today = this._todayStr();
+    const now   = new Date().toISOString();
+    const float = parseFloat(opening_float) || 0;
+
+    const summary = await this.calculateExpectedCash(today);
+
+    const docData = {
+      id:               today,
+      business_date:    today,
+      status:           'open',
+      locked:           false,
+      opening_float:    float,
+      counted_cash:     null,
+      expected_cash:    float + summary.sum_in - summary.sum_out,
+      difference:       0,
+      notes:            '',
+      opened_by_uid:    user?.uid  || null,
+      opened_by_name:   this._userName(),
+      opened_at_client: now,
+      closed_by_uid:    null,
+      closed_by_name:   null,
+      closed_at_client: null,
+      last_calculated_at_client: now,
+      updatedAt:        now,
+    };
+
+    await this._saveDailyCashDoc(docData);
+    await localforage.setItem('current_business_date', today);
+
+    await this.addCashEntry({
+      type:            'in',
+      amount:          float,
+      note:            `Opening Float — Day opened by ${this._userName()}`,
+      date:            now,
+      source:          'open_day',
+      business_date:   today,
+      created_by_uid:  user?.uid  || null,
+      created_by_name: this._userName(),
+    });
+
+    return docData;
+  }
+
+  async closeDay({ counted_cash, notes }) {
+    const user    = auth.currentUser;
+    const today   = this._todayStr();
+    const now     = new Date().toISOString();
+    const counted = parseFloat(counted_cash) || 0;
+
+    const summary  = await this.calculateExpectedCash(today);
+    const existing = await this.getDailyCashByDate(today);
+    const float    = existing?.opening_float || 0;
+    const expected = float + summary.sum_in - summary.sum_out;
+    const diff     = counted - expected;
+
+    const docData = {
+      ...(existing || {}),
+      id:               today,
+      business_date:    today,
+      status:           'closed',
+      locked:           true,
+      opening_float:    float,
+      counted_cash:     counted,
+      expected_cash:    expected,
+      difference:       diff,
+      notes:            notes || '',
+      opened_by_uid:    existing?.opened_by_uid  || null,
+      opened_by_name:   existing?.opened_by_name || null,
+      opened_at_client: existing?.opened_at_client || now,
+      closed_by_uid:    user?.uid  || null,
+      closed_by_name:   this._userName(),
+      closed_at_client: now,
+      last_calculated_at_client: now,
+      updatedAt:        now,
+    };
+
+    await this._saveDailyCashDoc(docData);
+
+    await this.addCashEntry({
+      type:            'in',
+      amount:          counted,
+      note:            `Closing Count — Day closed by ${this._userName()}. Difference: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`,
+      date:            now,
+      source:          'close_day',
+      business_date:   today,
+      created_by_uid:  user?.uid  || null,
+      created_by_name: this._userName(),
+    });
+
+    return docData;
+  }
+
+  async calculateExpectedCash(business_date) {
+    const entries = await this.getCashEntriesByDate(business_date);
+    let sum_in = 0, sum_out = 0;
+    for (const e of entries) {
+      if (e.source === 'open_day' || e.source === 'close_day') continue;
+      if (e.type === 'in')  sum_in  += parseFloat(e.amount) || 0;
+      if (e.type === 'out') sum_out += parseFloat(e.amount) || 0;
+    }
+    const rec      = await this.getDailyCashByDate(business_date);
+    const float    = rec?.opening_float || 0;
+    const expected = float + sum_in - sum_out;
+    return { opening_float: float, sum_in, sum_out, expected };
+  }
+
+  async getCashEntriesByDate(business_date) {
+    const all = await this.getCashEntries();
+    return all.filter(e => {
+      if (e.business_date) return e.business_date === business_date;
+      const d = e.date || e.createdAt;
+      return d ? d.slice(0, 10) === business_date : false;
+    });
+  }
+
+
+  // ════════════════════════════════════════════════════════════════════
 
 export default new DataService();

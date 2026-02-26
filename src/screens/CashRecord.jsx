@@ -320,9 +320,12 @@ function CashRecord() {
     if (!resolvedNote) { alert('Please select and complete a description.'); return; }
     setIsProcessing(true);
     try {
+      const _now = new Date();
       await dataService.addCashEntry({
         type: newType, amount, note: resolvedNote,
-        date: new Date().toISOString(), source: 'manual',
+        date: _now.toISOString(),
+        source: 'manual',
+        business_date: _now.toISOString().slice(0, 10),
       });
       closeAddModal();
       await loadEntries();

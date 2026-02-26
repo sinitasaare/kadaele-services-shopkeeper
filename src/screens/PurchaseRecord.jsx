@@ -477,7 +477,7 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
   const updateRow = (id, field, val) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
   const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
   const addRow = () => setRows(prev => [...prev, { id: nextId.current++, qty:'', description:'', costPrice:'', packUnit:'', packSize:'' }]);
-  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0)*(parseFloat(r.costPrice)||0), 0);
+  const itemTotal = rows.reduce((sum, r) => sum + (parseFloat(r.qty)||0)*(parseFloat(r.packUnit)||0)*(parseFloat(r.costPrice)||0), 0);
 
   const handleDelete = async () => {
     if (!window.confirm('Delete this purchase record? This cannot be undone.')) return;

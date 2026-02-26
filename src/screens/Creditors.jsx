@@ -127,8 +127,6 @@ function Creditors() {
   const [receiptNumber, setReceiptNumber] = useState('');
   const [loading, setLoading]           = useState(true);
   const [showNotifyModal, setShowNotifyModal] = useState(false);
-  const [showAddCreditorModal, setShowAddCreditorModal] = useState(false);
-  const [newCreditor, setNewCreditor]       = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [supplierList, setSupplierList]     = useState([]);
   const [isEditMode, setIsEditMode]     = useState(false);
@@ -230,15 +228,6 @@ function Creditors() {
     setIsEditMode(false); setEditedCreditor(null); setActiveTab('details');
   };
 
-  const openAddCreditorModal = () => {
-    setShowAddCreditorModal(true);
-    setNewCreditor({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
-    dataService.getSuppliers().then(s => setSupplierList(s || []));
-  };
-  const closeAddCreditorModal = () => {
-    setShowAddCreditorModal(false);
-    setNewCreditor({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
-  };
 
   const handleAddCreditor = async (e) => {
     e.preventDefault();
@@ -762,14 +751,14 @@ Kadaele Services`;
             </div>
           )}
         </div>
-        <button className="d-add-btn" onClick={openAddCreditorModal}>+ Add Creditor</button>
+
       </div>
 
       {/* ── Creditor cards ── */}
       <div className="d-grid">
         {filteredCreditors.length === 0 ? (
           <div className="d-empty">
-            {searchTerm ? 'No creditors match your search.' : 'No creditors yet. Click "+ Add Creditor" to get started.'}
+            {searchTerm ? 'No creditors match your search.' : 'No creditors yet.'}
           </div>
         ) : (
           filteredCreditors.map(creditor => (
@@ -990,84 +979,6 @@ Kadaele Services`;
         </div>
       )}
 
-      {/* ── Add Creditor Modal ── */}
-      {showAddCreditorModal && (
-        <div className="d-overlay" onClick={closeAddCreditorModal}>
-          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="d-modal-header">
-              <h2 className="d-modal-title">Add New Creditor</h2>
-              <button className="d-close-btn" onClick={closeAddCreditorModal}><X size={22} /></button>
-            </div>
-            <form className="d-add-form" onSubmit={handleAddCreditor}>
-              {/* Name of Creditor — supplier picker */}
-              <div className="d-form-group">
-                <label>Name of Creditor *</label>
-                <div className="d-supplier-pick-row" onClick={() => setShowSupplierPicker(true)}
-                  style={{cursor:'pointer',padding:'10px 12px',border:'1.5px solid #e5e7eb',borderRadius:'10px',
-                    background:'#f9fafb',fontSize:'14px',color: newCreditor.fullName ? '#1f2937':'#9ca3af',
-                    display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <span>{newCreditor.fullName || 'Select from suppliers list'}</span>
-                  <span style={{fontSize:'18px',color:'#667eea'}}>▾</span>
-                </div>
-              </div>
-              {[['Phone *','tel','phone','Phone number'],
-                ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
-                <div className="d-form-group" key={field}>
-                  <label>{lbl}</label>
-                  <input type={type} value={newCreditor[field]||''} placeholder={ph}
-                    onChange={e => setNewCreditor({...newCreditor,[field]:e.target.value})} />
-                </div>
-              ))}
-              <div className="d-form-group">
-                <label>Address *</label>
-                <textarea rows="2" value={newCreditor.address||''} placeholder="Enter address"
-                  onChange={e => setNewCreditor({...newCreditor,address:e.target.value})} />
-              </div>
-              <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
-              <div className="d-form-actions">
-                <button type="button" className="d-btn-cancel" onClick={closeAddCreditorModal}>Cancel</button>
-                <button type="submit" className="d-btn-save">Save</button>
-              </div>
-            </form>
-
-            {/* ── Supplier Picker child modal ── */}
-            {showSupplierPicker && (
-              <div className="d-overlay" style={{zIndex:3000}} onClick={() => setShowSupplierPicker(false)}>
-                <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxHeight:'70vh',display:'flex',flexDirection:'column'}}>
-                  <div className="d-modal-header">
-                    <h2 className="d-modal-title">Select Supplier</h2>
-                    <button className="d-close-btn" onClick={() => setShowSupplierPicker(false)}><X size={22}/></button>
-                  </div>
-                  <div style={{overflowY:'auto',flex:1}}>
-                    {supplierList.length === 0
-                      ? <p style={{padding:'16px',color:'#9ca3af',textAlign:'center'}}>No suppliers saved yet</p>
-                      : supplierList.map(s => {
-                          const name = s.name || s.customerName || '—';
-                          return (
-                            <div key={s.id} onClick={() => {
-                              setNewCreditor({...newCreditor, fullName: name, phone: s.phone||s.customerPhone||newCreditor.phone||'',
-                                whatsapp: s.whatsapp||newCreditor.whatsapp||'', email: s.email||newCreditor.email||'',
-                                address: s.address||newCreditor.address||'', gender: s.gender||''});
-                              setShowSupplierPicker(false);
-                            }} style={{padding:'12px 16px',borderBottom:'1px solid #f0f0f0',cursor:'pointer',
-                              fontSize:'14px',color:'#1f2937',display:'flex',alignItems:'center',gap:'10px'}}>
-                              <span style={{width:32,height:32,borderRadius:'50%',background:'#667eea',
-                                color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',
-                                fontWeight:700,fontSize:'13px',flexShrink:0}}>
-                                {name[0]?.toUpperCase()}
-                              </span>
-                              {name}
-                            </div>
-                          );
-                        })
-                    }
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── Payment / Deposit Modal ── */}
       {showPaymentModal && (
