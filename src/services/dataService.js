@@ -741,30 +741,59 @@ class DataService {
   }
 
   async voidSale(id, reason) {
-    return await this.updateSale(id, { 
-      status: 'voided', 
+    const sales = await this.getSales();
+    const original = sales.find(s => s.id === id);
+    const now = (await this.getServerTime()).toISOString();
+    const result = await this.updateSale(id, {
+      status: 'voided',
       voidReason: reason,
-      voidedAt: (await this.getServerTime()).toISOString(),
+      voidedAt: now,
       allowAfter24Hours: true,
     });
+    // Reverse the original cash IN if it was a cash sale
+    if (original && original.paymentType === 'cash') {
+      await this.addCashEntry({
+        type: 'out',
+        amount: parseFloat(original.total) || 0,
+        note: `Void — Sale #${id.slice(-6)} reversed. Reason: ${reason}`,
+        date: now,
+        source: 'void_sale',
+        saleId: id,
+        business_date: now.slice(0, 10),
+      });
+    }
+    return result;
   }
 
   async refundSale(id, amount, reason) {
+    const sales = await this.getSales();
+    const original = sales.find(s => s.id === id);
+    const now = (await this.getServerTime()).toISOString();
     const sale = await this.updateSale(id, {
       status: 'refunded',
       refund: {
         amount: parseFloat(amount),
         reason: reason,
-        date: (await this.getServerTime()).toISOString(),
+        date: now,
       },
       allowAfter24Hours: true,
     });
-    
+    // Record cash OUT for the refund amount (cash sales only)
+    if (original && original.paymentType === 'cash') {
+      await this.addCashEntry({
+        type: 'out',
+        amount: parseFloat(amount) || 0,
+        note: `Refund — Sale #${id.slice(-6)}. Reason: ${reason}`,
+        date: now,
+        source: 'refund_sale',
+        saleId: id,
+        business_date: now.slice(0, 10),
+      });
+    }
     // Update debtors if credit sale
     if (sale && sale.paymentType === 'credit') {
       await this.recalculateDebtors();
     }
-    
     return sale;
   }
 
@@ -1348,14 +1377,6 @@ class DataService {
             ...debtorForFirestore,
             deposits: depositsForFirestore,
             updatedAt: serverTimestamp(),
-          }, { merge: true });
-          synced++;
-        }
-        // Queue items for daily_cash docs
-        if (item.type === 'daily_cash' && item.data?.id) {
-          const { opened_at_server: _oas, closed_at_server: _cas, last_calculated_at_server: _lcas, ...dcRest } = item.data;
-          await setDoc(doc(db, 'daily_cash', item.data.id), {
-            ...dcRest, updatedAt: serverTimestamp(),
           }, { merge: true });
           synced++;
         }
@@ -2095,17 +2116,6 @@ class DataService {
     await this._saveDailyCashDoc(docData);
     await localforage.setItem('current_business_date', today);
 
-    await this.addCashEntry({
-      type:            'in',
-      amount:          float,
-      note:            `Opening Float — Day opened by ${this.userName()}`,
-      date:            now,
-      source:          'open_day',
-      business_date:   today,
-      created_by_uid:  user?.uid  || null,
-      created_by_name: this.userName(),
-    });
-
     return docData;
   }
 
@@ -2143,17 +2153,6 @@ class DataService {
     };
 
     await this._saveDailyCashDoc(docData);
-
-    await this.addCashEntry({
-      type:            'in',
-      amount:          counted,
-      note:            `Closing Count — Day closed by ${this.userName()}. Difference: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`,
-      date:            now,
-      source:          'close_day',
-      business_date:   today,
-      created_by_uid:  user?.uid  || null,
-      created_by_name: this.userName(),
-    });
 
     return docData;
   }
