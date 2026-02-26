@@ -15,8 +15,9 @@ jobs:
       with:
         node-version: '18'
 
-    - name: Install dependencies
+    - name: Install dependencies (fresh, no lockfile)
       run: |
+        rm -f package-lock.json
         npm install
         npm install firebase --legacy-peer-deps
 
@@ -42,17 +43,9 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
-    # ═══════════════════════════════════════════════════════════
-    # Capacitor 5.5.1 defaults to targetSdk=33 which triggers
-    # "built for older version" on Android 15.
-    #
-    # fix_sdk.py upgrades to a TESTED COMPATIBLE set:
-    #   targetSdk=34, compileSdk=34, AGP=8.1.4, Gradle=8.4
-    #
-    # These 4 values are interdependent — never change one
-    # without checking the others.
-    # ═══════════════════════════════════════════════════════════
-    - name: Upgrade SDK target to 34 (fix older-version warning)
+    # Capacitor 5.7.x should default to targetSdk=34, but
+    # this step ensures it in case defaults differ.
+    - name: Ensure SDK target is 34
       run: |
         python3 fix_sdk.py
 
@@ -99,4 +92,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: kadaele-shopkeeper
-        path: android/app/build/outputs/apk/debug/kadaele-shopkeeper.apk 
+        path: android/app/build/outputs/apk/debug/kadaele-shopkeeper.apk
