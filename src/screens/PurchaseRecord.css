@@ -641,3 +641,14 @@
   border-top: none !important;
   border-bottom: none !important;
 }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .pr-stat-box { background: #1e2a3a; border-color: #334155; }
+[data-theme="dark"] .pr-stat-label { color: #1e3a8a !important; }
+[data-theme="dark"] .pr-stat-value { color: #1e3a8a !important; }
+[data-theme="dark"] .pr-stat-green-val { color: #1e3a8a !important; }
+[data-theme="dark"] .pr-stat-indigo-lbl { color: #1e3a8a !important; }
+[data-theme="dark"] .pr-stat-indigo-val { color: #1e3a8a !important; }
+[data-theme="dark"] .pr-table td { color: #ffffff; }
+[data-theme="dark"] .pr-table th { color: #ffffff; }
+[data-theme="dark"] .pr-row td { color: #ffffff; }

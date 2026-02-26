@@ -822,3 +822,15 @@
 
 .d-hist-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1.5px solid #e5e7eb; }
 .d-img-cell { text-align: center; }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .d-card { background: #1e2a3a; border-color: #334155; }
+[data-theme="dark"] .d-card-name { color: #ffffff; }
+[data-theme="dark"] .d-modal { background: #1e2a3a; }
+[data-theme="dark"] .d-modal-title { color: #ffffff; }
+[data-theme="dark"] .d-modal label { color: #ffffff; }
+[data-theme="dark"] .d-history-table td { color: #000000; background: #f8f9fa; }
+[data-theme="dark"] .d-history-table th { color: #ffffff; background: #374151; }
+[data-theme="dark"] .d-history-table tbody tr:hover { background: #e5e7eb; }
+[data-theme="dark"] .d-detail-label { color: #ffffff; }
+[data-theme="dark"] .d-gender-option { color: #ffffff; }

@@ -239,3 +239,10 @@
   .sj-thead th, .sales-table td { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .date-range-inputs { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .sales-table td { color: #ffffff; }
+[data-theme="dark"] .sales-table th { color: #ffffff; }
+[data-theme="dark"] .merged-cell { color: #ffffff; }
+[data-theme="dark"] .items-cell { color: #ffffff; }
+[data-theme="dark"] .empty-cell { color: #ffffff; }

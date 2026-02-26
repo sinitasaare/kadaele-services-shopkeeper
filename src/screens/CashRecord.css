@@ -398,3 +398,10 @@
 }
 
 .cj-ref-cell { font-size: 12px; color: var(--text-secondary, #6b7280); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .cj-table td { color: #ffffff; }
+[data-theme="dark"] .cj-table th { color: #ffffff; }
+[data-theme="dark"] .cj-modal-content { background: #1e2a3a; }
+[data-theme="dark"] .cj-modal-title { color: #ffffff; }
+[data-theme="dark"] .cj-modal-content label { color: #ffffff; }
