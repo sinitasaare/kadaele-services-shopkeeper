@@ -1990,7 +1990,6 @@ class DataService {
       return { success: false, error: error.message };
     }
   }
-}
 
   // ════════════════════════════════════════════════════════════════════
   // DAILY CASH RECONCILIATION
@@ -2184,5 +2183,7 @@ class DataService {
 
 
   // ════════════════════════════════════════════════════════════════════
+
+}
 
 export default new DataService();
