@@ -9,11 +9,22 @@ with open("android/variables.gradle", "w") as f:
     f.write(content)
 print("Patched variables.gradle to 34")
 
-# 2. Fix styles.xml — disable edge-to-edge enforcement for Android 15
+# 2. Update Android Gradle Plugin to 8.3.0 (supports compileSdk 34 + edge-to-edge attr)
+with open("android/build.gradle") as f:
+    content = f.read()
+content = content.replace(
+    "classpath 'com.android.tools.build:gradle:8.0.0'",
+    "classpath 'com.android.tools.build:gradle:8.3.0'"
+)
+with open("android/build.gradle", "w") as f:
+    f.write(content)
+print("Updated Android Gradle Plugin to 8.3.0")
+
+# 3. Fix styles.xml - opt out of edge-to-edge (requires AGP 8.3+)
 styles_path = "android/app/src/main/res/values/styles.xml"
 with open(styles_path) as f:
     styles = f.read()
-if 'android:windowOptOutEdgeToEdgeEnforcement' not in styles:
+if 'windowOptOutEdgeToEdgeEnforcement' not in styles:
     styles = styles.replace(
         '</style>',
         '    <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>\n    </style>',
@@ -21,10 +32,11 @@ if 'android:windowOptOutEdgeToEdgeEnforcement' not in styles:
     )
     with open(styles_path, "w") as f:
         f.write(styles)
-    print("Patched styles.xml - disabled edge-to-edge enforcement")
+    print("Patched styles.xml")
 else:
     print("styles.xml already patched")
 
+print("=== build.gradle ===")
+with open("android/build.gradle") as f: print(f.read())
 print("=== styles.xml ===")
-with open(styles_path) as f:
-    print(f.read())
+with open(styles_path) as f: print(f.read())
