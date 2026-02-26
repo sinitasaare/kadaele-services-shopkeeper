@@ -32,16 +32,38 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Install Android SDK components
+      run: |
+        sdkmanager "build-tools;34.0.0" "platforms;android-34"
+
     - name: Install Capacitor CLI
       run: npm install -g @capacitor/cli
 
     - name: Add Android Platform
       run: npx cap add android
 
-    - name: Pin Gradle to stable version
+    # ═══════════════════════════════════════════════════════════
+    # KEY FIX: Do NOT downgrade AGP, Gradle, or targetSdkVersion.
+    # Capacitor 5.5.1 generates correct defaults (targetSdk=34,
+    # compileSdk=34, compatible AGP+Gradle). Overriding these
+    # was the root cause of BOTH the "older version" warning
+    # (targetSdk=33) AND the crashes (AGP 8.0.0 incompatibility).
+    #
+    # We only print the values so you can verify in the logs.
+    # ═══════════════════════════════════════════════════════════
+    - name: Verify Android SDK settings (DO NOT MODIFY)
       run: |
-        sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2.1-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+        echo "=== variables.gradle (Capacitor defaults - leave as-is) ==="
+        cat android/variables.gradle
+        echo ""
+        echo "=== gradle-wrapper.properties ==="
         cat android/gradle/wrapper/gradle-wrapper.properties
+        echo ""
+        echo "=== root build.gradle ==="
+        cat android/build.gradle
+        echo ""
+        echo "=== app/build.gradle ==="
+        cat android/app/build.gradle
 
     - name: Install ImageMagick
       run: |
@@ -61,16 +83,6 @@ jobs:
     - name: Sync Capacitor
       run: npx cap sync android
 
-    - name: Force compileSdk/targetSdk to 34
-      run: |
-        python3 fix_sdk.py
-        echo "=== root build.gradle ==="
-        cat android/build.gradle
-        echo "=== app/build.gradle ==="
-        cat android/app/build.gradle
-        echo "=== variables.gradle ==="
-        cat android/variables.gradle || true
-
     - name: Cache Gradle
       uses: actions/cache@v4
       with:
@@ -89,11 +101,6 @@ jobs:
         rm -f app/src/main/res/values/ic_launcher_background.xml
         chmod +x gradlew
         ./gradlew assembleDebug
-
-    - name: Verify APK targetSdkVersion
-      run: |
-        SDK=$(ls $ANDROID_SDK_ROOT/build-tools | sort -V | tail -n 1)
-        $ANDROID_SDK_ROOT/build-tools/$SDK/aapt dump badging android/app/build/outputs/apk/debug/app-debug.apk | grep -i targetSdkVersion || true
 
     - name: Rename APK
       run: |
