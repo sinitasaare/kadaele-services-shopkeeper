@@ -99,4 +99,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: kadaele-shopkeeper
-        path: android/app/build/outputs/apk/debug/kadaele-shopkeeper.apk
+        path: android/app/build/outputs/apk/debug/kadaele-shopkeeper.apk 
