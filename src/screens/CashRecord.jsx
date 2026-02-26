@@ -161,8 +161,6 @@ function CashRecord() {
   const [editEntry, setEditEntry] = useState(null);
 
   // Opening balance
-  const [showOpeningModal, setShowOpeningModal] = useState(false);
-  const [openingInput, setOpeningInput] = useState('');
 
   const [typeFilter, setTypeFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('today');
@@ -647,47 +645,6 @@ function CashRecord() {
         </div>
       )}
 
-      {/* ── Opening Balance Modal — shown once on first use ── */}
-      {showOpeningModal && (
-        <div className="cj-modal-overlay">
-          <div className="cj-modal-content">
-            <h2 className="cj-modal-title">Set Opening Balance</h2>
-            <p style={{ fontSize:'13px', color:'#6b7280', marginBottom:'16px', lineHeight:'1.5' }}>
-              Enter the amount of cash you currently have on hand before starting to use this system.
-              This sets your starting balance. You can enter <strong>0</strong> if you are starting fresh.
-            </p>
-            <div className="cj-modal-field">
-              <label>Cash on Hand</label>
-              <input
-                type="number"
-                className="cj-modal-input"
-                placeholder="0.00"
-                value={openingInput}
-                onChange={e => setOpeningInput(e.target.value)}
-                min="0"
-                step="0.01"
-                autoFocus
-              />
-            </div>
-            <div className="cj-modal-buttons">
-              <button className="cj-modal-cancel" onClick={() => {
-                // User dismissed — mark as set to 0 so we don't prompt again
-                dataService.getSettings().then(s =>
-                  dataService.saveSettings({ ...s, openingBalance: 0 })
-                );
-                setShowOpeningModal(false);
-              }}>Skip (set to 0)</button>
-              <button className="cj-modal-save" onClick={async () => {
-                const amount = parseFloat(openingInput) || 0;
-                await dataService.setOpeningBalance(amount);
-                setShowOpeningModal(false);
-                setOpeningInput('');
-                await loadEntries();
-              }}>Save Opening Balance</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Edit Cash Entry Modal (2-hour window) ── */}
       {editEntry && (
