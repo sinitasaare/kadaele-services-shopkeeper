@@ -405,3 +405,5 @@
 [data-theme="dark"] .cj-modal-content { background: #1e2a3a; }
 [data-theme="dark"] .cj-modal-title { color: #ffffff; }
 [data-theme="dark"] .cj-modal-content label { color: #ffffff; }
+
+[data-theme="dark"] .cj-modal-cancel { color: #374151; }

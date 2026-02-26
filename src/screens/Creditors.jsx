@@ -151,8 +151,12 @@ function Creditors() {
   const loadCreditors = async () => {
     try {
       setLoading(true);
-      const data = await dataService.getCreditors();
+      const [data, suppData] = await Promise.all([
+        dataService.getCreditors(),
+        dataService.getSuppliers(),
+      ]);
       setCreditors(data || []);
+      setSupplierList(suppData || []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -823,14 +827,17 @@ Kadaele Services`;
                   </div>
                 ) : (
                   <div className="d-details-view">
-                    {[
-                      ['Name', selectedCreditor.name || selectedCreditor.customerName],
-                      ['Gender', selectedCreditor.gender],
-                      ['Phone', selectedCreditor.phone || selectedCreditor.customerPhone],
-                      ['WhatsApp', selectedCreditor.whatsapp],
-                      ['Email', selectedCreditor.email],
-                      ['Address', selectedCreditor.address],
-                    ].map(([lbl, val]) => (
+                    {(() => {
+                      const sup = supplierList.find(s => s.id === selectedCreditor.id) || {};
+                      return [
+                        ['Name', selectedCreditor.name || selectedCreditor.customerName || sup.name || sup.customerName],
+                        ['Gender', selectedCreditor.gender || sup.gender],
+                        ['Phone', selectedCreditor.phone || selectedCreditor.customerPhone || sup.phone || sup.customerPhone],
+                        ['WhatsApp', selectedCreditor.whatsapp || sup.whatsapp],
+                        ['Email', selectedCreditor.email || sup.email],
+                        ['Address', selectedCreditor.address || sup.address],
+                      ];
+                    })().map(([lbl, val]) => (
                       <div className="d-detail-row" key={lbl}>
                         <span className="d-detail-label">{lbl}</span>
                         <span className="d-detail-value">{val || 'N/A'}</span>

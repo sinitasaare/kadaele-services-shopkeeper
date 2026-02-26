@@ -652,3 +652,7 @@
 [data-theme="dark"] .pr-table td { color: #ffffff; }
 [data-theme="dark"] .pr-table th { color: #ffffff; }
 [data-theme="dark"] .pr-row td { color: #ffffff; }
+
+[data-theme="dark"] .pr-stat-label { color: #ffffff !important; }
+
+[data-theme="dark"] .pr-add-row-btn { color: #3b82f6 !important; }

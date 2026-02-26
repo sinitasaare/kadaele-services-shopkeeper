@@ -425,3 +425,5 @@
 [data-theme="dark"] .d-history-table td { color: #000000; background: #f8f9fa; }
 [data-theme="dark"] .d-history-table th { color: #ffffff; background: #374151; }
 [data-theme="dark"] .d-history-table tbody tr:hover { background: #e5e7eb; }
+
+[data-theme="dark"] .d-detail-label { color: #374151; }

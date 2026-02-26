@@ -956,3 +956,6 @@
   transition: background 0.15s;
 }
 .sr-change-close-btn:hover { background: #d1d5db; }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .sr-btn-cancel { color: #374151; }
