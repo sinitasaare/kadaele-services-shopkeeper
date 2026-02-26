@@ -40,3 +40,14 @@ print("=== build.gradle ===")
 with open("android/build.gradle") as f: print(f.read())
 print("=== styles.xml ===")
 with open(styles_path) as f: print(f.read())
+
+# 4. Update Gradle wrapper to 8.4 (required by AGP 8.3.0)
+wrapper_path = "android/gradle/wrapper/gradle-wrapper.properties"
+with open(wrapper_path) as f:
+    wrapper = f.read()
+import re
+wrapper = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-all.zip", wrapper)
+with open(wrapper_path, "w") as f:
+    f.write(wrapper)
+print("Updated Gradle wrapper to 8.4")
+print(wrapper)
