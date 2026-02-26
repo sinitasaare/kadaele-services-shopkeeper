@@ -32,7 +32,7 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Install Android SDK components
+    - name: Install Android SDK 34 components
       run: |
         sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
@@ -43,27 +43,18 @@ jobs:
       run: npx cap add android
 
     # ═══════════════════════════════════════════════════════════
-    # KEY FIX: Do NOT downgrade AGP, Gradle, or targetSdkVersion.
-    # Capacitor 5.5.1 generates correct defaults (targetSdk=34,
-    # compileSdk=34, compatible AGP+Gradle). Overriding these
-    # was the root cause of BOTH the "older version" warning
-    # (targetSdk=33) AND the crashes (AGP 8.0.0 incompatibility).
+    # Capacitor 5.5.1 defaults to targetSdk=33 which triggers
+    # "built for older version" on Android 15.
     #
-    # We only print the values so you can verify in the logs.
+    # fix_sdk.py upgrades to a TESTED COMPATIBLE set:
+    #   targetSdk=34, compileSdk=34, AGP=8.1.4, Gradle=8.4
+    #
+    # These 4 values are interdependent — never change one
+    # without checking the others.
     # ═══════════════════════════════════════════════════════════
-    - name: Verify Android SDK settings (DO NOT MODIFY)
+    - name: Upgrade SDK target to 34 (fix older-version warning)
       run: |
-        echo "=== variables.gradle (Capacitor defaults - leave as-is) ==="
-        cat android/variables.gradle
-        echo ""
-        echo "=== gradle-wrapper.properties ==="
-        cat android/gradle/wrapper/gradle-wrapper.properties
-        echo ""
-        echo "=== root build.gradle ==="
-        cat android/build.gradle
-        echo ""
-        echo "=== app/build.gradle ==="
-        cat android/app/build.gradle
+        python3 fix_sdk.py
 
     - name: Install ImageMagick
       run: |
@@ -96,8 +87,6 @@ jobs:
     - name: Build APK
       run: |
         cd android
-        # Remove Capacitor's auto-generated ic_launcher_background.xml to avoid
-        # duplicate resource conflict with the colour already in colors.xml
         rm -f app/src/main/res/values/ic_launcher_background.xml
         chmod +x gradlew
         ./gradlew assembleDebug
