@@ -47,7 +47,7 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'380px' }}>
+      <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'380px' }}>
         <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Cash Entry</h3>
 
         <div style={{ marginBottom:'12px' }}>
@@ -57,7 +57,7 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
               <button key={t} onClick={() => setType(t)} style={{
                 flex:1, padding:'8px', borderRadius:'7px', border:'2px solid',
                 borderColor: type === t ? (t === TYPE_IN ? '#16a34a' : '#dc2626') : '#d1d5db',
-                background: type === t ? (t === TYPE_IN ? '#f0fdf4' : '#fff5f5') : 'white',
+                background: type === t ? (t === TYPE_IN ? '#f0fdf4' : '#fff5f5') : 'var(--surface)',
                 fontWeight: type === t ? 700 : 400, cursor:'pointer', fontSize:'13px',
               }}>{lbl}</button>
             ))}
@@ -78,7 +78,7 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
 
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
               {saving ? 'Saving…' : 'Update Record'}
             </button>

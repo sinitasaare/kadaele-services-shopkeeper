@@ -210,7 +210,7 @@ function AddPurchaseModal({ onSave, onClose }) {
                 </div>
               )}
               {showSupplierDrop && (
-                <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'white',border:'1px solid #ccc',borderRadius:'6px',maxHeight:'160px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
+                <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'var(--surface)',color:'var(--text-primary)',border:'1px solid var(--border)',borderRadius:'6px',maxHeight:'160px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
                   {filteredSuppliers.length === 0
                     ? <div style={{padding:'10px 12px',color:'#9ca3af',fontSize:'13px'}}>No suppliers found</div>
                     : filteredSuppliers.map(s => (
@@ -554,7 +554,7 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
                   <button key={pt} type="button" onClick={() => setPaymentType(pt)} style={{
                     flex:1,padding:'7px',borderRadius:'7px',border:'2px solid',
                     borderColor:paymentType===pt?(pt==='cash'?'#16a34a':'#4f46e5'):'#d1d5db',
-                    background:paymentType===pt?(pt==='cash'?'#f0fdf4':'#eef2ff'):'white',
+                    background:paymentType===pt?(pt==='cash'?'#f0fdf4':'#eef2ff'):'var(--surface)',
                     fontWeight:paymentType===pt?700:400,cursor:'pointer',fontSize:'13px',
                   }}>{lbl}</button>
                 ))}

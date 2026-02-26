@@ -317,12 +317,34 @@ tr:hover {
    DARK MODE — applied when <html data-theme="dark">
    ═══════════════════════════════════════════════════════════════ */
 [data-theme="dark"] {
-  --background: #0f1117;
-  --surface: #1a1d27;
-  --border: #2d3148;
+  --background: #0b1220;
+  --surface: #111827;
+  --surface-2: #0f172a;
+  --border: rgba(226,232,240,0.16);
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   color-scheme: dark;
+}
+
+.surface {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.surface-2 {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.input-surface {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-surface {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
 }
 
 /* Body + root */

@@ -66,7 +66,7 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
-      <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
+      <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
         <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Sale</h3>
 
         <div style={{ marginBottom:'12px' }}>
@@ -76,7 +76,7 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
               <button key={pt} onClick={() => setPaymentType(pt)} style={{
                 flex:1, padding:'8px', borderRadius:'7px', border:'2px solid',
                 borderColor: paymentType === pt ? '#667eea' : '#d1d5db',
-                background: paymentType === pt ? '#eef2ff' : 'white',
+                background: paymentType === pt ? '#eef2ff' : 'var(--surface)',
                 fontWeight: paymentType === pt ? 700 : 400, cursor:'pointer', fontSize:'13px', textTransform:'uppercase',
               }}>{pt}</button>
             ))}
@@ -130,7 +130,7 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
 
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
               {saving ? 'Saving…' : 'Update Record'}
             </button>
@@ -523,7 +523,7 @@ function SalesRecord() {
       {/* ── Void Sale Modal ── */}
       {voidSale && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ background:'white', borderRadius:'12px', padding:'24px', width:'100%', maxWidth:'360px' }}>
+          <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'24px', width:'100%', maxWidth:'360px' }}>
             <h3 style={{ margin:'0 0 12px', color:'#dc2626' }}>⛔ Void Sale</h3>
             <p style={{ fontSize:'13px', color:'#6b7280', marginBottom:'12px' }}>
               Voiding a sale marks it as cancelled. Total: <strong>{fmt(getSaleTotal(voidSale))}</strong>
@@ -540,7 +540,7 @@ function SalesRecord() {
             </div>
             <div style={{ display:'flex', gap:'8px' }}>
               <button onClick={() => setVoidSale(null)}
-                style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>
+                style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>
                 Cancel
               </button>
               <button disabled={actionProcessing || !voidReason.trim()}
@@ -566,7 +566,7 @@ function SalesRecord() {
       {/* ── Refund Sale Modal ── */}
       {refundSale && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ background:'white', borderRadius:'12px', padding:'24px', width:'100%', maxWidth:'360px' }}>
+          <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'24px', width:'100%', maxWidth:'360px' }}>
             <h3 style={{ margin:'0 0 12px', color:'#d97706' }}>↩ Refund Sale</h3>
             <p style={{ fontSize:'13px', color:'#6b7280', marginBottom:'12px' }}>
               Sale Total: <strong>{fmt(getSaleTotal(refundSale))}</strong>
@@ -593,7 +593,7 @@ function SalesRecord() {
             </div>
             <div style={{ display:'flex', gap:'8px' }}>
               <button onClick={() => setRefundSale(null)}
-                style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>
+                style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>
                 Cancel
               </button>
               <button disabled={actionProcessing || !refundReason.trim() || !refundAmount}

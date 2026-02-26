@@ -54,7 +54,7 @@ function PurchaseEditModal({ purchase, onSave, onClose, onDeleted, fmt }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
-      <div style={{ background:'white', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
+      <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
         <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Purchase Entry</h3>
 
         <div style={{ marginBottom:'12px' }}>
@@ -115,7 +115,7 @@ function PurchaseEditModal({ purchase, onSave, onClose, onDeleted, fmt }) {
 
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid #d1d5db', background:'white', cursor:'pointer', fontWeight:600 }}>Cancel</button>
+            <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700 }}>
               {saving ? 'Saving…' : 'Update Record'}
             </button>
@@ -377,7 +377,7 @@ Kadaele Services`;
     try {
       // 1. Capture the history section as a high-res canvas
       const canvas = await html2canvas(el, {
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--surface)',
         scale: 3,          // high DPI so text is sharp in the PDF
         useCORS: true,
         logging: false,

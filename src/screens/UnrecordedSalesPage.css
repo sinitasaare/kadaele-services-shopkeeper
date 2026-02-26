@@ -343,3 +343,16 @@
 .us-camera-btn:hover { background: #ccfbf1; }
 
 .us-cash-confirm, .us-credit-modal { max-width: 400px; }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .us-container { background: var(--background); color: var(--text-primary); }
+[data-theme="dark"] .us-date-input { background: #1e3a2e; color: #6ee7b7; border-color: #065f46; }
+[data-theme="dark"] .us-search-input { background: var(--surface); color: var(--text-primary); border-color: var(--border); }
+[data-theme="dark"] .us-search-results { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .us-search-item { background: var(--surface); color: var(--text-primary); border-bottom-color: var(--border); }
+[data-theme="dark"] .us-search-item:hover { background: var(--surface-2); }
+[data-theme="dark"] .us-cart-section { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .us-cart-item { border-bottom-color: var(--border); color: var(--text-primary); }
+[data-theme="dark"] .us-cart-name { color: var(--text-primary); }
+[data-theme="dark"] .us-empty-cart { color: var(--text-secondary); }
+[data-theme="dark"] .us-total-row { background: var(--surface-2); color: var(--text-primary); border-top-color: var(--border); }
