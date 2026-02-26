@@ -15,11 +15,10 @@ jobs:
       with:
         node-version: '18'
 
-    - name: Install dependencies (fresh, no lockfile)
+    - name: Install dependencies (fresh install)
       run: |
         rm -f package-lock.json
         npm install
-        npm install firebase --legacy-peer-deps
 
     - name: Build web app
       run: npm run build
@@ -43,11 +42,18 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
-    # Capacitor 5.7.x should default to targetSdk=34, but
-    # this step ensures it in case defaults differ.
-    - name: Ensure SDK target is 34
+    # Capacitor 6 defaults: targetSdk=34, compileSdk=34,
+    # AGP=8.2.1, Gradle=8.2.1 — no fix_sdk.py needed!
+    - name: Verify Android SDK settings
       run: |
-        python3 fix_sdk.py
+        echo "=== variables.gradle ==="
+        cat android/variables.gradle
+        echo ""
+        echo "=== gradle-wrapper.properties ==="
+        cat android/gradle/wrapper/gradle-wrapper.properties
+        echo ""
+        echo "=== root build.gradle ==="
+        cat android/build.gradle
 
     - name: Install ImageMagick
       run: |
