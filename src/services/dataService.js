@@ -1996,12 +1996,12 @@ class DataService {
   // DAILY CASH RECONCILIATION
   // ════════════════════════════════════════════════════════════════════
 
-  _todayStr() {
+  todayStr() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
-  _userName() {
+  userName() {
     const u = auth.currentUser;
     if (!u) return 'Unknown';
     if (u.displayName) return u.displayName;
@@ -2067,7 +2067,7 @@ class DataService {
 
   async openDay({ opening_float }) {
     const user  = auth.currentUser;
-    const today = this._todayStr();
+    const today = this.todayStr();
     const now   = new Date().toISOString();
     const float = parseFloat(opening_float) || 0;
 
@@ -2084,7 +2084,7 @@ class DataService {
       difference:       0,
       notes:            '',
       opened_by_uid:    user?.uid  || null,
-      opened_by_name:   this._userName(),
+      opened_by_name:   this.userName(),
       opened_at_client: now,
       closed_by_uid:    null,
       closed_by_name:   null,
@@ -2099,12 +2099,12 @@ class DataService {
     await this.addCashEntry({
       type:            'in',
       amount:          float,
-      note:            `Opening Float — Day opened by ${this._userName()}`,
+      note:            `Opening Float — Day opened by ${this.userName()}`,
       date:            now,
       source:          'open_day',
       business_date:   today,
       created_by_uid:  user?.uid  || null,
-      created_by_name: this._userName(),
+      created_by_name: this.userName(),
     });
 
     return docData;
@@ -2112,7 +2112,7 @@ class DataService {
 
   async closeDay({ counted_cash, notes }) {
     const user    = auth.currentUser;
-    const today   = this._todayStr();
+    const today   = this.todayStr();
     const now     = new Date().toISOString();
     const counted = parseFloat(counted_cash) || 0;
 
@@ -2137,7 +2137,7 @@ class DataService {
       opened_by_name:   existing?.opened_by_name || null,
       opened_at_client: existing?.opened_at_client || now,
       closed_by_uid:    user?.uid  || null,
-      closed_by_name:   this._userName(),
+      closed_by_name:   this.userName(),
       closed_at_client: now,
       last_calculated_at_client: now,
       updatedAt:        now,
@@ -2148,12 +2148,12 @@ class DataService {
     await this.addCashEntry({
       type:            'in',
       amount:          counted,
-      note:            `Closing Count — Day closed by ${this._userName()}. Difference: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`,
+      note:            `Closing Count — Day closed by ${this.userName()}. Difference: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`,
       date:            now,
       source:          'close_day',
       business_date:   today,
       created_by_uid:  user?.uid  || null,
-      created_by_name: this._userName(),
+      created_by_name: this.userName(),
     });
 
     return docData;
