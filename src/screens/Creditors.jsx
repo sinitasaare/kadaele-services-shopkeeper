@@ -894,6 +894,7 @@ Kadaele Services`;
                       <tr>
                         <th>Date</th>
                         <th>Ref</th>
+                        <th>Due Date</th>
                         <th>QTY</th>
                         <th>PACKSIZE</th>
                         <th>Products</th>
@@ -916,7 +917,7 @@ Kadaele Services`;
                               <tr key={`dep-${dep.id}`} className="d-deposit-row">
                                 <td className="d-merged">{formatDate(dep.date)}</td>
                                 <td className="d-merged">{dep.receiptNumber || dep.invoiceRef || '—'}</td>
-                                <td colSpan="5" className="d-deposit-merged-cell">
+                                <td colSpan="6" className="d-deposit-merged-cell">
                                   P&nbsp;a&nbsp;y&nbsp;m&nbsp;e&nbsp;n&nbsp;t&nbsp;&nbsp;&nbsp;M&nbsp;a&nbsp;d&nbsp;e
                                 </td>
                                 <td className="d-deposited-amount">{fmt(parseFloat(dep.amount))}</td>
@@ -946,6 +947,7 @@ Kadaele Services`;
                             <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'd-hist-cont' : 'd-hist-first'}>
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left'}}>{formatDate(rawTs)}</td>}
                               {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left',whiteSpace:'nowrap'}}>{sale.invoiceRef || sale.notes || '—'}</td>}
+                              {idx === 0 && <td rowSpan={rowSpan} className="d-merged" style={{verticalAlign:'middle',textAlign:'left',whiteSpace:'nowrap',color: sale.dueDate ? '#dc2626' : '#9ca3af'}}>{sale.dueDate ? sale.dueDate : '—'}</td>}
                               <td className="d-qty">{item ? (item.qty || item.quantity || '—') : '—'}</td>
                               <td>{item ? packDisplay(item) : '—'}</td>
                               <td style={{whiteSpace:'nowrap'}}>{item ? (item.name || 'N/A') : 'N/A'}</td>
@@ -989,6 +991,10 @@ Kadaele Services`;
               <button className="d-close-btn" onClick={() => setShowPaymentModal(false)}><X size={22} /></button>
             </div>
             <div className="d-payment-form">
+              <div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'8px',padding:'10px 14px',marginBottom:'12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:'13px',color:'#6b7280',fontWeight:500}}>Outstanding Balance</span>
+                <span style={{fontSize:'16px',fontWeight:700,color:'#dc2626'}}>{fmt(selectedCreditor?.balance || selectedCreditor?.totalDue || 0)}</span>
+              </div>
               <div className="d-form-group">
                 <label>Amount Paid to Creditor (Cash OUT)</label>
                 <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"

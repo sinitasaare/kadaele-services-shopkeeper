@@ -170,6 +170,7 @@ function AddPurchaseModal({ onSave, onClose }) {
       await dataService.addPurchase({
         supplierName, supplierId: supplierId || null,
         paymentType, creditorId: paymentType === 'credit' ? supplierId : null,
+        dueDate: paymentType === 'credit' ? dueDate : null,
         date: new Date(purchaseDate + 'T12:00:00').toISOString(),
         items, total,
         notes: notes.trim(), invoiceRef: invoiceRef.trim(),
@@ -244,6 +245,17 @@ function AddPurchaseModal({ onSave, onClose }) {
             </p>
           </div>
 
+
+          {/* Due Date — shown only for credit purchases */}
+          {paymentType === 'credit' && (
+            <div className="pr-date-inline">
+              <label className="pr-date-inline-label">Due Date</label>
+              <input type="date" className="pr-date-inline-input"
+                value={dueDate}
+                placeholder="Enter payment due date"
+                onChange={e => setDueDate(e.target.value)} />
+            </div>
+          )}
 
           {/* Purchase Date — inline */}
           <div className="pr-date-inline">
