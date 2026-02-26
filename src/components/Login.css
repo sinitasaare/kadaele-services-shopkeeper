@@ -173,3 +173,18 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .login-card {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+[data-theme="dark"] .app-title { color: var(--text-primary); }
+[data-theme="dark"] .app-subtitle { color: #818cf8; }
+[data-theme="dark"] .login-card input {
+  background: var(--surface-2, #0f172a);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+[data-theme="dark"] .login-card input::placeholder { color: var(--text-secondary); }
+[data-theme="dark"] .login-card label { color: var(--text-secondary); }

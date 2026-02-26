@@ -254,3 +254,14 @@
 .cr-loading {
   text-align: center; padding: 40px; color: var(--text-secondary, #9ca3af); font-size: 14px;
 }
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .cr-status-banner.open   { background: rgba(34,197,94,0.12);   color: #86efac; border-color: rgba(34,197,94,0.25); }
+[data-theme="dark"] .cr-status-banner.closed { background: rgba(148,163,184,0.10); color: #94a3b8; border-color: rgba(148,163,184,0.20); }
+[data-theme="dark"] .cr-status-banner.none   { background: rgba(245,158,11,0.10);  color: #fcd34d; border-color: rgba(245,158,11,0.20); }
+[data-theme="dark"] .cr-summary-card { background: var(--surface); border-color: var(--border); color: var(--text-primary); }
+[data-theme="dark"] .cr-summary-label { color: var(--text-secondary); }
+[data-theme="dark"] .cr-summary-value { color: var(--text-primary); }
+[data-theme="dark"] .cr-input { background: var(--surface-2, #0f172a); color: var(--text-primary); border-color: var(--border); }
+[data-theme="dark"] .cr-modal { background: var(--surface); color: var(--text-primary); }
+[data-theme="dark"] .cr-modal-title { color: var(--text-primary); }

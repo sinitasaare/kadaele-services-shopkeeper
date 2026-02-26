@@ -788,3 +788,35 @@
 }
 .st-cargo-actions .st-btn-cancel,
 .st-cargo-actions .st-btn-save { flex: 1; }
+
+/* ── Dark Mode — lang/toggle/currency ──────────────────────────────────── */
+[data-theme="dark"] .st-lang-btn {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+[data-theme="dark"] .st-lang-active {
+  background: var(--surface-2, #0f172a);
+  border-color: #667eea;
+  color: #818cf8;
+}
+[data-theme="dark"] .st-toggle-btn {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+[data-theme="dark"] .st-currency-trigger {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+[data-theme="dark"] .st-currency-dropdown {
+  background: var(--surface);
+  border-color: var(--border);
+}
+[data-theme="dark"] .st-currency-option {
+  color: var(--text-primary);
+  border-bottom-color: var(--border);
+}
+[data-theme="dark"] .st-currency-option:hover { background: var(--surface-2, #0f172a); }
+[data-theme="dark"] .st-currency-selected { background: #1e1e3a; }
