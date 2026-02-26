@@ -18,5 +18,10 @@
       "splashFullScreen": true,
       "splashImmersive": true
     }
+  },
+  "android": {
+    "minSdkVersion": 22,
+    "compileSdkVersion": 34,
+    "targetSdkVersion": 34
   }
 }

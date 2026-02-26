@@ -63,8 +63,22 @@ jobs:
 
     - name: Set targetSdkVersion to 34
       run: |
-        sed -i 's/targetSdkVersion 33/targetSdkVersion 34/' android/app/build.gradle
-        sed -i 's/compileSdkVersion 33/compileSdkVersion 34/' android/app/build.gradle
+        # Print current values for debugging
+        grep -n "targetSdkVersion\|compileSdkVersion" android/app/build.gradle || true
+        grep -n "targetSdkVersion\|compileSdkVersion" android/build.gradle || true
+        # Patch app/build.gradle - try both 33 and 34 as source
+        sed -i "s/targetSdkVersion [0-9]*/targetSdkVersion 34/g" android/app/build.gradle
+        sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion 34/g" android/app/build.gradle
+        # Also patch root build.gradle where ext variables are set
+        sed -i "s/targetSdkVersion = [0-9]*/targetSdkVersion = 34/g" android/build.gradle || true
+        sed -i "s/compileSdkVersion = [0-9]*/compileSdkVersion = 34/g" android/build.gradle || true
+        sed -i "s/ext.targetSdkVersion = [0-9]*/ext.targetSdkVersion = 34/g" android/build.gradle || true
+        sed -i "s/ext.compileSdkVersion = [0-9]*/ext.compileSdkVersion = 34/g" android/build.gradle || true
+        # Verify
+        echo "=== app/build.gradle ==="
+        grep -n "targetSdkVersion\|compileSdkVersion" android/app/build.gradle || true
+        echo "=== root build.gradle ==="
+        grep -n "targetSdkVersion\|compileSdkVersion" android/build.gradle || true
 
 
     - name: Cache Gradle
