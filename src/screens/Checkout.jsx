@@ -822,7 +822,7 @@ function Checkout() {
                         width:'100%', padding:'8px 36px 8px 10px', boxSizing:'border-box',
                         border:`1.5px solid ${selectedDebtorId ? '#667eea' : '#ccc'}`,
                         borderRadius:'6px', fontSize:'14px', color:'#1f2937',
-                        backgroundColor: selectedDebtorId ? '#f0f7ff' : 'white',
+                        backgroundColor: selectedDebtorId ? '#f0f7ff' : 'var(--surface)',
                         cursor: selectedDebtorId ? 'default' : 'text',
                       }}
                     />
@@ -839,7 +839,7 @@ function Checkout() {
                   {showDebtorSuggestions && filteredDebtors.length > 0 && (
                     <div style={{
                       position:'absolute', top:'100%', left:0, right:0, zIndex:1000,
-                      background:'white', border:'1px solid #ccc', borderRadius:'6px',
+                      background:'var(--surface)', color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'6px',
                       maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.15)',
                     }}>
                       {filteredDebtors.map((debtor) => {
@@ -856,9 +856,9 @@ function Checkout() {
                           <div key={debtor.id}
                             onMouseDown={(e) => { e.preventDefault(); selectDebtor(debtor); }}
                             style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee',
-                              backgroundColor: isOverdue ? '#fff5f5' : 'white' }}
+                              backgroundColor: isOverdue ? '#fff5f5' : 'var(--surface)' }}
                             onMouseEnter={e => e.currentTarget.style.background = isOverdue ? '#ffe8e8' : '#f5f5f5'}
-                            onMouseLeave={e => e.currentTarget.style.background = isOverdue ? '#fff5f5' : 'white'}
+                            onMouseLeave={e => e.currentTarget.style.background = isOverdue ? '#fff5f5' : 'var(--surface)'}
                           >
                             <div style={{ fontWeight:600, color: isOverdue ? '#dc2626' : '#1f2937' }}>
                               {debtor.name || debtor.customerName}
@@ -900,7 +900,7 @@ function Checkout() {
                     style={{
                       width:'100%', padding:'8px 10px', boxSizing:'border-box',
                       border:'1.5px solid #ccc', borderRadius:'6px',
-                      backgroundColor: (!selectedDebtorId || isLocked) ? '#f3f4f6' : 'white',
+                      backgroundColor: (!selectedDebtorId || isLocked) ? '#f3f4f6' : 'var(--surface)',
                       cursor: (!selectedDebtorId || isLocked) ? 'not-allowed' : 'pointer',
                     }}
                   />
