@@ -31,6 +31,7 @@ function AddPurchaseModal({ onSave, onClose }) {
   const [paymentType, setPaymentType] = useState('cash');
   const [creditors, setCreditors]     = useState([]);
   const [creditorId, setCreditorId]   = useState(null);
+  const [dueDate, setDueDate]           = useState('');
   const [creditorName, setCreditorName] = useState('');
   const [showCreditorDrop, setShowCreditorDrop] = useState(false);
 
