@@ -63,20 +63,23 @@ jobs:
 
     - name: Set targetSdkVersion to 34
       run: |
-        # Patch root build.gradle ext variables (read by Capacitor library)
-        sed -i "s/ext.compileSdkVersion = .*/ext.compileSdkVersion = 34/" android/build.gradle || true
-        sed -i "s/ext.targetSdkVersion = .*/ext.targetSdkVersion = 34/" android/build.gradle || true
-        # If ext vars not present, inject them using python
-        python3 -c "
-import re, sys
-with open("android/build.gradle") as f: content = f.read()
-if "ext.targetSdkVersion" not in content:
-    content = "ext.targetSdkVersion = 34\next.compileSdkVersion = 34\n" + content
-    with open("android/build.gradle", "w") as f: f.write(content)
-    print("Injected ext vars")
+        cat > /tmp/fix_sdk.py << PYEOF
+import sys
+with open("android/build.gradle") as f:
+    content = f.read()
+if "ext.targetSdkVersion" in content:
+    import re
+    content = re.sub(r"ext.targetSdkVersion\s*=\s*\d+", "ext.targetSdkVersion = 34", content)
+    content = re.sub(r"ext.compileSdkVersion\s*=\s*\d+", "ext.compileSdkVersion = 34", content)
 else:
-    print("ext vars already present")
-"
+    content = "ext.targetSdkVersion = 34
+ext.compileSdkVersion = 34
+" + content
+with open("android/build.gradle", "w") as f:
+    f.write(content)
+print("Done")
+PYEOF
+        python3 /tmp/fix_sdk.py
         echo "=== root build.gradle ==="
         cat android/build.gradle
 
