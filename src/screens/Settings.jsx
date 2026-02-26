@@ -4,85 +4,15 @@ import {
   ClipboardList, Wallet, X, Check, Plus, Trash2,
 } from 'lucide-react';
 import dataService from '../services/dataService';
+import {
+  scheduleCreditorReminders,
+  cancelCreditorReminders,
+  scheduleDebtReminders,
+  cancelDebtReminders,
+} from '../services/notificationService';
 import { useCurrency } from '../hooks/useCurrency';
 import UnrecordedSalesPage from './UnrecordedSalesPage';
 import './Settings.css';
-
-// ─────────────────────────────────────────────────────────────
-// Creditor Reminder Scheduler
-// Fires at 08:30, 12:00 and 16:30 if the notification is enabled.
-// ─────────────────────────────────────────────────────────────
-async function scheduleCreditorReminders() {
-  try {
-    const creditors = await dataService.getCreditors ? dataService.getCreditors() : Promise.resolve([]);
-    const list = await creditors;
-    const owing = (list || []).filter(c => (c.balance || 0) > 0);
-    if (owing.length === 0) return;
-
-    const { LocalNotifications } = await import('@capacitor/local-notifications').catch(() => ({ LocalNotifications: null }));
-    if (!LocalNotifications) return;
-
-    const perm = await LocalNotifications.requestPermissions();
-    if (perm.display !== 'granted') return;
-
-    // Cancel previous creditor reminders (ids 9001-9099)
-    const pending = await LocalNotifications.getPending();
-    const creditorIds = (pending.notifications || []).filter(n => n.id >= 9001 && n.id <= 9099);
-    if (creditorIds.length) await LocalNotifications.cancel({ notifications: creditorIds });
-
-    const now = new Date();
-    const fireHours = [8.5, 12, 16.5]; // 08:30, 12:00, 16:30
-    const notifications = [];
-    let notifId = 9001;
-
-    for (const creditor of owing.slice(0, 10)) { // max 10 creditors
-      const name = creditor.name || creditor.customerName || 'Creditor';
-      const balance = creditor.balance || creditor.totalDue || 0;
-      const purchaseDate = creditor.lastPurchase ? new Date(creditor.lastPurchase) : null;
-      let dateLabel = '';
-      if (purchaseDate) {
-        const diffDays = Math.floor((now - purchaseDate) / 86400000);
-        dateLabel = diffDays <= 1 ? 'yesterday' : `on ${purchaseDate.toLocaleDateString()}`;
-      }
-      const body = `Kadaele Services still owes ${name} the amount of $${Number(balance).toFixed(2)} for purchasing cargoes on credit${dateLabel ? ' ' + dateLabel : ''}.`;
-
-      for (const h of fireHours) {
-        const fireAt = new Date(now);
-        const hrs = Math.floor(h);
-        const mins = (h - hrs) * 60;
-        fireAt.setHours(hrs, mins, 0, 0);
-        if (fireAt <= now) fireAt.setDate(fireAt.getDate() + 1); // push to tomorrow if past
-
-        notifications.push({
-          id: notifId++,
-          title: '💳 Creditor Payment Reminder',
-          body,
-          schedule: { at: fireAt, repeats: true, every: 'day' },
-          sound: 'default',
-          channelId: 'creditor_reminders',
-        });
-      }
-    }
-
-    if (notifications.length) {
-      await LocalNotifications.schedule({ notifications });
-    }
-  } catch (e) {
-    console.error('Creditor reminder scheduling error:', e);
-  }
-}
-
-async function cancelCreditorReminders() {
-  try {
-    const { LocalNotifications } = await import('@capacitor/local-notifications').catch(() => ({ LocalNotifications: null }));
-    if (!LocalNotifications) return;
-    const pending = await LocalNotifications.getPending();
-    const creditorNotifs = (pending.notifications || []).filter(n => n.id >= 9001 && n.id <= 9099);
-    if (creditorNotifs.length) await LocalNotifications.cancel({ notifications: creditorNotifs });
-  } catch (e) {
-    console.error('Cancel creditor reminders error:', e);
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 // Translations
@@ -836,6 +766,10 @@ function Settings({ onSettingsChange }) {
     if (key === 'notifCreditorOwed') {
       if (next) scheduleCreditorReminders();
       else cancelCreditorReminders();
+    }
+    if (key === 'notifDebtReminder') {
+      if (next) scheduleDebtReminders();
+      else cancelDebtReminders();
     }
   };
 
