@@ -1,5 +1,10 @@
 import localforage from 'localforage';
 import { auth, db } from './firebaseConfig';
+import {
+  checkLowStock,
+  checkDailySalesMilestone,
+  scheduleDebtReminders,
+} from './notificationService';
 import { 
   signInWithEmailAndPassword, 
   signOut, 
@@ -623,9 +628,11 @@ class DataService {
     } catch (stockErr) {
       console.error('Error deducting stock after sale:', stockErr);
     }
-    
+
+    // ── Notification: check for low stock after deduction ─────────────────
+    localforage.getItem('goods').then(g => checkLowStock(g || [])).catch(() => {});
+
     // ── Auto-record cash sales in the Cash Journal ────────────────────────
-    // Every cash sale is also a Cash IN entry so the Cash Journal stays in sync.
     if (newSale.paymentType === 'cash') {
       await this.addCashEntry({
         type: 'in',
@@ -663,7 +670,12 @@ class DataService {
     // was left empty or came through blank from the modal.
     if (newSale.paymentType === 'credit' && (newSale.debtorId || newSale.customerName)) {
       await this.updateDebtor(newSale);
+      // ── Notification: refresh debt reminders with the new repayment date ──
+      scheduleDebtReminders().catch(() => {});
     }
+
+    // ── Notification: check if daily total crossed a $500 milestone ───────
+    checkDailySalesMilestone().catch(() => {});
 
     return newSale;
   }
