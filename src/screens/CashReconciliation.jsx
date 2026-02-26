@@ -135,11 +135,10 @@ function CashReconciliation() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rec, allRecs] = await Promise.all([
-        dataService.getDailyCashByDate(today),
-        dataService.getDailyCashRecords(),
-      ]);
-      setTodayRecord(rec || null);
+      // Fetch all records first, then derive today from the list
+      const allRecs = await dataService.getDailyCashRecords();
+      const rec = (allRecs || []).find(r => r.business_date === today) || null;
+      setTodayRecord(rec);
       setRecords((allRecs || []).sort((a, b) => b.business_date.localeCompare(a.business_date)));
 
       // Compute live summary from cash_entries
