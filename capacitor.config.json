@@ -2,7 +2,14 @@
   "appId": "com.kadaele.shopkeeper",
   "appName": "Shopkeeper",
   "webDir": "dist",
-  "bundledWebRuntime": false,
+  "android": {
+    "buildOptions": {
+      "signingType": "apksigner"
+    }
+  },
+  "server": {
+    "androidScheme": "http"
+  },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 3000,
