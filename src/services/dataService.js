@@ -2370,6 +2370,32 @@ class DataService {
     return docData;
   }
 
+  // ── Record a checkout unlock event for audit trail ────────────────────────
+  async recordUnlock(business_date) {
+    const user = auth.currentUser;
+    const today = business_date || this.todayStr();
+    const now   = new Date().toISOString();
+    const existing = await this.getDailyCashByDate(today);
+    if (!existing) return; // no record to update — day not opened yet
+
+    // Append to unlock_events array
+    const unlockEvents = Array.isArray(existing.unlock_events) ? existing.unlock_events : [];
+    unlockEvents.push({
+      uid:  user?.uid  || null,
+      name: this.userName(),
+      at:   now,
+    });
+
+    const docData = {
+      ...existing,
+      unlock_events: unlockEvents,
+      updatedAt: now,
+    };
+
+    await this._saveDailyCashDoc(docData);
+    return docData;
+  }
+
   async calculateExpectedCash(business_date) {
     const entries = await this.getCashEntriesByDate(business_date);
     let sum_in = 0, sum_out = 0;
