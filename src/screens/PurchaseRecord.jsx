@@ -50,12 +50,20 @@ function AddPurchaseModal({ onSave, onClose }) {
   const [receiptPhoto, setReceiptPhoto] = useState(null);
   const [saving, setSaving]         = useState(false);
   const [fieldError, setFieldError]   = useState(null); // {rowId, field, message}
+  const [cashBalance, setCashBalance]   = useState(null); // current cash balance
   const nextId = useRef(2);
 
   useEffect(() => {
     dataService.getSuppliers().then(d => setSuppliers(d || []));
     dataService.getCreditors().then(d => setCreditors(d || []));
     dataService.getGoods().then(d => setGoods(d || []));
+
+    // Load current cash balance to validate purchase total
+    dataService.getCashEntries().then(entries => {
+      const bal = (entries || []).reduce((sum, e) =>
+        sum + (e.type === 'in' ? (e.amount || 0) : -(e.amount || 0)), 0);
+      setCashBalance(bal);
+    });
 
     // Subscribe to real-time goods changes from Firebase listener
     const unsubscribe = dataService.onGoodsChange((updatedGoods) => {
@@ -167,6 +175,14 @@ function AddPurchaseModal({ onSave, onClose }) {
         stockToAdd: (parseFloat(r.qty)||0) * (parseFloat(r.packUnit)||0),
       }));
       const total = items.reduce((s, i) => s + i.subtotal, 0);
+
+      // ── Cash balance cap: total cost must not exceed current cash balance ──
+      if (paymentType === 'cash' && cashBalance !== null && total > cashBalance) {
+        const sym = dataService.getCurrencySymbol?.() || '$';
+        alert(`Total Cost (${sym}${total.toFixed(2)}) exceeds current Cash Balance (${sym}${cashBalance.toFixed(2)}). Please reduce the purchase total or use Buy on Credit.`);
+        setSaving(false);
+        return;
+      }
 
       await dataService.addPurchase({
         supplierName, supplierId: supplierId || null,
@@ -431,6 +447,12 @@ function AddPurchaseModal({ onSave, onClose }) {
             <span>Total Cost</span>
             <span className="pr-total-val">{fmt(itemTotal)}</span>
           </div>
+          {/* Balance cap warning */}
+          {paymentType === 'cash' && cashBalance !== null && itemTotal > cashBalance && itemTotal > 0 && (
+            <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'6px', padding:'8px 12px', fontSize:'12px', color:'#b91c1c', marginTop:'4px' }}>
+              ⚠️ Total Cost exceeds Cash Balance ({fmt(cashBalance)}). Switch to Credit or reduce amount.
+            </div>
+          )}
 
           {/* Ref — inline */}
           <div className="pr-ref-inline">
