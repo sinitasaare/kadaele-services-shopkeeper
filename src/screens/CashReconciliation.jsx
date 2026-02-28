@@ -28,21 +28,7 @@ function formatTime(iso) {
 
 // ── Detail Modal ─────────────────────────────────────────────────────────────
 
-function SessionBlock({ label, session, isLastSession, isOpen, onReopen, reopening }) {
-  // session shape:
-  //   For session 1 (root record): opened_by_name, opened_at_client, opening_float,
-  //                                expected_cash, counted_cash, closed_by_name, closed_at_client
-  //   For sessions 2+ (close_sessions[]): reopened_by_name, reopened_at, reopen_float,
-  //                                       expected_cash, counted_cash, closed_by_name, closed_at
-
-  const openedBy  = session.opened_by_name  || session.reopened_by_name || '—';
-  const openedAt  = session.opened_at_client || session.reopened_at     || null;
-  const float_    = session.opening_float    ?? session.reopen_float     ?? null;
-  const expected  = session.expected_cash    ?? null;
-  const counted   = session.counted_cash     ?? null;
-  const closedBy  = session.closed_by_name   || null;
-  const closedAt  = session.closed_at_client || session.closed_at        || null;
-
+function SessionBlock({ label, openedBy, openedAt, float, expected, counted, closedBy, closedAt, isLastSession, isDayClosed, onReopen, reopening }) {
   return (
     <div className="cr-session-block">
       {label && (
@@ -50,10 +36,9 @@ function SessionBlock({ label, session, isLastSession, isOpen, onReopen, reopeni
           <span className="cr-session-label-text">{label}</span>
         </div>
       )}
-
       <div className="cr-summary-row">
         <span className="cr-summary-label">Opened by</span>
-        <span className="cr-summary-value">{openedBy}</span>
+        <span className="cr-summary-value">{openedBy || '—'}</span>
       </div>
       <div className="cr-summary-row">
         <span className="cr-summary-label">Opened at</span>
@@ -61,17 +46,15 @@ function SessionBlock({ label, session, isLastSession, isOpen, onReopen, reopeni
       </div>
       <div className="cr-summary-row">
         <span className="cr-summary-label">Opening Float</span>
-        <span className="cr-summary-value">{float_ !== null ? fmt(float_) : '—'}</span>
+        <span className="cr-summary-value">{float !== null && float !== undefined ? fmt(float) : '—'}</span>
       </div>
       <div className="cr-summary-row">
         <span className="cr-summary-label">Expected Cash in drawer</span>
-        <span className="cr-summary-value expected">{expected !== null ? fmt(expected) : '—'}</span>
+        <span className="cr-summary-value expected">{expected !== null && expected !== undefined ? fmt(expected) : '—'}</span>
       </div>
       <div className="cr-summary-row">
         <span className="cr-summary-label">Counted Cash in drawer</span>
-        <span className="cr-summary-value">
-          {counted !== null && counted !== undefined ? fmt(counted) : '—'}
-        </span>
+        <span className="cr-summary-value">{counted !== null && counted !== undefined ? fmt(counted) : '—'}</span>
       </div>
       <div className="cr-summary-row">
         <span className="cr-summary-label">Closed by</span>
@@ -81,14 +64,8 @@ function SessionBlock({ label, session, isLastSession, isOpen, onReopen, reopeni
         <span className="cr-summary-label">Closed at</span>
         <span className="cr-summary-value">{closedAt ? formatTime(closedAt) : '—'}</span>
       </div>
-
-      {/* Re-Open Shop — only on the last session block when day is closed */}
-      {isLastSession && isOpen === false && (
-        <button
-          className="cr-btn-reopen"
-          onClick={onReopen}
-          disabled={reopening}
-        >
+      {isLastSession && isDayClosed && (
+        <button className="cr-btn-reopen" onClick={onReopen} disabled={reopening}>
           {reopening ? 'Reopening…' : '🔓 Re-Open Shop'}
         </button>
       )}
@@ -100,83 +77,83 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
   const [reopening, setReopening] = useState(false);
   if (!record) return null;
 
-  // close_sessions[] holds sessions 2, 3, 4 … (each archived when day was re-opened)
-  // The root record always represents the current / last active session.
+  // ── Understand the data structure ──────────────────────────────────────────
+  // Each time the day is re-opened, reopenDay() pushes a snapshot into close_sessions[]:
+  //   close_sessions[0] = snapshot of Session 1 at the moment Session 2 was opened
+  //   close_sessions[1] = snapshot of Session 2 at the moment Session 3 was opened
+  //   … and so on.
+  //
+  // Each snapshot contains:
+  //   { reopen_float, expected_cash, counted_cash, closed_by_name, closed_at,
+  //     reopened_by_name, reopened_at }   ← reopened_by/at = who OPENED the NEXT session
+  //
+  // The root record always holds the CURRENT (last) session's live data:
+  //   opened_by_name / opened_at_client / opening_float  = original day open (Session 1)
+  //   reopened_by_name / reopened_at                     = who opened the latest session
+  //   expected_cash / counted_cash / closed_by_name / closed_at_client = current session close
+
   const closeSessions = Array.isArray(record.close_sessions) ? record.close_sessions : [];
-  // Total sessions: 1 (root) + number of times day was re-opened
-  const totalSessions = 1 + closeSessions.length;
-  const hasMultipleSessions = totalSessions > 1;
+  const hasMultipleSessions = closeSessions.length > 0;
+  const ordinals = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
 
-  // Build ordered session list:
-  // closeSessions[0] = session 2 (was first re-open), closeSessions[1] = session 3, etc.
-  // Root record = LAST session (currently active / most recent)
-  // We display them in chronological order:
-  //   Session 1 = root record's ORIGINAL open (before any re-opens)
-  //   Session 2 = closeSessions[0]
-  //   …
-  //   Session N = root record (current)
-
-  // For the "first" session we use root record's opened_by / opened_at / opening_float.
-  // After a re-open the root record gets reopened_by_name/reopened_at for the new session,
-  // but the original open fields are preserved on the root record.
-
-  // Build an array of session data objects in display order:
+  // Build sessions array in chronological order
   const sessions = [];
 
   if (!hasMultipleSessions) {
-    // Only one session — no label header
-    sessions.push({ data: record, label: null, isRoot: true });
-  } else {
-    // Multiple sessions — label each one
-    // Session 1: the original open, using root record's original open fields
+    // ── Only one session ever — no label ──
     sessions.push({
-      data: {
-        opened_by_name:  record.opened_by_name,
-        opened_at_client: record.opened_at_client,
-        opening_float:   record.opening_float,
-        // Session 1's expected/counted/closed come from closeSessions[0] (archived when first re-opened)
-        expected_cash:   closeSessions[0]?.expected_cash   ?? record.expected_cash,
-        counted_cash:    closeSessions[0]?.counted_cash    ?? null,
-        closed_by_name:  closeSessions[0]?.closed_by_name  || null,
-        closed_at_client: closeSessions[0]?.closed_at      || null,
-      },
-      label: 'First Session',
-      isRoot: false,
+      label: null,
+      openedBy:   record.opened_by_name   || '—',
+      openedAt:   record.opened_at_client || null,
+      float:      record.opening_float    ?? null,
+      expected:   record.expected_cash    ?? null,
+      counted:    record.counted_cash     ?? null,
+      closedBy:   record.closed_by_name   || null,
+      closedAt:   record.closed_at_client || null,
+    });
+  } else {
+    // ── Session 1 ──
+    // Opened: root record's original open fields
+    // Closed: close_sessions[0] holds the close data for session 1
+    sessions.push({
+      label:    'First Session',
+      openedBy: record.opened_by_name   || '—',
+      openedAt: record.opened_at_client || null,
+      float:    record.opening_float    ?? null,
+      expected: closeSessions[0].expected_cash  ?? null,
+      counted:  closeSessions[0].counted_cash   ?? null,
+      closedBy: closeSessions[0].closed_by_name || null,
+      closedAt: closeSessions[0].closed_at      || null,
     });
 
-    // Sessions 2 … N-1: from closeSessions[1] onward
-    const ordinals = ['Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
+    // ── Sessions 2 … N-1 (middle sessions from close_sessions[1] onward) ──
+    // Session i+1 was opened by close_sessions[i-1].reopened_by_name
+    // and its close data lives in close_sessions[i]
     for (let i = 1; i < closeSessions.length; i++) {
-      const sess = closeSessions[i];
       sessions.push({
-        data: {
-          reopened_by_name: closeSessions[i-1]?.reopened_by_name || null,
-          reopened_at:      closeSessions[i-1]?.reopened_at      || null,
-          reopen_float:     sess.reopen_float,
-          expected_cash:    sess.expected_cash,
-          counted_cash:     sess.counted_cash,
-          closed_by_name:   sess.closed_by_name,
-          closed_at:        sess.closed_at,
-        },
-        label: `${ordinals[i] || `#${i+1}`} Session`,
-        isRoot: false,
+        label:    `${ordinals[i] || `#${i+1}`} Session`,
+        openedBy: closeSessions[i-1].reopened_by_name || '—',
+        openedAt: closeSessions[i-1].reopened_at      || null,
+        float:    closeSessions[i].reopen_float        ?? null,
+        expected: closeSessions[i].expected_cash       ?? null,
+        counted:  closeSessions[i].counted_cash        ?? null,
+        closedBy: closeSessions[i].closed_by_name      || null,
+        closedAt: closeSessions[i].closed_at           || null,
       });
     }
 
-    // Last session: current root record (re-opened, now active or just closed again)
-    const lastCloseSession = closeSessions[closeSessions.length - 1];
+    // ── Last session (current) ──
+    // Opened by: the last close_sessions entry's reopened_by_name
+    const prev = closeSessions[closeSessions.length - 1];
     sessions.push({
-      data: {
-        reopened_by_name: lastCloseSession?.reopened_by_name || record.reopened_by_name || null,
-        reopened_at:      lastCloseSession?.reopened_at      || record.reopened_at      || null,
-        reopen_float:     record.opening_float, // after re-open, root opening_float is updated
-        expected_cash:    record.expected_cash,
-        counted_cash:     record.counted_cash,
-        closed_by_name:   record.closed_by_name,
-        closed_at_client: record.closed_at_client,
-      },
-      label: `${ordinals[closeSessions.length] || `#${closeSessions.length+1}`} Session`,
-      isRoot: true,
+      label:    `${ordinals[closeSessions.length] || `#${closeSessions.length+1}`} Session`,
+      openedBy: prev.reopened_by_name   || '—',
+      openedAt: prev.reopened_at        || null,
+      float:    prev.reopen_float       ?? null,
+      expected: record.expected_cash    ?? null,
+      counted:  record.counted_cash     ?? null,
+      closedBy: record.closed_by_name   || null,
+      closedAt: record.closed_at_client || null,
     });
   }
 
@@ -219,9 +196,15 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
           <SessionBlock
             key={idx}
             label={sess.label}
-            session={sess.data}
+            openedBy={sess.openedBy}
+            openedAt={sess.openedAt}
+            float={sess.float}
+            expected={sess.expected}
+            counted={sess.counted}
+            closedBy={sess.closedBy}
+            closedAt={sess.closedAt}
             isLastSession={idx === sessions.length - 1}
-            isOpen={!isDayClosed}
+            isDayClosed={isDayClosed}
             onReopen={handleReopen}
             reopening={reopening}
           />
