@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calculator } from 'lucide-react';
+import { Calculator, Lock } from 'lucide-react';
 import { Camera as CapCamera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
@@ -24,7 +24,7 @@ function playBeep() {
   } catch (_) {}
 }
 
-function Checkout() {
+function Checkout({ isUnlocked = false }) {
   const { fmt } = useCurrency();
   const [goods, setGoods] = useState([]);
   const [catalogue, setCatalogue] = useState([]);
@@ -39,6 +39,8 @@ function Checkout() {
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);   // store-lock: user must tap lock to unlock
+  const [unlockAnim, setUnlockAnim] = useState(false); // triggers CSS animation
 
   // Debtor search states
   const [existingDebtors, setExistingDebtors] = useState([]);
@@ -198,6 +200,7 @@ function Checkout() {
   };
 
   const handleItemClick = (good) => {
+    if (!unlocked) { handleUnlock(); return; } // prompt unlock instead
     setSelectedItem(good);
     setQuantityToAdd('');
     setShowQuantityModal(true);
@@ -327,6 +330,7 @@ function Checkout() {
 
   // ── Cash payment ───────────────────────────────────────────────────────
   const handlePayCash = () => {
+    if (!unlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
     if (catalogue.length === 0) { alert('Cart is empty.'); return; }
     setShowCashPopup(true);
   };
@@ -355,6 +359,7 @@ function Checkout() {
 
   // ── Credit payment ─────────────────────────────────────────────────────
   const handlePayCredit = () => {
+    if (!unlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
     if (catalogue.length === 0) { alert('Cart is empty.'); return; }
     loadDebtors();
     setShowCreditModal(true);
@@ -427,6 +432,13 @@ function Checkout() {
       {/* Catalogue table */}
       <div className="sr-catalogue-area">
         <div className="sr-catalogue-wrapper" style={{position:'relative'}}>
+          {/* Locked overlay — shown when store is not unlocked */}
+          {!isUnlocked && (
+            <div className="checkout-locked-overlay">
+              <Lock size={36} />
+              <p className="checkout-locked-msg">Tap the 🔒 lock icon in the top bar to unlock and start a sale.</p>
+            </div>
+          )}
           <PdfTableButton
             title="Current Cart"
             columns={[
@@ -478,14 +490,14 @@ function Checkout() {
 
         {/* Three-button row: Credit | Scanner | Cash */}
         <div className="sr-payment-buttons">
-          <button className="sr-btn-credit" onClick={handlePayCredit} disabled={isProcessing}>
+          <button className="sr-btn-credit" onClick={handlePayCredit} disabled={isProcessing || !isUnlocked}>
             Buy on Credit
           </button>
 
           <button
             className="sr-btn-scan"
             onClick={() => alert('🚧 Barcode scanning feature is coming soon!')}
-            disabled={isProcessing}
+            disabled={isProcessing || !isUnlocked}
             title="Barcode scanning — coming soon"
           >
             {/* Barcode scanner SVG icon */}
@@ -501,7 +513,7 @@ function Checkout() {
             </svg>
           </button>
 
-          <button className="sr-btn-cash" onClick={handlePayCash} disabled={isProcessing}>
+          <button className="sr-btn-cash" onClick={handlePayCash} disabled={isProcessing || !isUnlocked}>
             Pay with Cash
           </button>
         </div>
