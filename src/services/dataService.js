@@ -2342,6 +2342,34 @@ class DataService {
     return docData;
   }
 
+  // ── Re-open a closed day (admin override) ─────────────────────────────────
+  async reopenDay(business_date) {
+    const user    = auth.currentUser;
+    const today   = business_date || this.todayStr();
+    const now     = new Date().toISOString();
+    const existing = await this.getDailyCashByDate(today);
+    if (!existing) throw new Error('No record found for this date.');
+
+    const docData = {
+      ...existing,
+      status:           'open',
+      locked:           false,
+      counted_cash:     null,
+      difference:       0,
+      notes:            existing.notes || '',
+      closed_by_uid:    null,
+      closed_by_name:   null,
+      closed_at_client: null,
+      reopened_by_uid:  user?.uid  || null,
+      reopened_by_name: this.userName(),
+      reopened_at:      now,
+      updatedAt:        now,
+    };
+
+    await this._saveDailyCashDoc(docData);
+    return docData;
+  }
+
   async calculateExpectedCash(business_date) {
     const entries = await this.getCashEntriesByDate(business_date);
     let sum_in = 0, sum_out = 0;
