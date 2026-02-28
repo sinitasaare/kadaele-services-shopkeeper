@@ -131,6 +131,22 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
             </>
           )}
 
+          {/* Unlock events — shown when any unlock was recorded */}
+          {Array.isArray(record.unlock_events) && record.unlock_events.length > 0 && (
+            <>
+              <hr style={{ border:'none', borderTop:'1px solid var(--border,#e5e7eb)', margin:'8px 0' }} />
+              <p style={{ fontSize:'12px', fontWeight:700, color:'#4f46e5', margin:'4px 0 6px' }}>
+                🔓 Checkout Unlocks ({record.unlock_events.length})
+              </p>
+              {record.unlock_events.map((ev, i) => (
+                <div key={i} className="cr-summary-row" style={{ fontSize:'12px' }}>
+                  <span className="cr-summary-label">{ev.name || 'Staff'}</span>
+                  <span className="cr-summary-value">{formatTime(ev.at)}</span>
+                </div>
+              ))}
+            </>
+          )}
+
           {/* Re-open button — only shown if day is closed */}
           {record.status === 'closed' && (
             <div style={{ marginTop:'8px' }}>
@@ -480,6 +496,9 @@ function CashReconciliation({ onStoreStatusChange }) {
                   Opened by {rec.opened_by_name || '—'}
                   {rec.closed_by_name ? ` · Closed by ${rec.closed_by_name}` : ''}
                   {rec.reopened_by_name ? ` · Reopened by ${rec.reopened_by_name}` : ''}
+                  {Array.isArray(rec.unlock_events) && rec.unlock_events.length > 0
+                    ? ` · 🔓 ${rec.unlock_events.length} unlock${rec.unlock_events.length > 1 ? 's' : ''}`
+                    : ''}
                 </div>
               </div>
               <div className="cr-record-right">
