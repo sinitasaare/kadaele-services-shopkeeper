@@ -699,9 +699,24 @@ class DataService {
       sales[index] = { ...sale, ...updates };
       await this.setSales(sales);
 
-      // Update debtors if needed
+      // Safely adjust debtor balance if credit sale total changed
       if (sales[index].paymentType === 'credit') {
-        await this.recalculateDebtors();
+        const oldTotal = parseFloat(sale.total || sale.total_amount || 0);
+        const newTotal = parseFloat(sales[index].total || sales[index].total_amount || 0);
+        const diff = newTotal - oldTotal;
+        if (diff !== 0) {
+          const debtorId = sale.debtorId;
+          if (debtorId) {
+            const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+            const debtor = debtors.find(d => d.id === debtorId);
+            if (debtor) {
+              debtor.totalDue = (debtor.totalDue || 0) + diff;
+              debtor.balance = Math.max(0, (debtor.totalDue || 0) - (debtor.totalPaid || 0));
+              debtor.updatedAt = new Date().toISOString();
+              await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+            }
+          }
+        }
       }
 
       return sales[index];
@@ -721,7 +736,12 @@ class DataService {
     if (this.isOnline && auth.currentUser) {
       try { await deleteDoc(doc(db, 'sales', id)); } catch (err) { console.error('Firebase delete sale error:', err); }
     }
-    await this.recalculateDebtors();
+    // Reverse debtor charge if credit sale
+    if (sale.paymentType === 'credit') {
+      await this._reverseDebtorCharge(sale);
+    }
+    // Restore stock for deleted items
+    await this._restoreStock(sale.items);
   }
 
   async deleteCashEntry(id) {
@@ -752,6 +772,73 @@ class DataService {
     }
   }
 
+  // ── Helper: safely reverse a debtor charge for a credit sale ──────────────
+  async _reverseDebtorCharge(sale) {
+    try {
+      const debtorId = sale.debtorId;
+      const saleTotal = parseFloat(sale.total || sale.total_amount || 0);
+      if (!debtorId || saleTotal <= 0) return;
+
+      const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+      const debtor = debtors.find(d => d.id === debtorId);
+      if (!debtor) return;
+
+      debtor.totalDue = Math.max(0, (debtor.totalDue || 0) - saleTotal);
+      debtor.balance = Math.max(0, debtor.totalDue - (debtor.totalPaid || 0));
+      // Remove the saleId from the debtor's tracked sales
+      if (debtor.saleIds) {
+        debtor.saleIds = debtor.saleIds.filter(sid => sid !== sale.id);
+      }
+      if (debtor.purchaseIds) {
+        debtor.purchaseIds = debtor.purchaseIds.filter(pid => pid !== sale.id);
+      }
+      // Clear repayment date if balance is zero
+      if (debtor.balance <= 0) {
+        debtor.balance = 0;
+        debtor.repaymentDate = '';
+      }
+      debtor.updatedAt = new Date().toISOString();
+      await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+
+      // Sync to Firebase
+      if (this.isOnline && auth.currentUser) {
+        await setDoc(doc(db, 'debtors', debtorId.toString()), {
+          ...debtor, updatedAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Error reversing debtor charge:', err);
+    }
+  }
+
+  // ── Helper: restore stock for sale items (void / delete / refund) ─────────
+  async _restoreStock(items) {
+    try {
+      if (!items || items.length === 0) return;
+      const goods = await localforage.getItem(DATA_KEYS.GOODS) || [];
+      let changed = false;
+
+      for (const item of items) {
+        const qty = parseFloat(item.quantity || item.qty || 0);
+        if (qty <= 0) continue;
+        // Match by id first, then by name
+        const good = goods.find(g => g.id === item.id) ||
+                     goods.find(g => (g.name || '').toLowerCase() === (item.name || '').toLowerCase());
+        if (good && typeof good.stock_quantity === 'number') {
+          good.stock_quantity += qty;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await localforage.setItem(DATA_KEYS.GOODS, goods);
+        this._notifyGoodsSubscribers(goods);
+      }
+    } catch (err) {
+      console.error('Error restoring stock:', err);
+    }
+  }
+
   async voidSale(id, reason) {
     const sales = await this.getSales();
     const original = sales.find(s => s.id === id);
@@ -773,6 +860,14 @@ class DataService {
         saleId: id,
         business_date: now.slice(0, 10),
       });
+    }
+    // Reverse the debtor charge if it was a credit sale
+    if (original && original.paymentType === 'credit') {
+      await this._reverseDebtorCharge(original);
+    }
+    // Restore stock for voided items
+    if (original) {
+      await this._restoreStock(original.items);
     }
     return result;
   }
@@ -802,9 +897,13 @@ class DataService {
         business_date: now.slice(0, 10),
       });
     }
-    // Update debtors if credit sale
-    if (sale && sale.paymentType === 'credit') {
-      await this.recalculateDebtors();
+    // Reverse the debtor charge if credit sale
+    if (original && original.paymentType === 'credit') {
+      await this._reverseDebtorCharge(original);
+    }
+    // Restore stock for refunded items
+    if (original) {
+      await this._restoreStock(original.items);
     }
     return sale;
   }
@@ -1696,6 +1795,7 @@ class DataService {
         supplierName: purchase.supplierName || '',
         supplierId: purchase.supplierId || null,
         creditorId: purchase.creditorId || null,
+        dueDate: purchase.dueDate || null,
         date: purchase.date || new Date().toISOString(),
         items: purchase.items || [],
         total: parseFloat(purchase.total) || 0,
@@ -1727,15 +1827,30 @@ class DataService {
         if (newPurchase.creditorId) {
           // Ensure the creditor card exists (create if missing)
           const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
-          const exists = creditors.find(c => c.id === newPurchase.creditorId);
-          if (!exists) {
-            const suppliers = await localforage.getItem(DATA_KEYS.SUPPLIERS) || [];
-            const supplier = suppliers.find(s => s.id === newPurchase.supplierId);
-            const stubName = newPurchase.supplierName || (supplier && (supplier.name || supplier.customerName)) || 'Unknown';
+          const suppliers = await localforage.getItem(DATA_KEYS.SUPPLIERS) || [];
+          const supplier = suppliers.find(s => s.id === newPurchase.supplierId);
+          const stubName = newPurchase.supplierName || (supplier && (supplier.name || supplier.customerName)) || 'Unknown';
+
+          // Check by ID first, then by name to avoid duplicates
+          let existingCreditor = creditors.find(c => c.id === newPurchase.creditorId) ||
+                                 creditors.find(c => (c.name || c.customerName || '').toLowerCase() === stubName.toLowerCase());
+
+          if (existingCreditor) {
+            // Use the existing creditor's ID for the debt
+            newPurchase.creditorId = existingCreditor.id;
+          } else {
             const newCreditor = {
               id: newPurchase.creditorId,
               name: stubName,
               customerName: stubName,
+              // Copy contact info from the supplier so notify works
+              phone: supplier?.phone || supplier?.customerPhone || '',
+              customerPhone: supplier?.phone || supplier?.customerPhone || '',
+              whatsapp: supplier?.whatsapp || '',
+              email: supplier?.email || '',
+              address: supplier?.address || '',
+              gender: supplier?.gender || '',
+              repaymentDate: newPurchase.dueDate || '',
               totalDue: 0,
               totalPaid: 0,
               balance: 0,
@@ -1752,7 +1867,7 @@ class DataService {
               }, { merge: true }).catch(e => console.error('Creditor stub sync error:', e));
             }
           }
-          await this.addCreditorDebt(newPurchase.creditorId, newPurchase.total, newPurchase.id);
+          await this.addCreditorDebt(newPurchase.creditorId, newPurchase.total, newPurchase.id, newPurchase.dueDate);
         }
       }
 
@@ -1813,7 +1928,7 @@ class DataService {
   }
 
   // ── Add debt to a creditor when a credit purchase is made ──────────────────
-  async addCreditorDebt(creditorId, amount, purchaseId) {
+  async addCreditorDebt(creditorId, amount, purchaseId, dueDate = null) {
     try {
       const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
       const creditor = creditors.find(c => c.id === creditorId);
@@ -1823,6 +1938,8 @@ class DataService {
       creditor.balance    = creditor.totalDue - (creditor.totalPaid || 0);
       creditor.purchaseIds = creditor.purchaseIds || [];
       if (!creditor.purchaseIds.includes(purchaseId)) creditor.purchaseIds.push(purchaseId);
+      // Store or update repayment date if provided
+      if (dueDate) creditor.repaymentDate = dueDate;
       creditor.lastPurchase = new Date().toISOString();
       creditor.updatedAt    = creditor.lastPurchase;
 
@@ -1897,6 +2014,62 @@ class DataService {
       return creditor;
     } catch (err) {
       console.error('Error recording creditor payment:', err);
+      throw err;
+    }
+  }
+
+  // ── Record a payment MADE to a supplier (Cash OUT) ─────────────────────────
+  async recordSupplierPayment(supplierId, amount, photo = null, receiptNumber = '') {
+    try {
+      const suppliers = await localforage.getItem(DATA_KEYS.SUPPLIERS) || [];
+      const supplier = suppliers.find(s => s.id === supplierId);
+      if (!supplier) return null;
+
+      const paymentAmount = parseFloat(amount);
+      supplier.totalPaid  = (supplier.totalPaid || 0) + paymentAmount;
+      supplier.balance    = (supplier.totalDue || 0) - supplier.totalPaid;
+      if (supplier.balance <= 0) { supplier.balance = 0; }
+      supplier.lastPayment = new Date().toISOString();
+      supplier.updatedAt   = supplier.lastPayment;
+
+      const depositEntry = {
+        id: this.generateId(), type: 'deposit',
+        amount: paymentAmount, date: supplier.lastPayment,
+        createdAt: supplier.lastPayment,
+        ...(photo ? { photo } : {}),
+        ...(receiptNumber ? { receiptNumber } : {}),
+      };
+      supplier.deposits = supplier.deposits || [];
+      supplier.deposits.push(depositEntry);
+
+      await localforage.setItem(DATA_KEYS.SUPPLIERS, suppliers);
+
+      // ── Cash OUT — we paid the supplier ───────────────────────────────
+      const supplierName = supplier.name || supplier.customerName || 'Supplier';
+      await this.addCashEntry({
+        type: 'out',
+        amount: paymentAmount,
+        note: `Paid to ${supplierName}`,
+        date: supplier.lastPayment,
+        source: 'supplier_payment',
+      });
+
+      // Sync to Firebase
+      if (this.isOnline && auth.currentUser) {
+        const depositsForFirestore = (supplier.deposits || []).map(dep => {
+          const { photo: _p, ...rest } = dep; return rest;
+        });
+        await setDoc(doc(db, 'suppliers', supplierId.toString()), {
+          ...supplier, deposits: depositsForFirestore,
+          lastPayment: serverTimestamp(), updatedAt: serverTimestamp(),
+        }, { merge: true }).catch(e => {
+          console.error('Supplier payment sync error:', e);
+        });
+      }
+
+      return supplier;
+    } catch (err) {
+      console.error('Error recording supplier payment:', err);
       throw err;
     }
   }
