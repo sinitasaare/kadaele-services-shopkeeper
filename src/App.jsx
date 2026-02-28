@@ -404,6 +404,7 @@ function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
+  const [storeIsOpen, setStoreIsOpen] = useState(null); // null = loading
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -411,11 +412,32 @@ function App() {
       if (user) {
         setCurrentUser(user);
         setUserEmail(user.email);
+        // Check store status after login
+        try {
+          const today = new Date().toISOString().slice(0, 10);
+          const record = await dataService.getDailyCashByDate(today);
+          setStoreIsOpen(record?.status === 'open');
+        } catch (e) { setStoreIsOpen(false); }
       }
       setIsCheckingAuth(false);
     };
     checkAuth();
   }, []);
+
+  // Re-check store status whenever the app becomes visible
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (!document.hidden && currentUser) {
+        try {
+          const today = new Date().toISOString().slice(0, 10);
+          const record = await dataService.getDailyCashByDate(today);
+          setStoreIsOpen(record?.status === 'open');
+        } catch (e) { /* ignore */ }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [currentUser]);
 
   useEffect(() => {
     const goOnline  = () => setIsOnline(true);
@@ -450,6 +472,17 @@ function App() {
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
     setUserEmail(user.email);
+    checkStoreStatus();
+  };
+
+  const checkStoreStatus = async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const record = await dataService.getDailyCashByDate(today);
+      setStoreIsOpen(record?.status === 'open');
+    } catch (e) {
+      setStoreIsOpen(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -515,7 +548,43 @@ function App() {
       </div>
 
       <main className="app-main">
-        <CurrentPageComponent />
+        {/* Pass store status update callback to CashReconciliation */}
+        <CurrentPageComponent
+          onStoreStatusChange={PAGES[currentPageIndex].name === 'CASH RECONCILIATION'
+            ? (isOpen) => setStoreIsOpen(isOpen)
+            : undefined}
+        />
+        {/* Store Closed Overlay — shown on all pages except Cash Reconciliation */}
+        {!storeIsOpen && currentUser && PAGES[currentPageIndex].name !== 'CASH RECONCILIATION' && storeIsOpen !== null && (
+          <div style={{
+            position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:9000,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'24px'
+          }}>
+            <div style={{
+              background:'white', borderRadius:'16px', padding:'28px 24px', maxWidth:'360px',
+              width:'100%', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.4)'
+            }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>🔒</div>
+              <h2 style={{ margin:'0 0 8px', fontSize:'20px', color:'#1a1a2e' }}>Store Closed</h2>
+              <p style={{ margin:'0 0 20px', color:'#6b7280', fontSize:'14px', lineHeight:'1.6' }}>
+                The store is not open for today. Please open the day in Cash Reconciliation before using the app.
+              </p>
+              <button
+                onClick={() => {
+                  const crIndex = PAGES.findIndex(p => p.name === 'CASH RECONCILIATION');
+                  if (crIndex >= 0) setCurrentPageIndex(crIndex);
+                }}
+                style={{
+                  width:'100%', padding:'12px', borderRadius:'10px', border:'none',
+                  background:'linear-gradient(135deg, #667eea, #764ba2)', color:'white',
+                  fontWeight:700, fontSize:'15px', cursor:'pointer'
+                }}
+              >
+                Go to Cash Reconciliation
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
       {showHelpModal && (
