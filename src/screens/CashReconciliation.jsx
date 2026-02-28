@@ -36,6 +36,8 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
     ? record.counted_cash - record.expected_cash
     : null;
 
+  const closeSessions = Array.isArray(record.close_sessions) ? record.close_sessions : [];
+
   const handleReopen = async () => {
     if (!window.confirm('Re-open this day? The close record will be cleared and the day will be marked as open again.')) return;
     setReopening(true);
@@ -88,6 +90,64 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
               </span>
             </div>
           )}
+
+          {/* ── Re-opening sessions (2nd, 3rd, …) ── */}
+          {closeSessions.map((sess, idx) => {
+            const sessionNum = idx + 2; // 1st close = original, 2nd close = index 0, etc.
+            const ordinals = ['Second', 'Third', 'Fourth', 'Fifth'];
+            const ordinal = ordinals[idx] || `#${sessionNum}`;
+            const sessDiff = (sess.counted_cash ?? null) !== null
+              ? sess.counted_cash - sess.expected_cash
+              : null;
+            return (
+              <React.Fragment key={idx}>
+                <hr style={{ border:'none', borderTop:'1px solid var(--border,#e5e7eb)', margin:'10px 0 6px' }} />
+                <p style={{ fontSize:'12px', fontWeight:700, color:'#4f46e5', margin:'2px 0 6px' }}>
+                  🔄 {ordinal} Session
+                </p>
+                <div className="cr-summary-row">
+                  <span className="cr-summary-label">
+                    {idx === 0 ? 'Re-opening Float' : `${ordinal} re-opening Float`}
+                  </span>
+                  <span className="cr-summary-value">{fmt(sess.reopen_float)}</span>
+                </div>
+                <div className="cr-summary-row">
+                  <span className="cr-summary-label">
+                    {idx === 0 ? 'Expected Cash after re-opening' : `Expected Cash after ${ordinal.toLowerCase()} re-opening`}
+                  </span>
+                  <span className="cr-summary-value expected">{fmt(sess.expected_cash)}</span>
+                </div>
+                {sess.counted_cash !== null && sess.counted_cash !== undefined && (
+                  <div className="cr-summary-row">
+                    <span className="cr-summary-label">
+                      {idx === 0 ? 'Counted Cash before second opening is closed' : `Counted Cash before ${ordinal.toLowerCase()} opening is closed`}
+                    </span>
+                    <span className="cr-summary-value">{fmt(sess.counted_cash)}</span>
+                  </div>
+                )}
+                {sessDiff !== null && (
+                  <div className="cr-summary-row">
+                    <span className="cr-summary-label">
+                      {idx === 0 ? 'Difference' : `Difference of ${ordinal.toLowerCase()} opening`}
+                    </span>
+                    <span className={`cr-summary-value ${sessDiff === 0 ? 'diff-zero' : sessDiff < 0 ? 'diff-neg' : 'diff-pos'}`}>
+                      {sessDiff >= 0 ? '+' : ''}{fmt(sessDiff)}
+                      {sessDiff === 0 && ' ✅ Balanced'}
+                      {sessDiff < 0 && ' ⚠️ Short'}
+                      {sessDiff > 0 && ' ⚠️ Surplus'}
+                    </span>
+                  </div>
+                )}
+                {sess.notes ? (
+                  <div className="cr-summary-row">
+                    <span className="cr-summary-label">Notes</span>
+                    <span className="cr-summary-value" style={{ textAlign:'right', maxWidth:'60%' }}>{sess.notes}</span>
+                  </div>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+
           {record.notes ? (
             <div className="cr-summary-row">
               <span className="cr-summary-label">Notes</span>
