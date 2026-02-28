@@ -28,18 +28,160 @@ function formatTime(iso) {
 
 // ── Detail Modal ─────────────────────────────────────────────────────────────
 
+function SessionBlock({ label, session, isLastSession, isOpen, onReopen, reopening }) {
+  // session shape:
+  //   For session 1 (root record): opened_by_name, opened_at_client, opening_float,
+  //                                expected_cash, counted_cash, closed_by_name, closed_at_client
+  //   For sessions 2+ (close_sessions[]): reopened_by_name, reopened_at, reopen_float,
+  //                                       expected_cash, counted_cash, closed_by_name, closed_at
+
+  const openedBy  = session.opened_by_name  || session.reopened_by_name || '—';
+  const openedAt  = session.opened_at_client || session.reopened_at     || null;
+  const float_    = session.opening_float    ?? session.reopen_float     ?? null;
+  const expected  = session.expected_cash    ?? null;
+  const counted   = session.counted_cash     ?? null;
+  const closedBy  = session.closed_by_name   || null;
+  const closedAt  = session.closed_at_client || session.closed_at        || null;
+
+  return (
+    <div className="cr-session-block">
+      {label && (
+        <div className="cr-session-label">
+          <span className="cr-session-label-text">{label}</span>
+        </div>
+      )}
+
+      <div className="cr-summary-row">
+        <span className="cr-summary-label">Opened by</span>
+        <span className="cr-summary-value">{openedBy}</span>
+      </div>
+      <div className="cr-summary-row">
+        <span className="cr-summary-label">Opened at</span>
+        <span className="cr-summary-value">{formatTime(openedAt)}</span>
+      </div>
+      <div className="cr-summary-row">
+        <span className="cr-summary-label">Opening Float</span>
+        <span className="cr-summary-value">{float_ !== null ? fmt(float_) : '—'}</span>
+      </div>
+      <div className="cr-summary-row">
+        <span className="cr-summary-label">Expected Cash in drawer</span>
+        <span className="cr-summary-value expected">{expected !== null ? fmt(expected) : '—'}</span>
+      </div>
+      <div className="cr-summary-row">
+        <span className="cr-summary-label">Counted Cash in drawer</span>
+        <span className="cr-summary-value">
+          {counted !== null && counted !== undefined ? fmt(counted) : '—'}
+        </span>
+      </div>
+      <div className="cr-summary-row">
+        <span className="cr-summary-label">Closed by</span>
+        <span className="cr-summary-value">{closedBy || '—'}</span>
+      </div>
+      <div className="cr-summary-row" style={{ borderBottom: 'none' }}>
+        <span className="cr-summary-label">Closed at</span>
+        <span className="cr-summary-value">{closedAt ? formatTime(closedAt) : '—'}</span>
+      </div>
+
+      {/* Re-Open Shop — only on the last session block when day is closed */}
+      {isLastSession && isOpen === false && (
+        <button
+          className="cr-btn-reopen"
+          onClick={onReopen}
+          disabled={reopening}
+        >
+          {reopening ? 'Reopening…' : '🔓 Re-Open Shop'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
   const [reopening, setReopening] = useState(false);
   if (!record) return null;
 
-  const diff = (record.counted_cash ?? null) !== null
-    ? record.counted_cash - record.expected_cash
-    : null;
-
+  // close_sessions[] holds sessions 2, 3, 4 … (each archived when day was re-opened)
+  // The root record always represents the current / last active session.
   const closeSessions = Array.isArray(record.close_sessions) ? record.close_sessions : [];
+  // Total sessions: 1 (root) + number of times day was re-opened
+  const totalSessions = 1 + closeSessions.length;
+  const hasMultipleSessions = totalSessions > 1;
+
+  // Build ordered session list:
+  // closeSessions[0] = session 2 (was first re-open), closeSessions[1] = session 3, etc.
+  // Root record = LAST session (currently active / most recent)
+  // We display them in chronological order:
+  //   Session 1 = root record's ORIGINAL open (before any re-opens)
+  //   Session 2 = closeSessions[0]
+  //   …
+  //   Session N = root record (current)
+
+  // For the "first" session we use root record's opened_by / opened_at / opening_float.
+  // After a re-open the root record gets reopened_by_name/reopened_at for the new session,
+  // but the original open fields are preserved on the root record.
+
+  // Build an array of session data objects in display order:
+  const sessions = [];
+
+  if (!hasMultipleSessions) {
+    // Only one session — no label header
+    sessions.push({ data: record, label: null, isRoot: true });
+  } else {
+    // Multiple sessions — label each one
+    // Session 1: the original open, using root record's original open fields
+    sessions.push({
+      data: {
+        opened_by_name:  record.opened_by_name,
+        opened_at_client: record.opened_at_client,
+        opening_float:   record.opening_float,
+        // Session 1's expected/counted/closed come from closeSessions[0] (archived when first re-opened)
+        expected_cash:   closeSessions[0]?.expected_cash   ?? record.expected_cash,
+        counted_cash:    closeSessions[0]?.counted_cash    ?? null,
+        closed_by_name:  closeSessions[0]?.closed_by_name  || null,
+        closed_at_client: closeSessions[0]?.closed_at      || null,
+      },
+      label: 'First Session',
+      isRoot: false,
+    });
+
+    // Sessions 2 … N-1: from closeSessions[1] onward
+    const ordinals = ['Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
+    for (let i = 1; i < closeSessions.length; i++) {
+      const sess = closeSessions[i];
+      sessions.push({
+        data: {
+          reopened_by_name: closeSessions[i-1]?.reopened_by_name || null,
+          reopened_at:      closeSessions[i-1]?.reopened_at      || null,
+          reopen_float:     sess.reopen_float,
+          expected_cash:    sess.expected_cash,
+          counted_cash:     sess.counted_cash,
+          closed_by_name:   sess.closed_by_name,
+          closed_at:        sess.closed_at,
+        },
+        label: `${ordinals[i] || `#${i+1}`} Session`,
+        isRoot: false,
+      });
+    }
+
+    // Last session: current root record (re-opened, now active or just closed again)
+    const lastCloseSession = closeSessions[closeSessions.length - 1];
+    sessions.push({
+      data: {
+        reopened_by_name: lastCloseSession?.reopened_by_name || record.reopened_by_name || null,
+        reopened_at:      lastCloseSession?.reopened_at      || record.reopened_at      || null,
+        reopen_float:     record.opening_float, // after re-open, root opening_float is updated
+        expected_cash:    record.expected_cash,
+        counted_cash:     record.counted_cash,
+        closed_by_name:   record.closed_by_name,
+        closed_at_client: record.closed_at_client,
+      },
+      label: `${ordinals[closeSessions.length] || `#${closeSessions.length+1}`} Session`,
+      isRoot: true,
+    });
+  }
 
   const handleReopen = async () => {
-    if (!window.confirm('Re-open this day? The close record will be cleared and the day will be marked as open again.')) return;
+    if (!window.confirm('Re-open this day? A new session will begin and the day will be marked as open again.')) return;
     setReopening(true);
     try {
       await dataService.reopenDay(record.business_date);
@@ -51,181 +193,53 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
     } finally { setReopening(false); }
   };
 
+  const isDayClosed = record.status === 'closed';
+
   return (
     <div className="cr-overlay" onClick={onClose}>
       <div className="cr-detail-modal" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
         <div className="cr-detail-header">
           <span className="cr-detail-title">{formatDateLabel(record.business_date)}</span>
           <button className="cr-close-btn" onClick={onClose}>✕</button>
         </div>
 
-        <div className="cr-card" style={{ gap:10 }}>
+        {/* Day Summary card */}
+        <div className="cr-card" style={{ gap: 10 }}>
           <p className="cr-card-title">Day Summary</p>
-          <div className="cr-summary-row">
+          <div className="cr-summary-row" style={{ borderBottom: 'none' }}>
             <span className="cr-summary-label">Status</span>
             <span className={`cr-record-status ${record.status}`}>{record.status}</span>
           </div>
-          <div className="cr-summary-row">
-            <span className="cr-summary-label">Opening Float</span>
-            <span className="cr-summary-value">{fmt(record.opening_float)}</span>
-          </div>
-          <div className="cr-summary-row">
-            <span className="cr-summary-label">Expected Cash</span>
-            <span className="cr-summary-value expected">{fmt(record.expected_cash)}</span>
-          </div>
-          {record.counted_cash !== null && record.counted_cash !== undefined && (
-            <div className="cr-summary-row">
-              <span className="cr-summary-label">Counted Cash</span>
-              <span className="cr-summary-value">{fmt(record.counted_cash)}</span>
-            </div>
-          )}
-          {diff !== null && (
-            <div className="cr-summary-row">
-              <span className="cr-summary-label">Difference</span>
-              <span className={`cr-summary-value ${diff === 0 ? 'diff-zero' : diff < 0 ? 'diff-neg' : 'diff-pos'}`}>
-                {diff >= 0 ? '+' : ''}{fmt(diff)}
-                {diff === 0 && ' ✅ Balanced'}
-                {diff < 0 && ' ⚠️ Short'}
-                {diff > 0 && ' ⚠️ Surplus'}
-              </span>
-            </div>
-          )}
-
-          {/* ── Re-opening sessions (2nd, 3rd, …) ── */}
-          {closeSessions.map((sess, idx) => {
-            const sessionNum = idx + 2; // 1st close = original, 2nd close = index 0, etc.
-            const ordinals = ['Second', 'Third', 'Fourth', 'Fifth'];
-            const ordinal = ordinals[idx] || `#${sessionNum}`;
-            const sessDiff = (sess.counted_cash ?? null) !== null
-              ? sess.counted_cash - sess.expected_cash
-              : null;
-            return (
-              <React.Fragment key={idx}>
-                <hr style={{ border:'none', borderTop:'1px solid var(--border,#e5e7eb)', margin:'10px 0 6px' }} />
-                <p style={{ fontSize:'12px', fontWeight:700, color:'#4f46e5', margin:'2px 0 6px' }}>
-                  🔄 {ordinal} Session
-                </p>
-                <div className="cr-summary-row">
-                  <span className="cr-summary-label">
-                    {idx === 0 ? 'Re-opening Float' : `${ordinal} re-opening Float`}
-                  </span>
-                  <span className="cr-summary-value">{fmt(sess.reopen_float)}</span>
-                </div>
-                <div className="cr-summary-row">
-                  <span className="cr-summary-label">
-                    {idx === 0 ? 'Expected Cash after re-opening' : `Expected Cash after ${ordinal.toLowerCase()} re-opening`}
-                  </span>
-                  <span className="cr-summary-value expected">{fmt(sess.expected_cash)}</span>
-                </div>
-                {sess.counted_cash !== null && sess.counted_cash !== undefined && (
-                  <div className="cr-summary-row">
-                    <span className="cr-summary-label">
-                      {idx === 0 ? 'Counted Cash before second opening is closed' : `Counted Cash before ${ordinal.toLowerCase()} opening is closed`}
-                    </span>
-                    <span className="cr-summary-value">{fmt(sess.counted_cash)}</span>
-                  </div>
-                )}
-                {sessDiff !== null && (
-                  <div className="cr-summary-row">
-                    <span className="cr-summary-label">
-                      {idx === 0 ? 'Difference' : `Difference of ${ordinal.toLowerCase()} opening`}
-                    </span>
-                    <span className={`cr-summary-value ${sessDiff === 0 ? 'diff-zero' : sessDiff < 0 ? 'diff-neg' : 'diff-pos'}`}>
-                      {sessDiff >= 0 ? '+' : ''}{fmt(sessDiff)}
-                      {sessDiff === 0 && ' ✅ Balanced'}
-                      {sessDiff < 0 && ' ⚠️ Short'}
-                      {sessDiff > 0 && ' ⚠️ Surplus'}
-                    </span>
-                  </div>
-                )}
-                {sess.notes ? (
-                  <div className="cr-summary-row">
-                    <span className="cr-summary-label">Notes</span>
-                    <span className="cr-summary-value" style={{ textAlign:'right', maxWidth:'60%' }}>{sess.notes}</span>
-                  </div>
-                ) : null}
-              </React.Fragment>
-            );
-          })}
-
-          {record.notes ? (
-            <div className="cr-summary-row">
-              <span className="cr-summary-label">Notes</span>
-              <span className="cr-summary-value" style={{ textAlign:'right', maxWidth:'60%' }}>{record.notes}</span>
-            </div>
-          ) : null}
         </div>
 
-        <div className="cr-card" style={{ gap:10 }}>
-          <p className="cr-card-title">Staff</p>
-          <div className="cr-summary-row">
-            <span className="cr-summary-label">Opened by</span>
-            <span className="cr-summary-value">{record.opened_by_name || '—'}</span>
-          </div>
-          <div className="cr-summary-row">
-            <span className="cr-summary-label">Opened at</span>
-            <span className="cr-summary-value">{formatTime(record.opened_at_client)}</span>
-          </div>
-          {record.closed_by_name && (
-            <>
-              <div className="cr-summary-row">
-                <span className="cr-summary-label">Closed by</span>
-                <span className="cr-summary-value">{record.closed_by_name}</span>
-              </div>
-              <div className="cr-summary-row">
-                <span className="cr-summary-label">Closed at</span>
-                <span className="cr-summary-value">{formatTime(record.closed_at_client)}</span>
-              </div>
-            </>
-          )}
-          {record.reopened_by_name && (
-            <>
-              <div className="cr-summary-row">
-                <span className="cr-summary-label">Reopened by</span>
-                <span className="cr-summary-value">{record.reopened_by_name}</span>
-              </div>
-              <div className="cr-summary-row">
-                <span className="cr-summary-label">Reopened at</span>
-                <span className="cr-summary-value">{formatTime(record.reopened_at)}</span>
-              </div>
-            </>
-          )}
+        {/* Session blocks */}
+        {sessions.map((sess, idx) => (
+          <SessionBlock
+            key={idx}
+            label={sess.label}
+            session={sess.data}
+            isLastSession={idx === sessions.length - 1}
+            isOpen={!isDayClosed}
+            onReopen={handleReopen}
+            reopening={reopening}
+          />
+        ))}
 
-          {/* Unlock events — shown when any unlock was recorded */}
-          {Array.isArray(record.unlock_events) && record.unlock_events.length > 0 && (
-            <>
-              <hr style={{ border:'none', borderTop:'1px solid var(--border,#e5e7eb)', margin:'8px 0' }} />
-              <p style={{ fontSize:'12px', fontWeight:700, color:'#4f46e5', margin:'4px 0 6px' }}>
-                🔓 Checkout Unlocks ({record.unlock_events.length})
-              </p>
-              {record.unlock_events.map((ev, i) => (
-                <div key={i} className="cr-summary-row" style={{ fontSize:'12px' }}>
-                  <span className="cr-summary-label">{ev.name || 'Staff'}</span>
-                  <span className="cr-summary-value">{formatTime(ev.at)}</span>
-                </div>
-              ))}
-            </>
-          )}
+        {/* Unlock events — audit trail */}
+        {Array.isArray(record.unlock_events) && record.unlock_events.length > 0 && (
+          <div className="cr-card" style={{ gap: 8 }}>
+            <p className="cr-card-title">🔓 Checkout Unlocks ({record.unlock_events.length})</p>
+            {record.unlock_events.map((ev, i) => (
+              <div key={i} className="cr-summary-row" style={{ fontSize: '12px' }}>
+                <span className="cr-summary-label">{ev.name || 'Staff'}</span>
+                <span className="cr-summary-value">{formatTime(ev.at)}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
-          {/* Re-open button — only shown if day is closed */}
-          {record.status === 'closed' && (
-            <div style={{ marginTop:'8px' }}>
-              <button
-                onClick={handleReopen}
-                disabled={reopening}
-                style={{
-                  width:'100%', padding:'10px', borderRadius:'8px', border:'none',
-                  background:'#4f46e5', color:'white', cursor:'pointer', fontWeight:700, fontSize:'14px'
-                }}
-              >
-                {reopening ? 'Reopening…' : '🔓 Re-Open Day'}
-              </button>
-              <p style={{ fontSize:'11px', color:'#6b7280', textAlign:'center', marginTop:'6px' }}>
-                This will revert the close and allow new entries.
-              </p>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
