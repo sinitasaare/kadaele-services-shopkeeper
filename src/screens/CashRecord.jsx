@@ -308,12 +308,11 @@ function StoreClosedBanner() {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-function CashRecord() {
+function CashRecord({ isUnlocked = false }) {
   const { fmt } = useCurrency();
   const [entries, setEntries]             = useState([]);
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [editEntry, setEditEntry]         = useState(null);
-  const [storeIsOpen, setStoreIsOpen]     = useState(null); // null = loading
   const [currentBalance, setCurrentBalance] = useState(0);
 
   // Filter states
@@ -341,13 +340,12 @@ function CashRecord() {
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    checkStoreStatus();
     loadEntries();
   }, []);
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (!document.hidden) { checkStoreStatus(); loadEntries(); }
+      if (!document.hidden) { loadEntries(); }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
@@ -356,16 +354,7 @@ function CashRecord() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { applyFilters(); }, [entries, appliedTypeFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
-  const checkStoreStatus = async () => {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const record = await dataService.getDailyCashByDate(today);
-      setStoreIsOpen(record?.status === 'open');
-    } catch (e) {
-      console.error('Error checking store status:', e);
-      setStoreIsOpen(false);
-    }
-  };
+
 
   const loadEntries = async () => {
     const allEntries = await dataService.getCashEntries();
@@ -529,10 +518,6 @@ function CashRecord() {
   const btnLabel = !showFilters ? 'Filter Entries' : showApply ? 'Apply Filter' : 'Close Filter';
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  if (storeIsOpen === null) {
-    return <div style={{ padding:'32px', textAlign:'center', color:'#6b7280' }}>Loading…</div>;
-  }
-
   return (
     <div className="cj-record">
 
@@ -594,11 +579,11 @@ function CashRecord() {
           <button
             className={`cj-filter-action-btn${!showFilters ? ' cjfab-open' : showApply ? ' cjfab-apply' : ' cjfab-close'}`}
             onClick={handleFilterButtonClick}>{btnLabel}</button>
-          {!showFilters && storeIsOpen && (
+          {!showFilters && isUnlocked && (
             <button className="cj-add-btn" onClick={openAddModal}>+ Add Entry</button>
           )}
-          {!showFilters && !storeIsOpen && (
-            <span style={{ fontSize:'12px', color:'#ef4444', fontWeight:600, padding:'6px 8px' }}>🔒 Store Closed</span>
+          {!showFilters && !isUnlocked && (
+            <span style={{ fontSize:'12px', color:'#ef4444', fontWeight:600, padding:'6px 8px' }}>🔒 Locked</span>
           )}
         </div>
         <h3 className="cj-table-title">{getTableTitle()}</h3>
@@ -613,9 +598,6 @@ function CashRecord() {
           </div>
         </div>
       </div>
-
-      {/* Store closed warning */}
-      {!storeIsOpen && <StoreClosedBanner />}
 
       {/* ── Scroll body ── */}
       <div className="cj-scroll-body">
