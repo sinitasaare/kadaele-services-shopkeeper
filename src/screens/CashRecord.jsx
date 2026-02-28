@@ -8,7 +8,6 @@ import './CashRecord.css';
 const TYPE_IN  = 'in';
 const TYPE_OUT = 'out';
 
-// ── Shared 30-minute edit window helper ──────────────────────────────────────
 function isWithin30Mins(entry) {
   const ts = entry.createdAt || entry.date;
   if (!ts) return false;
@@ -48,8 +47,7 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'380px' }}>
-        <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Cash Entry</h3>
-
+        <h3 style={{ margin:'0 0 16px', fontSize:'16px' }}>✏️ Edit Cash Entry</h3>
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Type</label>
           <div style={{ display:'flex', gap:'8px' }}>
@@ -63,19 +61,16 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
             ))}
           </div>
         </div>
-
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Amount</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} min="0.01" step="0.01"
             style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
-
         <div style={{ marginBottom:'16px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Description</label>
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="Description…"
             style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
-
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>Cancel</button>
@@ -92,7 +87,7 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
   );
 }
 
-// ── Sub-modal for "Cash from" (Cash IN) ─────────────────────────────────────
+// ── Sub-modal: Cash From (Cash IN) ───────────────────────────────────────────
 function CashFromModal({ onSave, onCancel }) {
   const [from, setFrom] = useState('');
   const [reason, setReason] = useState('');
@@ -121,32 +116,174 @@ function CashFromModal({ onSave, onCancel }) {
   );
 }
 
-// ── Sub-modal for "Withdrawals" or "Paid to" (Cash OUT) ─────────────────────
-function CashOutSubModal({ mode, onSave, onCancel }) {
-  const [name, setName] = useState('');
-  const [reason, setReason] = useState(mode === 'withdrawal' ? 'Personal use' : '');
-  const title = mode === 'withdrawal' ? 'Withdrawal' : 'Bills';
-  const nameLbl = mode === 'withdrawal' ? 'Person / Company withdrawing' : 'Bill / Company to pay';
+// ── Sub-modal: Vendor Payment ────────────────────────────────────────────────
+function VendorSubModal({ onSave, onCancel }) {
+  const [vendorName, setVendorName] = useState('');
+  const [reason, setReason] = useState('');
+
+  const handleSave = async () => {
+    if (!vendorName.trim()) { alert('Please enter a vendor name.'); return; }
+    if (!reason.trim()) { alert('Please enter a reason.'); return; }
+    // Save vendor as Supplier + Debtor
+    try {
+      const suppliers = await dataService.getSuppliers();
+      const exists = suppliers.find(s => (s.name || '').toLowerCase() === vendorName.trim().toLowerCase());
+      if (!exists) {
+        const newSupplier = {
+          id: dataService.generateId(),
+          name: vendorName.trim(),
+          customerName: vendorName.trim(),
+          totalDue: 0, totalPaid: 0, balance: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await dataService.setSuppliers([...suppliers, newSupplier]);
+      }
+      const debtors = await dataService.getDebtors();
+      const dExists = debtors.find(d => (d.name || d.customerName || '').toLowerCase() === vendorName.trim().toLowerCase());
+      if (!dExists) {
+        await dataService.setDebtors([...debtors, {
+          id: dataService.generateId(),
+          name: vendorName.trim(),
+          customerName: vendorName.trim(),
+          totalDue: 0, totalPaid: 0, balance: 0,
+          isVendor: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }]);
+      }
+    } catch(e) { console.error('Error saving vendor:', e); }
+    onSave(`Paid Cash to ${vendorName.trim()} — ${reason.trim()}`);
+  };
 
   return (
     <div className="cj-sub-overlay">
       <div className="cj-sub-modal">
-        <h3 className="cj-sub-title">{title}</h3>
+        <h3 className="cj-sub-title">Vendor Payment</h3>
         <div className="cj-modal-field">
-          <label>{nameLbl}</label>
-          <input className="cj-modal-input" value={name} onChange={e => setName(e.target.value)} placeholder="Enter name…" />
+          <label>Vendor Name</label>
+          <input className="cj-modal-input" value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="Enter vendor name…" />
         </div>
         <div className="cj-modal-field">
-          <label>Being for</label>
-          <input className="cj-modal-input" value={reason} onChange={e => setReason(e.target.value)}
-            placeholder={mode === 'withdrawal' ? 'Personal use' : 'Reason for payment…'}
-            readOnly={mode === 'withdrawal'} style={mode === 'withdrawal' ? {background:'#f3f4f6',color:'#6b7280'} : {}} />
+          <label>Reason</label>
+          <input className="cj-modal-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for payment…" />
         </div>
+        <p style={{ fontSize:'11px', color:'#6b7280', margin:'4px 0 8px' }}>
+          ℹ️ This vendor will be saved as a Supplier and Debtor record.
+        </p>
+        <div className="cj-modal-buttons">
+          <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="cj-modal-save" onClick={handleSave}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-modal: Withdrawal (Cash OUT) ─────────────────────────────────────────
+// Name dropdown: Riti, PUB, Starlink, Vendor, [employees/landlords from debtors]
+function WithdrawalSubModal({ onSave, onCancel }) {
+  const [name, setName]               = useState('');
+  const [description, setDescription] = useState('');
+  const [showNameDrop, setShowNameDrop] = useState(false);
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  const [debtors, setDebtors]         = useState([]);
+
+  useEffect(() => {
+    dataService.getDebtors().then(d => setDebtors(d || []));
+  }, []);
+
+  const FIXED_OPTIONS = [
+    { key: 'riti',     label: 'Riti (Personal use)',               desc: 'for Personal use' },
+    { key: 'pub',      label: 'PUB',                               desc: 'for electricity' },
+    { key: 'starlink', label: 'Starlink',                          desc: 'for internet monthly subscription' },
+    { key: 'vendor',   label: 'Vendor (recharge / stationary)',    desc: '' },
+  ];
+
+  // Employee and landlord debtors
+  const staffOptions = debtors
+    .filter(d => d.isEmployee || d.isLandlord || d.role === 'employee' || d.role === 'landlord')
+    .map(d => ({
+      key: `person_${d.id}`,
+      label: d.name || d.customerName,
+      desc: 'Cash Advance',
+    }));
+
+  const allOptions = [...FIXED_OPTIONS, ...staffOptions];
+  const filteredOptions = name.trim()
+    ? allOptions.filter(o => o.label.toLowerCase().includes(name.toLowerCase()))
+    : allOptions;
+
+  const handleNameSelect = (opt) => {
+    setShowNameDrop(false);
+    if (opt.key === 'vendor') {
+      setShowVendorModal(true);
+      return;
+    }
+    setName(opt.label);
+    setDescription(opt.desc);
+  };
+
+  if (showVendorModal) {
+    return (
+      <VendorSubModal
+        onSave={(note) => { setShowVendorModal(false); onSave(note); }}
+        onCancel={() => setShowVendorModal(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="cj-sub-overlay">
+      <div className="cj-sub-modal">
+        <h3 className="cj-sub-title">Withdrawal</h3>
+
+        <div className="cj-modal-field" style={{ position:'relative' }}>
+          <label>Name</label>
+          <input
+            className="cj-modal-input"
+            value={name}
+            onChange={e => { setName(e.target.value); setDescription(''); setShowNameDrop(true); }}
+            onFocus={() => setShowNameDrop(true)}
+            onBlur={() => setTimeout(() => setShowNameDrop(false), 200)}
+            placeholder="Select or type a name…"
+          />
+          {showNameDrop && filteredOptions.length > 0 && (
+            <div style={{
+              position:'absolute', top:'100%', left:0, right:0, zIndex:200,
+              background:'var(--surface)', border:'1px solid var(--border)',
+              borderRadius:'6px', maxHeight:'200px', overflowY:'auto',
+              boxShadow:'0 4px 12px rgba(0,0,0,0.15)'
+            }}>
+              {filteredOptions.map(opt => (
+                <div
+                  key={opt.key}
+                  onMouseDown={() => handleNameSelect(opt)}
+                  style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'13px' }}
+                >
+                  {opt.label}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="cj-modal-field">
+          <label>Description</label>
+          <input
+            className="cj-modal-input"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Auto-filled based on name…"
+          />
+        </div>
+
         <div className="cj-modal-buttons">
           <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
           <button className="cj-modal-save" onClick={() => {
             if (!name.trim()) { alert('Please enter a name.'); return; }
-            onSave(`Paid Cash to ${name.trim()} for ${reason.trim() || 'Personal use'}`);
+            if (!description.trim()) { alert('Please enter a description.'); return; }
+            onSave(`Paid Cash to ${name.trim()} ${description.trim()}`);
           }}>Save</button>
         </div>
       </div>
@@ -154,75 +291,91 @@ function CashOutSubModal({ mode, onSave, onCancel }) {
   );
 }
 
+// ── Store Closed Banner ────────────────────────────────────────────────────────
+function StoreClosedBanner() {
+  return (
+    <div style={{
+      background:'#fef3c7', border:'1.5px solid #f59e0b', borderRadius:'10px',
+      padding:'20px', margin:'16px', textAlign:'center', color:'#92400e'
+    }}>
+      <div style={{ fontSize:'32px', marginBottom:'8px' }}>🔒</div>
+      <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'4px' }}>Store Not Open</div>
+      <div style={{ fontSize:'13px', lineHeight:'1.5' }}>
+        Open the day in <strong>Cash Reconciliation</strong> to use the Cash Record and add entries.
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 function CashRecord() {
   const { fmt } = useCurrency();
-  const [entries, setEntries] = useState([]);
+  const [entries, setEntries]             = useState([]);
   const [filteredEntries, setFilteredEntries] = useState([]);
-  const [editEntry, setEditEntry] = useState(null);
+  const [editEntry, setEditEntry]         = useState(null);
+  const [storeIsOpen, setStoreIsOpen]     = useState(null); // null = loading
+  const [currentBalance, setCurrentBalance] = useState(0);
 
-  // Opening balance
-
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('today');
-  const [selectedDate, setSelectedDate] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-
+  // Filter states
+  const [typeFilter, setTypeFilter]       = useState('all');
+  const [dateFilter, setDateFilter]       = useState('today');
+  const [selectedDate, setSelectedDate]   = useState('');
+  const [startDate, setStartDate]         = useState('');
+  const [endDate, setEndDate]             = useState('');
   const [appliedTypeFilter, setAppliedTypeFilter] = useState('all');
   const [appliedDateFilter, setAppliedDateFilter] = useState('today');
   const [appliedSelectedDate, setAppliedSelectedDate] = useState('');
   const [appliedStartDate, setAppliedStartDate] = useState('');
-  const [appliedEndDate, setAppliedEndDate] = useState('');
+  const [appliedEndDate, setAppliedEndDate]     = useState('');
+  const [showFilters, setShowFilters]     = useState(false);
 
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Add Entry modal states
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newType, setNewType] = useState(TYPE_IN);
-  const [newAmount, setNewAmount] = useState('');
-  // descriptionKey: null | 'float' | 'cash_from' | 'withdrawal' | 'paid_to'
+  // Add Entry modal
+  const [showAddModal, setShowAddModal]   = useState(false);
+  const [newType, setNewType]             = useState(TYPE_IN);
+  const [newAmount, setNewAmount]         = useState('');
   const [descriptionKey, setDescriptionKey] = useState(null);
-  const [resolvedNote, setResolvedNote] = useState('');
-  // subModal: null | 'cash_from' | 'withdrawal' | 'paid_to'
-  const [subModal, setSubModal] = useState(null);
+  const [resolvedNote, setResolvedNote]   = useState('');
+  const [subModal, setSubModal]           = useState(null);
   const [descDropdownOpen, setDescDropdownOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing]   = useState(false);
 
-  // ── Data ──────────────────────────────────────────────────────────────────
+  // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Check if opening balance has been set yet
-    dataService.getSettings().then(s => {
-      if (s.openingBalance === null || s.openingBalance === undefined) {
-        setShowOpeningModal(true);
-      }
-    });
+    checkStoreStatus();
     loadEntries();
   }, []);
-  // Reload when tab becomes visible again (after switching from SalesRegister)
+
   useEffect(() => {
-    const handleVisibility = () => { if (!document.hidden) loadEntries(); };
+    const handleVisibility = () => {
+      if (!document.hidden) { checkStoreStatus(); loadEntries(); }
+    };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { applyFilters(); }, [entries, appliedTypeFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
 
+  const checkStoreStatus = async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const record = await dataService.getDailyCashByDate(today);
+      setStoreIsOpen(record?.status === 'open');
+    } catch (e) {
+      console.error('Error checking store status:', e);
+      setStoreIsOpen(false);
+    }
+  };
+
   const loadEntries = async () => {
-    // All cash entries (sales, deposits, manual) are stored in localforage
-    // via dataService.addCashEntry(). We simply read them all here.
-    // Sales Register writes "CASH Sale" entries automatically.
-    // Debtors deposit payments write "[Name] paid cash to repay debt" entries.
     const allEntries = await dataService.getCashEntries();
-
-    const sorted = (allEntries || [])
-      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-
+    const sorted = (allEntries || []).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     let running = 0;
     const withBalance = sorted.map(entry => {
       running += entry.type === TYPE_IN ? entry.amount : -entry.amount;
       return { ...entry, balance: running };
     });
-
+    setCurrentBalance(running);
     setEntries([...withBalance].reverse());
   };
 
@@ -257,9 +410,9 @@ function CashRecord() {
 
   // ── Filter controls ───────────────────────────────────────────────────────
   const isFilterComplete = () => {
-    if (dateFilter === 'today')  return true;
+    if (dateFilter === 'today') return true;
     if (dateFilter === 'single') return !!selectedDate;
-    if (dateFilter === 'range')  return !!(startDate && endDate);
+    if (dateFilter === 'range') return !!(startDate && endDate);
     return false;
   };
   const hasChanged = () =>
@@ -267,7 +420,7 @@ function CashRecord() {
     selectedDate !== appliedSelectedDate || startDate !== appliedStartDate || endDate !== appliedEndDate;
   const showApply = isFilterComplete() && hasChanged();
 
-  const handleClose = () => {
+  const handleCloseFilter = () => {
     setTypeFilter(appliedTypeFilter); setDateFilter(appliedDateFilter);
     setSelectedDate(appliedSelectedDate); setStartDate(appliedStartDate); setEndDate(appliedEndDate);
     setShowFilters(false);
@@ -280,7 +433,7 @@ function CashRecord() {
   const handleFilterButtonClick = () => {
     if (!showFilters)    setShowFilters(true);
     else if (showApply)  handleApply();
-    else                 handleClose();
+    else                 handleCloseFilter();
   };
 
   // ── Add Entry ─────────────────────────────────────────────────────────────
@@ -291,24 +444,29 @@ function CashRecord() {
   const openAddModal = () => { resetAddModal(); setShowAddModal(true); };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
-  // When user picks a description option
+  const IN_OPTIONS = [
+    { key: 'float',        label: 'Float (change money)' },
+    { key: 'purchases',    label: 'Purchases (money to pay stock)' },
+    { key: 'safe_keeping', label: 'For Safe Keeping' },
+    { key: 'cash_from',    label: 'Cash from…' },
+  ];
+  const OUT_OPTIONS = [
+    { key: 'withdrawal', label: 'Withdrawal' },
+  ];
+  const currentOptions = newType === TYPE_IN ? IN_OPTIONS : OUT_OPTIONS;
+
   const handleDescriptionSelect = (key) => {
     setDescriptionKey(key);
     setResolvedNote('');
-    if (key === 'float') {
-      // Float is immediate — no sub-modal needed
-      setResolvedNote('Float (notes and coins for change)');
-    } else if (key === 'cash_from') {
-      setSubModal('cash_from');
-    } else if (key === 'withdrawal') {
-      setSubModal('withdrawal');
-    } else if (key === 'paid_to') {
-      setSubModal('paid_to');
-    }
+    if (key === 'float')        setResolvedNote('Float (notes and coins for change)');
+    else if (key === 'purchases')    setResolvedNote('Purchases (money to pay stock)');
+    else if (key === 'safe_keeping') setResolvedNote('For Safe Keeping');
+    else if (key === 'cash_from')    setSubModal('cash_from');
+    else if (key === 'withdrawal')   setSubModal('withdrawal');
   };
 
   const handleSubModalSave = (note) => {
-    setResolvedNote(note);
+    setResolvedNote(typeof note === 'string' ? note : '');
     setSubModal(null);
   };
 
@@ -362,36 +520,24 @@ function CashRecord() {
     if (!d) return { date:'N/A', time:'N/A' };
     return {
       date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
-      // Show FORGOTTEN for entries entered via the Settings "Unrecorded Cash Entry" modal
       time: entry.isUnrecorded ? 'UNRECORDED' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
     };
   };
 
   const totalRecords = filteredEntries.length;
-  const netBalance = filteredEntries.reduce(
-    (sum, e) => sum + (e.type === TYPE_IN ? e.amount : -e.amount), 0
-  );
+  const netBalance = filteredEntries.reduce((sum, e) => sum + (e.type === TYPE_IN ? e.amount : -e.amount), 0);
   const btnLabel = !showFilters ? 'Filter Entries' : showApply ? 'Apply Filter' : 'Close Filter';
 
-  // IN description options
-  const IN_OPTIONS = [
-    { key: 'float',     label: 'Float (change money)' },
-    { key: 'cash_from', label: 'Cash from…'           },
-  ];
-  // OUT description options
-  const OUT_OPTIONS = [
-    { key: 'withdrawal', label: 'Withdrawal'   },
-    { key: 'paid_to',    label: 'Bills…'       },
-  ];
-  const currentOptions = newType === TYPE_IN ? IN_OPTIONS : OUT_OPTIONS;
+  // ── Render ─────────────────────────────────────────────────────────────────
+  if (storeIsOpen === null) {
+    return <div style={{ padding:'32px', textAlign:'center', color:'#6b7280' }}>Loading…</div>;
+  }
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="cj-record">
 
-      {/* ── Sticky bar ── */}
+      {/* ── Sticky header ── */}
       <div className="cj-sticky-bar">
-        {/* Filter panel — inside sticky bar */}
         {showFilters && (
           <div className="cj-filters-section">
             <div className="cj-filter-group">
@@ -448,9 +594,11 @@ function CashRecord() {
           <button
             className={`cj-filter-action-btn${!showFilters ? ' cjfab-open' : showApply ? ' cjfab-apply' : ' cjfab-close'}`}
             onClick={handleFilterButtonClick}>{btnLabel}</button>
-          {/* Hide + Add Entry while filter panel is open */}
-          {!showFilters && (
+          {!showFilters && storeIsOpen && (
             <button className="cj-add-btn" onClick={openAddModal}>+ Add Entry</button>
+          )}
+          {!showFilters && !storeIsOpen && (
+            <span style={{ fontSize:'12px', color:'#ef4444', fontWeight:600, padding:'6px 8px' }}>🔒 Store Closed</span>
           )}
         </div>
         <h3 className="cj-table-title">{getTableTitle()}</h3>
@@ -466,7 +614,10 @@ function CashRecord() {
         </div>
       </div>
 
-      {/* ── Scroll body — the ONLY scroll container; thead sticks at top:0 inside it ── */}
+      {/* Store closed warning */}
+      {!storeIsOpen && <StoreClosedBanner />}
+
+      {/* ── Scroll body ── */}
       <div className="cj-scroll-body">
         <div className="cj-table-wrapper" style={{position:'relative'}}>
           <PdfTableButton
@@ -481,7 +632,7 @@ function CashRecord() {
               return {
                 date, time,
                 ref: entry.invoiceRef||entry.ref||'—',
-                desc: entry.description||'—',
+                desc: entry.note||'—',
                 amount: fmt(entry.amount||0),
                 type: entry.type===TYPE_IN ? 'IN':'OUT',
                 balance: fmt(entry.balance||0),
@@ -489,68 +640,65 @@ function CashRecord() {
             })}
             summary={[{label:'Net Balance', value: fmt(Math.abs(netBalance))+(netBalance<0?' (deficit)':'')}]}
           />
-        <table className="cj-table">
-          <thead className="cj-thead">
-            <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Ref</th>
-              <th>Description</th>
-              <th className="cj-col-right">Amount</th>
-              <th className="cj-col-center">Type</th>
-              <th className="cj-col-right">Balance</th>
-              <th className="cj-col-center">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredEntries.length === 0 ? (
-              <tr><td colSpan="8" className="cj-empty-cell">No entries found</td></tr>
-            ) : (
-              filteredEntries.map(entry => {
-                const { date, time } = formatDateTime(entry);
-                const editable = isWithin30Mins(entry);
-                return (
-                  <tr key={entry.id} className="cj-row">
-                    <td>{date}</td>
-                    <td>{time}</td>
-                    <td className="cj-ref-cell">{entry.invoiceRef || entry.ref || '—'}</td>
-                    <td className="cj-note-cell">{entry.note || '—'}</td>
-                    <td className={`cj-col-right cj-amount ${entry.type === TYPE_IN ? 'cj-in' : 'cj-out'}`}>
-                      {(() => { const s = entry.type === TYPE_IN ? '+' : '-'; const r = fmt(entry.amount); const sym = r.match(/^[^\d]+/)?.[0] ?? ''; const num = r.slice(sym.length); return `${s} ${sym} ${num}`; })()}
-                    </td>
-                    <td className="cj-col-center">
-                      <span className={`cj-type-badge cj-badge-${entry.type}`}>
-                        {entry.type === TYPE_IN ? 'IN' : 'OUT'}
-                      </span>
-                    </td>
-                    <td className={`cj-col-right cj-balance ${entry.balance < 0 ? 'cj-balance-neg' : ''}`}>
-                      {entry.balance < 0 ? '-' : ''}{fmt(Math.abs(entry.balance))}
-                    </td>
-                    <td className="cj-col-center">
-                      {editable ? (
-                        <button onClick={() => setEditEntry(entry)}
-                          style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
-                          title="Edit entry">
-                          <Edit2 size={15} />
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+          <table className="cj-table">
+            <thead className="cj-thead">
+              <tr>
+                <th>Date</th><th>Time</th><th>Ref</th><th>Description</th>
+                <th className="cj-col-right">Amount</th>
+                <th className="cj-col-center">Type</th>
+                <th className="cj-col-right">Balance</th>
+                <th className="cj-col-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEntries.length === 0 ? (
+                <tr><td colSpan="8" className="cj-empty-cell">No entries found</td></tr>
+              ) : (
+                filteredEntries.map(entry => {
+                  const { date, time } = formatDateTime(entry);
+                  const editable = isWithin30Mins(entry);
+                  return (
+                    <tr key={entry.id} className="cj-row">
+                      <td>{date}</td>
+                      <td>{time}</td>
+                      <td className="cj-ref-cell">{entry.invoiceRef || entry.ref || '—'}</td>
+                      <td className="cj-note-cell">{entry.note || '—'}</td>
+                      <td className={`cj-col-right cj-amount ${entry.type === TYPE_IN ? 'cj-in' : 'cj-out'}`}>
+                        {(() => { const s = entry.type === TYPE_IN ? '+' : '-'; const r = fmt(entry.amount); const sym = r.match(/^[^\d]+/)?.[0] ?? ''; const num = r.slice(sym.length); return `${s} ${sym} ${num}`; })()}
+                      </td>
+                      <td className="cj-col-center">
+                        <span className={`cj-type-badge cj-badge-${entry.type}`}>
+                          {entry.type === TYPE_IN ? 'IN' : 'OUT'}
+                        </span>
+                      </td>
+                      <td className={`cj-col-right cj-balance ${entry.balance < 0 ? 'cj-balance-neg' : ''}`}>
+                        {entry.balance < 0 ? '-' : ''}{fmt(Math.abs(entry.balance))}
+                      </td>
+                      <td className="cj-col-center">
+                        {editable ? (
+                          <button onClick={() => setEditEntry(entry)}
+                            style={{ background:'none', border:'none', cursor:'pointer', color:'#667eea', padding:'4px', borderRadius:'4px', display:'inline-flex', alignItems:'center' }}
+                            title="Edit entry">
+                            <Edit2 size={15} />
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* ── Add Entry modal ── */}
-      {showAddModal && (
+      {showAddModal && storeIsOpen && (
         <div className="cj-modal-overlay">
           <div className="cj-modal-content">
             <h2 className="cj-modal-title">Add Cash Entry</h2>
 
-            {/* Type selector */}
+            {/* Type */}
             <div className="cj-modal-field">
               <label>Type</label>
               <div className="cj-modal-type-btns">
@@ -572,13 +720,17 @@ function CashRecord() {
               <label>Amount</label>
               <input type="number" className="cj-modal-input" placeholder="0.00"
                 value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01" />
+              {newType === TYPE_OUT && (
+                <div style={{ fontSize:'12px', color:'#6b7280', marginTop:'4px' }}>
+                  Current cash balance: {fmt(Math.max(0, currentBalance))}
+                </div>
+              )}
             </div>
 
-            {/* Description — click '...' to open dropdown */}
+            {/* Description dropdown — no free-text, must pick from list */}
             <div className="cj-modal-field">
               <label>Description</label>
               <div className="cj-desc-field-wrapper">
-                {/* The '...' trigger / selected value display */}
                 <button
                   className={`cj-desc-trigger${descDropdownOpen ? ' open' : ''}${resolvedNote ? ' has-value' : ''}`}
                   onClick={() => setDescDropdownOpen(o => !o)}
@@ -593,7 +745,6 @@ function CashRecord() {
                   <span className="cj-desc-chevron">{descDropdownOpen ? '▲' : '▼'}</span>
                 </button>
 
-                {/* Dropdown list — only shows when open */}
                 {descDropdownOpen && (
                   <div className="cj-desc-dropdown">
                     {currentOptions.map(opt => (
@@ -613,7 +764,6 @@ function CashRecord() {
                 )}
               </div>
 
-              {/* Preview of resolved description */}
               {resolvedNote && (
                 <div className="cj-desc-preview">{resolvedNote}</div>
               )}
@@ -627,16 +777,15 @@ function CashRecord() {
               </button>
             </div>
 
-            {/* Sub-modals rendered inside the overlay stack */}
+            {/* Sub-modals */}
             {subModal === 'cash_from' && (
               <CashFromModal
                 onSave={handleSubModalSave}
                 onCancel={() => { setSubModal(null); setDescriptionKey(null); }}
               />
             )}
-            {(subModal === 'withdrawal' || subModal === 'paid_to') && (
-              <CashOutSubModal
-                mode={subModal === 'withdrawal' ? 'withdrawal' : 'paid_to'}
+            {subModal === 'withdrawal' && (
+              <WithdrawalSubModal
                 onSave={handleSubModalSave}
                 onCancel={() => { setSubModal(null); setDescriptionKey(null); }}
               />
@@ -645,8 +794,7 @@ function CashRecord() {
         </div>
       )}
 
-
-      {/* ── Edit Cash Entry Modal (2-hour window) ── */}
+      {/* ── Edit Cash Entry Modal ── */}
       {editEntry && (
         <CashEditModal
           entry={editEntry}
@@ -656,7 +804,6 @@ function CashRecord() {
           onClose={() => setEditEntry(null)}
         />
       )}
-
     </div>
   );
 }
