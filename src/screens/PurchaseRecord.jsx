@@ -715,7 +715,7 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
 // ─────────────────────────────────────────────────────────────
 // Main PurchaseRecord screen
 // ─────────────────────────────────────────────────────────────
-function PurchaseRecord() {
+function PurchaseRecord({ storeIsOpen }) {
   const { fmt } = useCurrency();
   const [purchases, setPurchases]       = useState([]);
   const [filtered, setFiltered]         = useState([]);
@@ -902,7 +902,18 @@ function PurchaseRecord() {
             className={`pr-filter-action-btn${!showFilters?' prfab-open':showApply?' prfab-apply':' prfab-close'}`}
             onClick={handleFilterButtonClick}>{btnLabel}</button>
           {!showFilters && (
-            <button className="pr-add-btn" onClick={() => setShowAddModal(true)}>+ Add Purchase</button>
+            <button
+              className="pr-add-btn"
+              onClick={() => {
+                if (storeIsOpen === false) {
+                  alert('The store is closed. Open the day in Cash Reconciliation before adding purchases.');
+                  return;
+                }
+                setShowAddModal(true);
+              }}
+            >
+              {storeIsOpen === false ? '🔒 Locked' : '+ Add Purchase'}
+            </button>
           )}
         </div>
 
