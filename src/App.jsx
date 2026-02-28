@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HelpCircle, Menu, X, LogOut, Lock, Unlock } from 'lucide-react';
+import { HelpCircle, Menu, X, LogOut } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import Checkout from './screens/Checkout';
 import SalesRecord from './screens/SalesRecord';
@@ -404,8 +404,7 @@ function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [isUnlocking, setIsUnlocking] = useState(false); // drives the unlock animation
+
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -461,20 +460,6 @@ function App() {
     window.location.reload();
   };
 
-  const handleLockToggle = () => {
-    if (isUnlocked) {
-      // Lock immediately
-      setIsUnlocked(false);
-    } else {
-      // Play unlock animation then unlock
-      setIsUnlocking(true);
-      setTimeout(() => {
-        setIsUnlocking(false);
-        setIsUnlocked(true);
-      }, 600);
-    }
-  };
-
   const navigateToPage = (index) => {
     setCurrentPageIndex(index);
     setShowMenuModal(false);
@@ -526,14 +511,6 @@ function App() {
         </button>
         <h2 className="page-title">{PAGES[currentPageIndex].name}</h2>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-          <button
-            className={`nav-icon-btn lock-btn${isUnlocking ? ' lock-btn-unlocking' : ''}${isUnlocked ? ' lock-btn-unlocked' : ''}`}
-            onClick={handleLockToggle}
-            aria-label={isUnlocked ? 'Lock store' : 'Unlock store'}
-            title={isUnlocked ? 'Tap to lock' : 'Tap to unlock entries'}
-          >
-            {isUnlocked ? <Unlock size={20} /> : <Lock size={20} />}
-          </button>
           <button onClick={() => setShowMenuModal(true)} className="nav-icon-btn" aria-label="Menu">
             <Menu size={24} />
           </button>
@@ -542,7 +519,7 @@ function App() {
 
       <main className="app-main">
         <CurrentPageComponent
-          isUnlocked={isUnlocked}
+          isUnlocked={true}
         />
       </main>
 
