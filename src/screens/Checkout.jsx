@@ -39,7 +39,7 @@ function Checkout({ isUnlocked = false }) {
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);   // store-lock: user must tap lock to unlock
+  const [unlocked] = useState(false);   // kept for legacy ref safety — use isUnlocked prop instead
   const [unlockAnim, setUnlockAnim] = useState(false); // triggers CSS animation
 
   // Debtor search states
@@ -200,7 +200,7 @@ function Checkout({ isUnlocked = false }) {
   };
 
   const handleItemClick = (good) => {
-    if (!unlocked) { handleUnlock(); return; } // prompt unlock instead
+    if (!isUnlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
     setSelectedItem(good);
     setQuantityToAdd('');
     setShowQuantityModal(true);
@@ -330,7 +330,7 @@ function Checkout({ isUnlocked = false }) {
 
   // ── Cash payment ───────────────────────────────────────────────────────
   const handlePayCash = () => {
-    if (!unlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
+    if (!isUnlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
     if (catalogue.length === 0) { alert('Cart is empty.'); return; }
     setShowCashPopup(true);
   };
@@ -359,7 +359,7 @@ function Checkout({ isUnlocked = false }) {
 
   // ── Credit payment ─────────────────────────────────────────────────────
   const handlePayCredit = () => {
-    if (!unlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
+    if (!isUnlocked) { alert('Unlock the store first by tapping the lock icon.'); return; }
     if (catalogue.length === 0) { alert('Cart is empty.'); return; }
     loadDebtors();
     setShowCreditModal(true);
