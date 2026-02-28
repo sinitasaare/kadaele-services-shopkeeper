@@ -7,10 +7,7 @@ import './CashReconciliation.css';
 
 function todayStr() {
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function fmt(amount) {
@@ -21,21 +18,36 @@ function fmt(amount) {
 function formatDateLabel(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'numeric' });
 }
 
 function formatTime(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
 }
 
 // ── Detail Modal ─────────────────────────────────────────────────────────────
 
-function DetailModal({ record, onClose }) {
+function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
+  const [reopening, setReopening] = useState(false);
   if (!record) return null;
+
   const diff = (record.counted_cash ?? null) !== null
     ? record.counted_cash - record.expected_cash
     : null;
+
+  const handleReopen = async () => {
+    if (!window.confirm('Re-open this day? The close record will be cleared and the day will be marked as open again.')) return;
+    setReopening(true);
+    try {
+      await dataService.reopenDay(record.business_date);
+      if (onStoreStatusChange) onStoreStatusChange(true);
+      onReopen();
+      onClose();
+    } catch (e) {
+      alert('Failed to re-open day: ' + e.message);
+    } finally { setReopening(false); }
+  };
 
   return (
     <div className="cr-overlay" onClick={onClose}>
@@ -45,7 +57,7 @@ function DetailModal({ record, onClose }) {
           <button className="cr-close-btn" onClick={onClose}>✕</button>
         </div>
 
-        <div className="cr-card" style={{ gap: 10 }}>
+        <div className="cr-card" style={{ gap:10 }}>
           <p className="cr-card-title">Day Summary</p>
           <div className="cr-summary-row">
             <span className="cr-summary-label">Status</span>
@@ -70,18 +82,21 @@ function DetailModal({ record, onClose }) {
               <span className="cr-summary-label">Difference</span>
               <span className={`cr-summary-value ${diff === 0 ? 'diff-zero' : diff < 0 ? 'diff-neg' : 'diff-pos'}`}>
                 {diff >= 0 ? '+' : ''}{fmt(diff)}
+                {diff === 0 && ' ✅ Balanced'}
+                {diff < 0 && ' ⚠️ Short'}
+                {diff > 0 && ' ⚠️ Surplus'}
               </span>
             </div>
           )}
           {record.notes ? (
             <div className="cr-summary-row">
               <span className="cr-summary-label">Notes</span>
-              <span className="cr-summary-value" style={{ textAlign: 'right', maxWidth: '60%' }}>{record.notes}</span>
+              <span className="cr-summary-value" style={{ textAlign:'right', maxWidth:'60%' }}>{record.notes}</span>
             </div>
           ) : null}
         </div>
 
-        <div className="cr-card" style={{ gap: 10 }}>
+        <div className="cr-card" style={{ gap:10 }}>
           <p className="cr-card-title">Staff</p>
           <div className="cr-summary-row">
             <span className="cr-summary-label">Opened by</span>
@@ -103,6 +118,37 @@ function DetailModal({ record, onClose }) {
               </div>
             </>
           )}
+          {record.reopened_by_name && (
+            <>
+              <div className="cr-summary-row">
+                <span className="cr-summary-label">Reopened by</span>
+                <span className="cr-summary-value">{record.reopened_by_name}</span>
+              </div>
+              <div className="cr-summary-row">
+                <span className="cr-summary-label">Reopened at</span>
+                <span className="cr-summary-value">{formatTime(record.reopened_at)}</span>
+              </div>
+            </>
+          )}
+
+          {/* Re-open button — only shown if day is closed */}
+          {record.status === 'closed' && (
+            <div style={{ marginTop:'8px' }}>
+              <button
+                onClick={handleReopen}
+                disabled={reopening}
+                style={{
+                  width:'100%', padding:'10px', borderRadius:'8px', border:'none',
+                  background:'#4f46e5', color:'white', cursor:'pointer', fontWeight:700, fontSize:'14px'
+                }}
+              >
+                {reopening ? 'Reopening…' : '🔓 Re-Open Day'}
+              </button>
+              <p style={{ fontSize:'11px', color:'#6b7280', textAlign:'center', marginTop:'6px' }}>
+                This will revert the close and allow new entries.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -111,13 +157,13 @@ function DetailModal({ record, onClose }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-function CashReconciliation() {
+function CashReconciliation({ onStoreStatusChange }) {
   const [activeTab, setActiveTab]       = useState('today');
   const [loading, setLoading]           = useState(true);
-  const [todayRecord, setTodayRecord]   = useState(null);   // daily_cash doc for today
-  const [records, setRecords]           = useState([]);      // all recent docs
-  const [liveSummary, setLiveSummary]   = useState(null);   // { opening_float, sum_in, sum_out, expected }
-  const [detailRecord, setDetailRecord] = useState(null);   // for modal
+  const [todayRecord, setTodayRecord]   = useState(null);
+  const [records, setRecords]           = useState([]);
+  const [liveSummary, setLiveSummary]   = useState(null);
+  const [detailRecord, setDetailRecord] = useState(null);
 
   // Open Day form
   const [openingFloat, setOpeningFloat] = useState('');
@@ -135,13 +181,10 @@ function CashReconciliation() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all records first, then derive today from the list
       const allRecs = await dataService.getDailyCashRecords();
       const rec = (allRecs || []).find(r => r.business_date === today) || null;
       setTodayRecord(rec);
       setRecords((allRecs || []).sort((a, b) => b.business_date.localeCompare(a.business_date)));
-
-      // Compute live summary from cash_entries
       const summary = await dataService.calculateExpectedCash(today);
       setLiveSummary(summary);
     } catch (e) {
@@ -153,7 +196,6 @@ function CashReconciliation() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Re-load once auth is confirmed (fixes empty Records after reinstall)
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(user => {
       if (user) {
@@ -173,12 +215,11 @@ function CashReconciliation() {
     try {
       await dataService.openDay({ opening_float: float });
       setOpeningFloat('');
+      if (onStoreStatusChange) onStoreStatusChange(true);
       await loadData();
     } catch (e) {
       alert('Failed to open day: ' + e.message);
-    } finally {
-      setOpeningSaving(false);
-    }
+    } finally { setOpeningSaving(false); }
   };
 
   // ── Close Day ────────────────────────────────────────────────────────────
@@ -189,8 +230,12 @@ function CashReconciliation() {
 
     const summary = await dataService.calculateExpectedCash(today);
     const diff = counted - summary.expected;
+
+    // Notes required if not balanced
     if (diff !== 0 && !closeNotes.trim()) {
-      alert('Notes are required when counted cash differs from expected cash.');
+      alert(diff < 0
+        ? 'Notes are required when cash is SHORT. Please explain why.'
+        : 'Notes are required when cash is SURPLUS. Please explain why.');
       return;
     }
     setCloseSaving(true);
@@ -198,12 +243,11 @@ function CashReconciliation() {
       await dataService.closeDay({ counted_cash: counted, notes: closeNotes.trim() });
       setCountedCash('');
       setCloseNotes('');
+      if (onStoreStatusChange) onStoreStatusChange(false);
       await loadData();
     } catch (e) {
       alert('Failed to close day: ' + e.message);
-    } finally {
-      setCloseSaving(false);
-    }
+    } finally { setCloseSaving(false); }
   };
 
   // ── Render helpers ───────────────────────────────────────────────────────
@@ -301,14 +345,14 @@ function CashReconciliation() {
               <span className={`cr-summary-value ${diff === 0 ? 'diff-zero' : diff < 0 ? 'diff-neg' : 'diff-pos'}`}>
                 {diff >= 0 ? '+' : ''}{fmt(diff)}
                 {diff < 0 && ' ⚠️ Short'}
-                {diff > 0 && ' ⚠️ Over'}
+                {diff > 0 && ' ⚠️ Surplus'}
                 {diff === 0 && ' ✅ Balanced'}
               </span>
             </div>
             {todayRecord.notes ? (
               <div className="cr-summary-row">
                 <span className="cr-summary-label">Notes</span>
-                <span className="cr-summary-value" style={{ textAlign: 'right', maxWidth: '65%', fontSize: 13 }}>{todayRecord.notes}</span>
+                <span className="cr-summary-value" style={{ textAlign:'right', maxWidth:'65%', fontSize:13 }}>{todayRecord.notes}</span>
               </div>
             ) : null}
           </div>
@@ -325,6 +369,18 @@ function CashReconciliation() {
     const expected = liveSummary?.expected ?? todayRecord.opening_float;
     const countedVal = parseFloat(countedCash) || 0;
     const previewDiff = countedCash !== '' ? countedVal - expected : null;
+
+    // Determine note placeholder based on preview diff
+    const notesPlaceholder = previewDiff === null
+      ? 'Notes (optional)…'
+      : previewDiff < 0
+        ? 'Reason why balance is SHORT…'
+        : previewDiff > 0
+          ? 'Reason why balance is SURPLUS…'
+          : 'Notes (optional)…';
+
+    // Show notes only when reconciliation is "over" or "under" (not balanced, not empty)
+    const showNotes = previewDiff !== null && previewDiff !== 0;
 
     return (
       <>
@@ -364,31 +420,34 @@ function CashReconciliation() {
               min="0"
               step="0.01"
               value={countedCash}
-              onChange={e => setCountedCash(e.target.value)}
+              onChange={e => { setCountedCash(e.target.value); setCloseNotes(''); }}
             />
           </div>
 
           {previewDiff !== null && (
-            <div className={`cr-status-banner ${previewDiff === 0 ? 'open' : 'none'}`} style={{ fontSize: 13 }}>
+            <div className={`cr-status-banner ${previewDiff === 0 ? 'open' : 'none'}`} style={{ fontSize:13 }}>
               <span className="cr-status-dot" />
               Difference: {previewDiff >= 0 ? '+' : ''}{fmt(previewDiff)}
               {previewDiff === 0 && ' ✅ Balanced'}
               {previewDiff < 0 && ' ⚠️ Short — notes required'}
-              {previewDiff > 0 && ' ⚠️ Over — notes required'}
+              {previewDiff > 0 && ' ⚠️ Surplus — notes required'}
             </div>
           )}
 
-          <div className="cr-field">
-            <label className="cr-label">
-              Notes {previewDiff !== null && previewDiff !== 0 ? '(required)' : '(optional)'}
-            </label>
-            <textarea
-              className="cr-input cr-textarea"
-              placeholder="Explain any discrepancy…"
-              value={closeNotes}
-              onChange={e => setCloseNotes(e.target.value)}
-            />
-          </div>
+          {/* Notes field — hidden until imbalance detected */}
+          {showNotes && (
+            <div className="cr-field">
+              <label className="cr-label">
+                Notes <span style={{ color:'#dc2626' }}>(required)</span>
+              </label>
+              <textarea
+                className="cr-input cr-textarea"
+                placeholder={notesPlaceholder}
+                value={closeNotes}
+                onChange={e => setCloseNotes(e.target.value)}
+              />
+            </div>
+          )}
 
           <button
             className="cr-btn cr-btn-close"
@@ -420,6 +479,7 @@ function CashReconciliation() {
                 <div className="cr-record-meta">
                   Opened by {rec.opened_by_name || '—'}
                   {rec.closed_by_name ? ` · Closed by ${rec.closed_by_name}` : ''}
+                  {rec.reopened_by_name ? ` · Reopened by ${rec.reopened_by_name}` : ''}
                 </div>
               </div>
               <div className="cr-record-right">
@@ -457,12 +517,17 @@ function CashReconciliation() {
 
       {/* Body */}
       <div className="cr-body">
-        {activeTab === 'today'   ? renderTodayTab()   : renderRecordsTab()}
+        {activeTab === 'today' ? renderTodayTab() : renderRecordsTab()}
       </div>
 
       {/* Detail modal */}
       {detailRecord && (
-        <DetailModal record={detailRecord} onClose={() => setDetailRecord(null)} />
+        <DetailModal
+          record={detailRecord}
+          onClose={() => setDetailRecord(null)}
+          onReopen={() => { loadData(); }}
+          onStoreStatusChange={onStoreStatusChange}
+        />
       )}
     </div>
   );
