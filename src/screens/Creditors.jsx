@@ -42,17 +42,17 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
         qty: parseFloat(it.quantity ?? it.qty ?? 0),
         subtotal: parseFloat(it.quantity ?? it.qty ?? 0) * parseFloat(it.price ?? 0),
       }));
-      await dataService.updateSale(sale.id, { items: updatedItems, total_amount: total, total });
+      await dataService.updatePurchase(sale.id, { items: updatedItems, total_amount: total, total });
       onSave();
     } catch (e) { alert(e.message); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this sale record? This cannot be undone.')) return;
+    if (!window.confirm('Delete this purchase record? This cannot be undone.')) return;
     setDeleting(true);
     try {
-      await dataService.deleteSale(sale.id);
+      await dataService.deletePurchase(sale.id);
       onDeleted();
     } catch (e) { alert(e.message); }
     finally { setDeleting(false); }
@@ -61,7 +61,7 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
       <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
-        <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Sale Entry</h3>
+        <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Purchase Entry</h3>
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Products</label>
           <div style={{ overflowX:'auto' }}>
@@ -651,8 +651,7 @@ Kadaele Services`;
       const updated = (await dataService.getCreditors()).find(d => d.id === selectedCreditor.id);
       if (updated) {
         setSelectedCreditor(updated);
-        // Refresh debt history to show new deposit row
-        const allSales = await dataService.getSales();
+        // Refresh purchase history to show new deposit row
         const allPurchases2 = await dataService.getPurchases();
         setCreditorSales(allPurchases2.filter(p =>
           updated.purchaseIds?.includes(p.id) ||
