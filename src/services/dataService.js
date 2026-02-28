@@ -2350,19 +2350,38 @@ class DataService {
     const existing = await this.getDailyCashByDate(today);
     if (!existing) throw new Error('No record found for this date.');
 
+    // Archive the completed close session before clearing it
+    const closeSessions = Array.isArray(existing.close_sessions) ? [...existing.close_sessions] : [];
+    if (existing.counted_cash !== null && existing.counted_cash !== undefined) {
+      closeSessions.push({
+        reopen_float:     existing.counted_cash,   // counted cash becomes the float for the next session
+        expected_cash:    existing.expected_cash,
+        counted_cash:     existing.counted_cash,
+        difference:       existing.difference,
+        notes:            existing.notes || '',
+        closed_by_uid:    existing.closed_by_uid  || null,
+        closed_by_name:   existing.closed_by_name || null,
+        closed_at:        existing.closed_at_client || null,
+        reopened_by_uid:  user?.uid  || null,
+        reopened_by_name: this.userName(),
+        reopened_at:      now,
+      });
+    }
+
     const docData = {
       ...existing,
       status:           'open',
       locked:           false,
       counted_cash:     null,
       difference:       0,
-      notes:            existing.notes || '',
+      notes:            '',
       closed_by_uid:    null,
       closed_by_name:   null,
       closed_at_client: null,
       reopened_by_uid:  user?.uid  || null,
       reopened_by_name: this.userName(),
       reopened_at:      now,
+      close_sessions:   closeSessions,
       updatedAt:        now,
     };
 
