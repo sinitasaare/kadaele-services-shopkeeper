@@ -227,8 +227,11 @@ function Suppliers() {
     setIsEditMode(false);
     setActiveTab('details');
     try {
-      const allSales = await dataService.getSales();
-      setSupplierSales(allSales.filter(s => supplier.saleIds?.includes(s.id) || supplier.purchaseIds?.includes(s.id)));
+      const allPurchases = await dataService.getPurchases();
+      setSupplierSales(allPurchases.filter(p =>
+        supplier.purchaseIds?.includes(p.id) ||
+        p.supplierId === supplier.id
+      ));
     } catch (e) { setSupplierSales([]); }
   };
 
@@ -592,15 +595,15 @@ Kadaele Services`;
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
     try {
-      await dataService.recordPayment(selectedSupplier.id, parseFloat(paymentAmount), [], paymentPhoto || null);
+      await dataService.recordSupplierPayment(selectedSupplier.id, parseFloat(paymentAmount), paymentPhoto || null);
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
       await loadSuppliers();
       const updated = (await dataService.getSuppliers()).find(d => d.id === selectedSupplier.id);
       if (updated) {
         setSelectedSupplier(updated);
-        // Refresh debt history to show new deposit row
-        const allSales = await dataService.getSales();
-        setSupplierSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
+        // Refresh purchase history to show new deposit row
+        const allPurchases = await dataService.getPurchases();
+        setSupplierSales(allPurchases.filter(p => updated.purchaseIds?.includes(p.id) || p.supplierId === updated.id));
       }
       setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null);
     } catch (e) { console.error(e); alert('Failed to record payment'); }
