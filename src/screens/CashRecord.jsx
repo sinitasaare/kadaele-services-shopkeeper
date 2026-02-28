@@ -88,89 +88,97 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
 }
 
 // ── Sub-modal: Cash From (Cash IN) ───────────────────────────────────────────
+const CASH_FROM_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Others'];
+const CASH_FROM_REASONS = [
+  { key: 'float',        label: 'Float (change money)',      phrase: 'for float (change money)' },
+  { key: 'purchases',    label: 'Purchases (money to pay stock)', phrase: 'to purchase stock' },
+  { key: 'safe_keeping', label: 'For Safe Keeping',          phrase: 'for Safe Keeping' },
+];
+
 function CashFromModal({ onSave, onCancel }) {
-  const [from, setFrom] = useState('');
-  const [reason, setReason] = useState('');
-  return (
-    <div className="cj-sub-overlay">
-      <div className="cj-sub-modal">
-        <h3 className="cj-sub-title">Cash From</h3>
-        <div className="cj-modal-field">
-          <label>Cash from</label>
-          <input className="cj-modal-input" value={from} onChange={e => setFrom(e.target.value)} placeholder="Person or company name…" />
-        </div>
-        <div className="cj-modal-field">
-          <label>Being for (reason)</label>
-          <input className="cj-modal-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for cash coming in…" />
-        </div>
-        <div className="cj-modal-buttons">
-          <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="cj-modal-save" onClick={() => {
-            if (!from.trim()) { alert('Please enter who the cash is from.'); return; }
-            if (!reason.trim()) { alert('Please enter the reason.'); return; }
-            onSave(`Received Cash from ${from.trim()} for ${reason.trim()}`);
-          }}>Save</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const [from, setFrom]             = useState('');
+  const [isOthers, setIsOthers]     = useState(false);
+  const [showFromDrop, setShowFromDrop] = useState(false);
+  const [reason, setReason]         = useState('');
+  const [showReasonDrop, setShowReasonDrop] = useState(false);
 
-// ── Sub-modal: Vendor Payment ────────────────────────────────────────────────
-function VendorSubModal({ onSave, onCancel }) {
-  const [vendorName, setVendorName] = useState('');
-  const [reason, setReason] = useState('');
+  const handleNameSelect = (name) => {
+    setShowFromDrop(false);
+    if (name === 'Others') { setIsOthers(true); setFrom(''); }
+    else                   { setIsOthers(false); setFrom(name); }
+  };
 
-  const handleSave = async () => {
-    if (!vendorName.trim()) { alert('Please enter a vendor name.'); return; }
-    if (!reason.trim()) { alert('Please enter a reason.'); return; }
-    // Save vendor as Supplier + Debtor
-    try {
-      const suppliers = await dataService.getSuppliers();
-      const exists = suppliers.find(s => (s.name || '').toLowerCase() === vendorName.trim().toLowerCase());
-      if (!exists) {
-        const newSupplier = {
-          id: dataService.generateId(),
-          name: vendorName.trim(),
-          customerName: vendorName.trim(),
-          totalDue: 0, totalPaid: 0, balance: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await dataService.setSuppliers([...suppliers, newSupplier]);
-      }
-      const debtors = await dataService.getDebtors();
-      const dExists = debtors.find(d => (d.name || d.customerName || '').toLowerCase() === vendorName.trim().toLowerCase());
-      if (!dExists) {
-        await dataService.setDebtors([...debtors, {
-          id: dataService.generateId(),
-          name: vendorName.trim(),
-          customerName: vendorName.trim(),
-          totalDue: 0, totalPaid: 0, balance: 0,
-          isVendor: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }]);
-      }
-    } catch(e) { console.error('Error saving vendor:', e); }
-    onSave(`Paid Cash to ${vendorName.trim()} — ${reason.trim()}`);
+  const handleSave = () => {
+    if (!from.trim())   { alert('Please enter who the cash is from.'); return; }
+    if (!reason)        { alert('Please select a reason.'); return; }
+    const r = CASH_FROM_REASONS.find(x => x.key === reason);
+    onSave(`Cash from ${from.trim()} ${r.phrase}.`);
   };
 
   return (
     <div className="cj-sub-overlay">
       <div className="cj-sub-modal">
-        <h3 className="cj-sub-title">Vendor Payment</h3>
-        <div className="cj-modal-field">
-          <label>Vendor Name</label>
-          <input className="cj-modal-input" value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="Enter vendor name…" />
+        <h3 className="cj-sub-title">Cash From</h3>
+
+        {/* Cash From field */}
+        <div className="cj-modal-field" style={{ position:'relative' }}>
+          <label>Cash From</label>
+          {isOthers ? (
+            <input
+              className="cj-modal-input"
+              value={from}
+              onChange={e => setFrom(e.target.value)}
+              placeholder="Type name…"
+              autoFocus
+            />
+          ) : (
+            <button
+              className={`cj-desc-trigger${from ? ' has-value' : ''}`}
+              onClick={() => setShowFromDrop(o => !o)}
+            >
+              <span className="cj-desc-trigger-text">{from || 'Select name…'}</span>
+              <span className="cj-desc-chevron">{showFromDrop ? '▲' : '▼'}</span>
+            </button>
+          )}
+          {showFromDrop && !isOthers && (
+            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+              {CASH_FROM_NAMES.map(n => (
+                <button key={n} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>{n}</button>
+              ))}
+            </div>
+          )}
+          {isOthers && (
+            <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
+              onClick={() => { setIsOthers(false); setFrom(''); }}>
+              ← Back to list
+            </button>
+          )}
         </div>
-        <div className="cj-modal-field">
-          <label>Reason</label>
-          <input className="cj-modal-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for payment…" />
+
+        {/* Being For field */}
+        <div className="cj-modal-field" style={{ position:'relative' }}>
+          <label>Being For</label>
+          <button
+            className={`cj-desc-trigger${reason ? ' has-value' : ''}`}
+            onClick={() => setShowReasonDrop(o => !o)}
+          >
+            <span className="cj-desc-trigger-text">
+              {reason ? CASH_FROM_REASONS.find(x => x.key === reason)?.label : 'Select reason…'}
+            </span>
+            <span className="cj-desc-chevron">{showReasonDrop ? '▲' : '▼'}</span>
+          </button>
+          {showReasonDrop && (
+            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+              {CASH_FROM_REASONS.map(r => (
+                <button key={r.key} className={`cj-desc-dropdown-item${reason === r.key ? ' selected' : ''}`}
+                  onMouseDown={() => { setReason(r.key); setShowReasonDrop(false); }}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <p style={{ fontSize:'11px', color:'#6b7280', margin:'4px 0 8px' }}>
-          ℹ️ This vendor will be saved as a Supplier and Debtor record.
-        </p>
+
         <div className="cj-modal-buttons">
           <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
           <button className="cj-modal-save" onClick={handleSave}>Save</button>
@@ -180,111 +188,190 @@ function VendorSubModal({ onSave, onCancel }) {
   );
 }
 
-// ── Sub-modal: Withdrawal (Cash OUT) ─────────────────────────────────────────
-// Name dropdown: Riti, PUB, Starlink, Vendor, [employees/landlords from debtors]
+// ── Sub-modal: Cash Out ───────────────────────────────────────────────────────
+const PAID_TO_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Others'];
+const PAID_TO_REASONS = [
+  { key: 'advance',      label: 'Cash Advance',         phrase: 'for Cash Advance' },
+  { key: 'electricity',  label: 'Pay electricity bill',  phrase: 'to pay electricity bill' },
+  { key: 'stationary',   label: 'Buy stationary',        phrase: 'to buy stationary' },
+  { key: 'rent',         label: 'Pay rent',              phrase: 'to pay rent' },
+  { key: 'other',        label: 'Other reason…',         phrase: '' },
+];
+
 function WithdrawalSubModal({ onSave, onCancel }) {
-  const [name, setName]               = useState('');
-  const [description, setDescription] = useState('');
+  const [paidTo, setPaidTo]             = useState('');
+  const [isOthers, setIsOthers]         = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [suppliers, setSuppliers]       = useState([]);
+  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
   const [showNameDrop, setShowNameDrop] = useState(false);
-  const [showVendorModal, setShowVendorModal] = useState(false);
-  const [debtors, setDebtors]         = useState([]);
+  const [reason, setReason]             = useState('');
+  const [showReasonDrop, setShowReasonDrop] = useState(false);
+  const [otherReason, setOtherReason]   = useState('');
+  const [showOtherModal, setShowOtherModal] = useState(false);
+  const [refNumber, setRefNumber]       = useState('');
 
   useEffect(() => {
-    dataService.getDebtors().then(d => setDebtors(d || []));
+    dataService.getSuppliers().then(s => setSuppliers(s || []));
   }, []);
 
-  const FIXED_OPTIONS = [
-    { key: 'riti',     label: 'Riti (Personal use)',               desc: 'for Personal use' },
-    { key: 'pub',      label: 'PUB',                               desc: 'for electricity' },
-    { key: 'starlink', label: 'Starlink',                          desc: 'for internet monthly subscription' },
-    { key: 'vendor',   label: 'Vendor (recharge / stationary)',    desc: '' },
-  ];
+  const filteredSuppliers = suppliers.filter(s =>
+    (s.name || s.customerName || '').toLowerCase().includes(supplierSearch.toLowerCase())
+  );
 
-  // Employee and landlord debtors
-  const staffOptions = debtors
-    .filter(d => d.isEmployee || d.isLandlord || d.role === 'employee' || d.role === 'landlord')
-    .map(d => ({
-      key: `person_${d.id}`,
-      label: d.name || d.customerName,
-      desc: 'Cash Advance',
-    }));
-
-  const allOptions = [...FIXED_OPTIONS, ...staffOptions];
-  const filteredOptions = name.trim()
-    ? allOptions.filter(o => o.label.toLowerCase().includes(name.toLowerCase()))
-    : allOptions;
-
-  const handleNameSelect = (opt) => {
+  const handleNameSelect = (name) => {
     setShowNameDrop(false);
-    if (opt.key === 'vendor') {
-      setShowVendorModal(true);
-      return;
+    if (name === 'Others') {
+      setIsOthers(true);
+      setPaidTo('');
+      setSupplierSearch('');
+    } else {
+      setIsOthers(false);
+      setPaidTo(name);
+      setSupplierSearch('');
     }
-    setName(opt.label);
-    setDescription(opt.desc);
   };
 
-  if (showVendorModal) {
+  const handleReasonSelect = (key) => {
+    setShowReasonDrop(false);
+    setReason(key);
+    if (key === 'other') setShowOtherModal(true);
+    else setOtherReason('');
+  };
+
+  const getPhrase = () => {
+    if (reason === 'other') return otherReason.trim() ? `for ${otherReason.trim()}` : '';
+    return PAID_TO_REASONS.find(r => r.key === reason)?.phrase || '';
+  };
+
+  const handleSave = () => {
+    const name = isOthers ? supplierSearch.trim() || paidTo.trim() : paidTo.trim();
+    if (!name) { alert('Please enter who the cash is paid to.'); return; }
+    if (!reason) { alert('Please select a reason.'); return; }
+    if (reason === 'other' && !otherReason.trim()) { alert('Please enter the reason.'); return; }
+    const phrase = getPhrase();
+    onSave({
+      note: `Paid ${name} ${phrase}.`,
+      invoiceRef: refNumber.trim() || '',
+    });
+  };
+
+  // Other Reason child modal
+  if (showOtherModal) {
     return (
-      <VendorSubModal
-        onSave={(note) => { setShowVendorModal(false); onSave(note); }}
-        onCancel={() => setShowVendorModal(false)}
-      />
+      <div className="cj-sub-overlay">
+        <div className="cj-sub-modal">
+          <h3 className="cj-sub-title">Enter Reason</h3>
+          <div className="cj-modal-field">
+            <label>Reason for payment</label>
+            <input className="cj-modal-input" value={otherReason} onChange={e => setOtherReason(e.target.value)}
+              placeholder="Describe the reason…" autoFocus />
+          </div>
+          <div className="cj-modal-buttons">
+            <button className="cj-modal-cancel" onClick={() => { setShowOtherModal(false); setReason(''); }}>Cancel</button>
+            <button className="cj-modal-save" onClick={() => {
+              if (!otherReason.trim()) { alert('Please enter a reason.'); return; }
+              setShowOtherModal(false);
+            }}>Done</button>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="cj-sub-overlay">
       <div className="cj-sub-modal">
-        <h3 className="cj-sub-title">Withdrawal</h3>
+        <h3 className="cj-sub-title">Cash Out</h3>
 
+        {/* Paid To field */}
         <div className="cj-modal-field" style={{ position:'relative' }}>
-          <label>Name</label>
-          <input
-            className="cj-modal-input"
-            value={name}
-            onChange={e => { setName(e.target.value); setDescription(''); setShowNameDrop(true); }}
-            onFocus={() => setShowNameDrop(true)}
-            onBlur={() => setTimeout(() => setShowNameDrop(false), 200)}
-            placeholder="Select or type a name…"
-          />
-          {showNameDrop && filteredOptions.length > 0 && (
-            <div style={{
-              position:'absolute', top:'100%', left:0, right:0, zIndex:200,
-              background:'var(--surface)', border:'1px solid var(--border)',
-              borderRadius:'6px', maxHeight:'200px', overflowY:'auto',
-              boxShadow:'0 4px 12px rgba(0,0,0,0.15)'
-            }}>
-              {filteredOptions.map(opt => (
-                <div
-                  key={opt.key}
-                  onMouseDown={() => handleNameSelect(opt)}
-                  style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'13px' }}
-                >
-                  {opt.label}
+          <label>Paid To</label>
+          {isOthers ? (
+            <>
+              <input
+                className="cj-modal-input"
+                value={supplierSearch}
+                onChange={e => { setSupplierSearch(e.target.value); setShowSupplierDrop(true); }}
+                onFocus={() => setShowSupplierDrop(true)}
+                onBlur={() => setTimeout(() => setShowSupplierDrop(false), 200)}
+                placeholder="Search from Suppliers list…"
+                autoFocus
+              />
+              {showSupplierDrop && filteredSuppliers.length > 0 && (
+                <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+                  {filteredSuppliers.map(s => {
+                    const name = s.name || s.customerName;
+                    return (
+                      <button key={s.id} className="cj-desc-dropdown-item"
+                        onMouseDown={() => { setSupplierSearch(name); setShowSupplierDrop(false); }}>
+                        {name}
+                      </button>
+                    );
+                  })}
                 </div>
+              )}
+              <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
+                onClick={() => { setIsOthers(false); setPaidTo(''); setSupplierSearch(''); }}>
+                ← Back to list
+              </button>
+            </>
+          ) : (
+            <button
+              className={`cj-desc-trigger${paidTo ? ' has-value' : ''}`}
+              onClick={() => setShowNameDrop(o => !o)}
+            >
+              <span className="cj-desc-trigger-text">{paidTo || 'Select name…'}</span>
+              <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
+            </button>
+          )}
+          {showNameDrop && !isOthers && (
+            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+              {PAID_TO_NAMES.map(n => (
+                <button key={n} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>{n}</button>
               ))}
             </div>
           )}
         </div>
 
+        {/* Being For field */}
+        <div className="cj-modal-field" style={{ position:'relative' }}>
+          <label>Being For</label>
+          <button
+            className={`cj-desc-trigger${reason ? ' has-value' : ''}`}
+            onClick={() => setShowReasonDrop(o => !o)}
+          >
+            <span className="cj-desc-trigger-text">
+              {reason === 'other' && otherReason
+                ? otherReason
+                : reason
+                  ? PAID_TO_REASONS.find(r => r.key === reason)?.label
+                  : 'Select reason…'}
+            </span>
+            <span className="cj-desc-chevron">{showReasonDrop ? '▲' : '▼'}</span>
+          </button>
+          {showReasonDrop && (
+            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+              {PAID_TO_REASONS.map(r => (
+                <button key={r.key} className={`cj-desc-dropdown-item${reason === r.key ? ' selected' : ''}`}
+                  onMouseDown={() => handleReasonSelect(r.key)}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Ref Number */}
         <div className="cj-modal-field">
-          <label>Description</label>
-          <input
-            className="cj-modal-input"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Auto-filled based on name…"
-          />
+          <label>Reference Number <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+          <input className="cj-modal-input" value={refNumber} onChange={e => setRefNumber(e.target.value)}
+            placeholder="Invoice / receipt ref…" />
         </div>
 
         <div className="cj-modal-buttons">
           <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="cj-modal-save" onClick={() => {
-            if (!name.trim()) { alert('Please enter a name.'); return; }
-            if (!description.trim()) { alert('Please enter a description.'); return; }
-            onSave(`Paid Cash to ${name.trim()} ${description.trim()}`);
-          }}>Save</button>
+          <button className="cj-modal-save" onClick={handleSave}>Save</button>
         </div>
       </div>
     </div>
@@ -334,6 +421,7 @@ function CashRecord({ isUnlocked = false }) {
   const [newAmount, setNewAmount]         = useState('');
   const [descriptionKey, setDescriptionKey] = useState(null);
   const [resolvedNote, setResolvedNote]   = useState('');
+  const [resolvedRef, setResolvedRef]     = useState('');
   const [subModal, setSubModal]           = useState(null);
   const [descDropdownOpen, setDescDropdownOpen] = useState(false);
   const [isProcessing, setIsProcessing]   = useState(false);
@@ -429,33 +517,40 @@ function CashRecord({ isUnlocked = false }) {
   const resetAddModal = () => {
     setNewAmount(''); setDescriptionKey(null); setResolvedNote('');
     setSubModal(null); setNewType(TYPE_IN); setDescDropdownOpen(false);
+    setResolvedRef('');
   };
   const openAddModal = () => { resetAddModal(); setShowAddModal(true); };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
+  // Cash In: quick-select options resolve immediately; 'cash_from' opens sub-modal
   const IN_OPTIONS = [
-    { key: 'float',        label: 'Float (change money)' },
-    { key: 'purchases',    label: 'Purchases (money to pay stock)' },
-    { key: 'safe_keeping', label: 'For Safe Keeping' },
-    { key: 'cash_from',    label: 'Cash from…' },
+    { key: 'float',        label: 'Float (change money)',           note: 'Float (change money)' },
+    { key: 'purchases',    label: 'Purchases (money to pay stock)', note: 'Purchases (money to pay stock)' },
+    { key: 'safe_keeping', label: 'For Safe Keeping',               note: 'For Safe Keeping' },
+    { key: 'cash_from',    label: 'Cash from a person…',            note: null }, // opens sub-modal
   ];
-  const OUT_OPTIONS = [
-    { key: 'withdrawal', label: 'Withdrawal' },
-  ];
-  const currentOptions = newType === TYPE_IN ? IN_OPTIONS : OUT_OPTIONS;
+  const currentOptions = newType === TYPE_IN ? IN_OPTIONS : [];
 
   const handleDescriptionSelect = (key) => {
     setDescriptionKey(key);
     setResolvedNote('');
-    if (key === 'float')        setResolvedNote('Float (notes and coins for change)');
-    else if (key === 'purchases')    setResolvedNote('Purchases (money to pay stock)');
-    else if (key === 'safe_keeping') setResolvedNote('For Safe Keeping');
-    else if (key === 'cash_from')    setSubModal('cash_from');
-    else if (key === 'withdrawal')   setSubModal('withdrawal');
+    setResolvedRef('');
+    if (key === 'cash_from')  { setSubModal('cash_from'); return; }
+    if (newType === TYPE_OUT) { setSubModal('withdrawal'); return; }
+    // Quick-select for Cash In
+    const opt = IN_OPTIONS.find(o => o.key === key);
+    if (opt?.note) setResolvedNote(opt.note);
   };
 
-  const handleSubModalSave = (note) => {
-    setResolvedNote(typeof note === 'string' ? note : '');
+  // Sub-modal save — accepts { note, invoiceRef? } or plain string (legacy)
+  const handleSubModalSave = (result) => {
+    if (typeof result === 'string') {
+      setResolvedNote(result);
+      setResolvedRef('');
+    } else {
+      setResolvedNote(result.note || '');
+      setResolvedRef(result.invoiceRef || '');
+    }
     setSubModal(null);
   };
 
@@ -471,6 +566,7 @@ function CashRecord({ isUnlocked = false }) {
         date: _now.toISOString(),
         source: 'manual',
         business_date: _now.toISOString().slice(0, 10),
+        ...(resolvedRef ? { invoiceRef: resolvedRef } : {}),
       });
       closeAddModal();
       await loadEntries();
@@ -686,12 +782,12 @@ function CashRecord({ isUnlocked = false }) {
               <div className="cj-modal-type-btns">
                 <button
                   className={`cj-modal-type-btn${newType === TYPE_IN ? ' active-in' : ''}`}
-                  onClick={() => { setNewType(TYPE_IN); setDescriptionKey(null); setResolvedNote(''); setDescDropdownOpen(false); }}>
+                  onClick={() => { setNewType(TYPE_IN); setDescriptionKey(null); setResolvedNote(''); setResolvedRef(''); setDescDropdownOpen(false); setSubModal(null); }}>
                   Cash In
                 </button>
                 <button
                   className={`cj-modal-type-btn${newType === TYPE_OUT ? ' active-out' : ''}`}
-                  onClick={() => { setNewType(TYPE_OUT); setDescriptionKey(null); setResolvedNote(''); setDescDropdownOpen(false); }}>
+                  onClick={() => { setNewType(TYPE_OUT); setDescriptionKey(null); setResolvedNote(''); setResolvedRef(''); setDescDropdownOpen(false); setSubModal(null); }}>
                   Cash Out
                 </button>
               </div>
@@ -709,45 +805,46 @@ function CashRecord({ isUnlocked = false }) {
               )}
             </div>
 
-            {/* Description dropdown — no free-text, must pick from list */}
+            {/* Description */}
             <div className="cj-modal-field">
               <label>Description</label>
-              <div className="cj-desc-field-wrapper">
+              {newType === TYPE_IN ? (
+                // Cash In — show dropdown with quick options + Cash From sub-modal option
+                <div className="cj-desc-field-wrapper">
+                  <button
+                    className={`cj-desc-trigger${descDropdownOpen ? ' open' : ''}${resolvedNote ? ' has-value' : ''}`}
+                    onClick={() => setDescDropdownOpen(o => !o)}
+                  >
+                    <span className="cj-desc-trigger-text">
+                      {resolvedNote || (descriptionKey === 'cash_from' ? 'Cash from a person…' : 'Select description…')}
+                    </span>
+                    <span className="cj-desc-chevron">{descDropdownOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {descDropdownOpen && (
+                    <div className="cj-desc-dropdown">
+                      {IN_OPTIONS.map(opt => (
+                        <button
+                          key={opt.key}
+                          className={`cj-desc-dropdown-item${descriptionKey === opt.key ? ' selected' : ''}`}
+                          onClick={() => { setDescDropdownOpen(false); handleDescriptionSelect(opt.key); }}
+                        >
+                          {opt.label}
+                          {descriptionKey === opt.key && resolvedNote && ' ✓'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {resolvedNote && <div className="cj-desc-preview">{resolvedNote}</div>}
+                </div>
+              ) : (
+                // Cash Out — tap to open sub-modal directly
                 <button
-                  className={`cj-desc-trigger${descDropdownOpen ? ' open' : ''}${resolvedNote ? ' has-value' : ''}`}
-                  onClick={() => setDescDropdownOpen(o => !o)}
+                  className={`cj-desc-trigger${resolvedNote ? ' has-value' : ''}`}
+                  onClick={() => { setDescriptionKey('withdrawal'); setSubModal('withdrawal'); }}
                 >
-                  <span className="cj-desc-trigger-text">
-                    {resolvedNote
-                      ? resolvedNote
-                      : descriptionKey && !resolvedNote
-                        ? currentOptions.find(o => o.key === descriptionKey)?.label || '…'
-                        : '…'}
-                  </span>
-                  <span className="cj-desc-chevron">{descDropdownOpen ? '▲' : '▼'}</span>
+                  <span className="cj-desc-trigger-text">{resolvedNote || 'Tap to fill description…'}</span>
+                  <span className="cj-desc-chevron">›</span>
                 </button>
-
-                {descDropdownOpen && (
-                  <div className="cj-desc-dropdown">
-                    {currentOptions.map(opt => (
-                      <button
-                        key={opt.key}
-                        className={`cj-desc-dropdown-item${descriptionKey === opt.key ? ' selected' : ''}`}
-                        onClick={() => {
-                          setDescDropdownOpen(false);
-                          handleDescriptionSelect(opt.key);
-                        }}
-                      >
-                        {opt.label}
-                        {descriptionKey === opt.key && resolvedNote && ' ✓'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {resolvedNote && (
-                <div className="cj-desc-preview">{resolvedNote}</div>
               )}
             </div>
 
