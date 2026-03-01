@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Globe, Moon, Sun, Bell,
+  Globe, Moon, Sun, Bell, Clock,
   ClipboardList, Wallet, X, Check, Plus, Trash2,
 } from 'lucide-react';
 import dataService from '../services/dataService';
@@ -717,6 +717,7 @@ function Settings({ onSettingsChange }) {
   const [notifLowStock, setNotifLowStock]         = useState(false);
   const [notifDailySales, setNotifDailySales]     = useState(false);
   const [notifCreditorOwed, setNotifCreditorOwed] = useState(false);
+  const [businessDayCutoff, setBusinessDayCutoff] = useState(0);
   const [loaded, setLoaded]     = useState(false);
   const [showForgotSale, setShowForgotSale] = useState(false);
   const [showForgotCash, setShowForgotCash] = useState(false);
@@ -733,6 +734,7 @@ function Settings({ onSettingsChange }) {
       setNotifLowStock(!!s.notifLowStock);
       setNotifDailySales(!!s.notifDailySales);
       setNotifCreditorOwed(!!s.notifCreditorOwed);
+      setBusinessDayCutoff(typeof s.businessDayCutoff === 'number' ? s.businessDayCutoff : 0);
       setLoaded(true);
     });
   }, []);
@@ -759,6 +761,13 @@ function Settings({ onSettingsChange }) {
   };
 
   const handleDarkMode = (val) => { setDarkMode(val); autoSave({ darkMode: val }); };
+
+  const handleCutoffChange = (hour) => {
+    const h = parseInt(hour, 10);
+    setBusinessDayCutoff(h);
+    autoSave({ businessDayCutoff: h });
+    flashSaved(h === 0 ? 'Cutoff set to midnight (default)' : `Cutoff set to ${String(h).padStart(2,'0')}:00`);
+  };
   const handleToggle = (key, setter, current) => {
     const next = !current;
     setter(next);
@@ -828,6 +837,33 @@ function Settings({ onSettingsChange }) {
             </div>
           </SettingRow>
         ))}
+      </Section>
+
+      <Section icon={<Clock size={18}/>} title="Cash Reconciliation">
+        <div className="st-setting-row">
+          <div className="st-notif-info">
+            <span className="st-notif-label">Business Day Cutoff</span>
+            <span className="st-notif-desc">
+              The time at which a new business day begins. Sessions opened before this hour are assigned to the previous day's record.
+              Set to 00:00 (default) for a standard midnight cutoff. Set to e.g. 06:00 if your shop trades past midnight.
+            </span>
+            {businessDayCutoff > 0 && (
+              <span className="st-cutoff-example">
+                e.g. opening at 02:00 tonight belongs to today's record, not tomorrow's.
+              </span>
+            )}
+          </div>
+          <select
+            className="st-cutoff-select"
+            value={businessDayCutoff}
+            onChange={e => handleCutoffChange(e.target.value)}
+          >
+            <option value={0}>00:00 — Midnight (default)</option>
+            {[1,2,3,4,5,6,7,8].map(h => (
+              <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>
+            ))}
+          </select>
+        </div>
       </Section>
 
       <Section icon={<ClipboardList size={18}/>} title={t.forgottenEntries}>
