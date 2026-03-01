@@ -350,7 +350,7 @@ function App() {
   const handleStoreStatusChange = (isOpen) => {
     setStoreIsOpen(isOpen);
     if (!isOpen) {
-      setClosedModalMessage('The shop is now closed. Re-open in Cash Reconciliation to continue using the app.');
+      setClosedModalMessage('The shop is currently closed. Only Cash Reconciliation is accessible. Re-open the day there to continue using the app.');
       setShowClosedModal(true);
     } else {
       setShowClosedModal(false);
@@ -426,12 +426,32 @@ function App() {
       </header>
 
       <div className="page-navigation">
-        <button onClick={() => setShowHelpModal(true)} className="nav-icon-btn" aria-label="Help">
+        <button
+          onClick={() => {
+            if (!storeIsOpen) {
+              setShowClosedModal(true);
+            } else {
+              setShowHelpModal(true);
+            }
+          }}
+          className="nav-icon-btn"
+          aria-label="Help"
+        >
           <HelpCircle size={24} />
         </button>
         <h2 className="page-title">{PAGES[currentPageIndex].name}</h2>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-          <button onClick={() => setShowMenuModal(true)} className="nav-icon-btn" aria-label="Menu">
+          <button
+            onClick={() => {
+              if (!storeIsOpen) {
+                setShowClosedModal(true);
+              } else {
+                setShowMenuModal(true);
+              }
+            }}
+            className="nav-icon-btn"
+            aria-label="Menu"
+          >
             <Menu size={24} />
           </button>
         </div>
