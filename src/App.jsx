@@ -260,12 +260,10 @@ function App() {
 
   const checkStoreStatus = useCallback(async () => {
     try {
-      const todayStr = (() => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      })();
+      await dataService.autoCloseStaleOpenSessions();
+      const businessDate = dataService.currentBusinessDate();
       const allRecs = await dataService.getDailyCashRecords();
-      const todayRec = (allRecs || []).find(r => r.business_date === todayStr);
+      const todayRec = (allRecs || []).find(r => r.business_date === businessDate);
 
       if (!todayRec) {
         setStoreIsOpen(false);
@@ -426,27 +424,34 @@ function App() {
       </header>
 
       <div className="page-navigation">
-        {storeIsOpen && (
-          <button
-            onClick={() => setShowHelpModal(true)}
-            className="nav-icon-btn"
-            aria-label="Help"
-          >
-            <HelpCircle size={24} />
-          </button>
-        )}
-        {!storeIsOpen && <div style={{ width: 40 }} />}
+        <button
+          onClick={() => {
+            if (!storeIsOpen) {
+              setShowClosedModal(true);
+            } else {
+              setShowHelpModal(true);
+            }
+          }}
+          className="nav-icon-btn"
+          aria-label="Help"
+        >
+          <HelpCircle size={24} />
+        </button>
         <h2 className="page-title">{PAGES[currentPageIndex].name}</h2>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-          {storeIsOpen && (
-            <button
-              onClick={() => setShowMenuModal(true)}
-              className="nav-icon-btn"
-              aria-label="Menu"
-            >
-              <Menu size={24} />
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (!storeIsOpen) {
+                setShowClosedModal(true);
+              } else {
+                setShowMenuModal(true);
+              }
+            }}
+            className="nav-icon-btn"
+            aria-label="Menu"
+          >
+            <Menu size={24} />
+          </button>
         </div>
       </div>
 
