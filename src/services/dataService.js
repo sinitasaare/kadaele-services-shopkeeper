@@ -413,13 +413,13 @@ class DataService {
         const localOnlyGoods = localGoods.filter(g => !firebaseIds.has(String(g.id)));
         const rawMerged = [...firebaseGoods, ...localOnlyGoods];
 
-        // Deduplicate by name (case-insensitive, trimmed) keeping the first occurrence.
+        // Deduplicate by name+size (case-insensitive, trimmed) keeping the first occurrence.
         // This cleans up any existing duplicates already in Firebase or local storage.
-        const seenNames = new Set();
+        const seenKeys = new Set();
         const merged = rawMerged.filter(g => {
-          const key = (g.name || '').toLowerCase().trim();
-          if (!key || seenNames.has(key)) return false;
-          seenNames.add(key);
+          const key = ((g.name || '').toLowerCase().trim() + '|' + (g.size || '').toLowerCase().trim());
+          if (!key || seenKeys.has(key)) return false;
+          seenKeys.add(key);
           return true;
         });
 
@@ -470,17 +470,22 @@ class DataService {
     const newGood = {
       id: good.id || this.generateId(),
       name: good.name,
+      brand: good.brand || '',
+      size: good.size || '',
       price: parseFloat(good.price),
       category: good.category || 'General',
       barcode: good.barcode || null,
+      barcodeImage: good.barcodeImage || null,
       stock_quantity: good.stock_quantity || 0,
       createdAt: new Date().toISOString(),
     };
-    // Guard: never push if this ID OR this name already exists
+    // Guard: never push if this ID OR same name+size already exists
     const nameKey = (newGood.name || '').toLowerCase().trim();
+    const sizeKey = (newGood.size || '').toLowerCase().trim();
     const isDuplicate = goods.some(g =>
       String(g.id) === String(newGood.id) ||
-      (nameKey && (g.name || '').toLowerCase().trim() === nameKey)
+      (nameKey && (g.name || '').toLowerCase().trim() === nameKey &&
+       (g.size || '').toLowerCase().trim() === sizeKey)
     );
     if (isDuplicate) return newGood;
     goods.push(newGood);
