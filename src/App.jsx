@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { HelpCircle, Menu, X, LogOut } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import Checkout from './screens/Checkout';
@@ -21,377 +21,225 @@ import './App.css';
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
 })();
 
+// Cash Reconciliation page index (used for navigation from closed modal)
+const CASH_RECON_INDEX = 8;
+const SETTINGS_INDEX   = 9;
+
 const PAGES = [
   { 
     name: 'CHECKOUT',   
     component: Checkout,
     helpContent: `
-      <h3>Checkout – How to Use</h3>
-      <p><strong>This is your main point-of-sale screen for recording every customer sale.</strong></p>
+      <h3>Checkout</h3>
+      <p>This is your point-of-sale screen where you record every customer sale.</p>
 
-      <h4>Adding Products to Cart</h4>
-      <p>Type a product name in the search box at the bottom. Tap a result to open the quantity modal. Enter how many units you are selling and tap <strong>Add to Cart</strong>. The product appears in the cart table above. Tap the × button on any row to remove it.</p>
+      <h4>How It Works</h4>
+      <p>Search for a product at the bottom, tap it, enter how many to sell, then tap <strong>Add to Cart</strong>. When done, choose <strong>Pay with Cash</strong> or <strong>Buy on Credit</strong>.</p>
 
-      <h4>Barcode Scanner</h4>
-      <p>Tap the barcode icon next to the search box to open the camera scanner. Point it at a product barcode — if the product exists in Inventory it is added to the cart instantly with a beep. If no match is found the scanner shows the unrecognised barcode so you can search manually.</p>
+      <h4>Examples</h4>
+      <p>&#x1f6d2; <em>A customer wants 3 bags of rice and 2 tins of tuna:</em> Search "rice", add 3 to cart. Search "tuna", add 2. Tap "Pay with Cash" &rarr; confirm &rarr; done. A Cash IN entry is created automatically.</p>
+      <p>&#x1f6d2; <em>A regular customer wants to buy on credit:</em> Add items to cart &rarr; tap "Buy on Credit" &rarr; select the debtor from the list &rarr; set the repayment due date &rarr; confirm.</p>
 
-      <h4>Pay with Cash</h4>
-      <p>Tap <strong>Pay with Cash</strong>. A confirmation modal shows the total. Optionally tap <strong>Change Calculator</strong> to enter the amount the customer hands you and see the change due. Tap <strong>Confirm</strong> to save the sale. A Cash IN entry is automatically created in Cash Record.</p>
-
-      <h4>Buy on Credit</h4>
-      <p>Tap <strong>Buy on Credit</strong> to sell to a debtor. Select an existing debtor from the dropdown. Set the repayment due date — if the debtor already has an existing due date it will be locked to that date. If a debtor's debt is <strong>overdue</strong>, a red blocking warning appears and you cannot add more credit until their balance is cleared.</p>
-
-      <h4>Out of Stock Warning</h4>
-      <p>If a product has zero stock the Add to Cart button is disabled and a warning is shown.</p>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>The cart total updates automatically as you add or remove products</li>
-        <li>Search is instant — no need to press Enter</li>
-        <li>All sales are saved locally and synced to the cloud when online</li>
-      </ul>
+      <h4>Key Features</h4>
+      <p>&#x1f4f7; <strong>Barcode Scanner</strong> &mdash; tap the barcode icon to scan a product barcode with your camera. If it matches a product in Inventory, it's added instantly.</p>
+      <p>&#x1f4b0; <strong>Change Calculator</strong> &mdash; when paying cash, enter what the customer gives you and the app shows how much change to return.</p>
+      <p>&#x26a0;&#xfe0f; <strong>Overdue Debtors</strong> &mdash; if a debtor's repayment date has passed, credit sales are blocked until they pay.</p>
+      <p>&#x1f4e6; <strong>Stock Check</strong> &mdash; if a product is out of stock (0 units), you cannot add it to the cart.</p>
     `
   },
   { 
     name: 'SALES RECORD',     
     component: SalesRecord,
     helpContent: `
-      <h3>Sales Record – How to Use</h3>
-      <p><strong>View, filter, and manage all your recorded sales transactions.</strong></p>
+      <h3>Sales Record</h3>
+      <p>This page shows every sale you have made. Use it to check what was sold, when, and for how much.</p>
 
-      <h4>Filtering Sales</h4>
-      <p>Tap <strong>Filter Sales</strong> at the top. Choose a <strong>Payment Type</strong> (All, Cash Only, or Credit Only) and a <strong>Date Filter</strong> (Today, Single Date, or Date Range). Tap <strong>Apply Filter</strong> to update the table.</p>
+      <h4>How It Works</h4>
+      <p>All sales from Checkout appear here automatically. Use the <strong>Filter</strong> button to narrow results by payment type (Cash / Credit) or date (Today, a specific date, or a date range).</p>
 
-      <h4>Understanding the Table</h4>
-      <ul>
-        <li><strong>Date & Time:</strong> When the sale was recorded. Sales added via Forgotten Entries show "UNRECORDED" in the Time column.</li>
-        <li><strong>QTY:</strong> Total quantity of products sold in that transaction</li>
-        <li><strong>Products:</strong> Names of all products in the sale</li>
-        <li><strong>Selling Price:</strong> Unit selling price</li>
-        <li><strong>Total:</strong> Final amount for the transaction</li>
-        <li><strong>Pay/Type:</strong> CASH or CREDIT badge</li>
-        <li><strong>Customer:</strong> Customer name (credit sales only)</li>
-      </ul>
+      <h4>Examples</h4>
+      <p>&#x1f4cb; <em>You want to see today's cash sales only:</em> Tap Filter &rarr; set Type to "Cash Only" &rarr; Date to "Today" &rarr; Apply.</p>
+      <p>&#x1f4cb; <em>You want to check last week's total sales:</em> Tap Filter &rarr; set Date to "Date Range" &rarr; pick Monday to Friday &rarr; Apply. The Grand Total box shows the combined amount.</p>
 
-      <h4>Editing a Sale</h4>
-      <p>Within <strong>30 minutes</strong> of recording a sale, a pencil ✏️ icon appears on that row. Tap it to edit the product name, quantity, or price. After 30 minutes the entry is locked.</p>
+      <h4>Editing Sales</h4>
+      <p>Within 30 minutes of recording a sale, a pencil &#x270f;&#xfe0f; icon appears. Tap it to correct the product name, quantity, or price. After 30 minutes the sale is locked.</p>
 
-      <h4>Summary Boxes</h4>
-      <p>The summary at the top shows <strong>Total Records</strong> (count of sales in current filter) and <strong>Grand Total</strong> (sum of all filtered sale amounts).</p>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>Table header stays fixed when you scroll</li>
-        <li>Newest sales appear at the top</li>
-        <li>Use a date range filter to review sales for any period</li>
-      </ul>
+      <h4>What the Columns Mean</h4>
+      <p><strong>Date/Time</strong> &mdash; when the sale happened. <strong>QTY</strong> &mdash; total items sold. <strong>Products</strong> &mdash; what was sold. <strong>Total</strong> &mdash; amount charged. <strong>Pay/Type</strong> &mdash; CASH or CREDIT badge.</p>
     `
   },
   { 
     name: 'CASH RECORD',      
     component: CashRecord,
     helpContent: `
-      <h3>Cash Record – How to Use</h3>
-      <p><strong>Track every dollar coming in and going out of your business.</strong></p>
+      <h3>Cash Record</h3>
+      <p>This page tracks every dollar that comes in or goes out of your business cash box.</p>
 
-      <h4>Opening Balance</h4>
-      <p>The first time you open Cash Record you will be asked to set your <strong>Opening Balance</strong> — the cash you already have on hand before any transactions. You can update it any time by tapping the balance amount at the top.</p>
+      <h4>How It Works</h4>
+      <p>Tap <strong>+ Add Entry</strong> and choose Cash IN or Cash OUT. Select who the money is from/to, pick the reason, enter the amount, and save.</p>
 
-      <h4>Adding a Cash Entry</h4>
-      <p>Tap <strong>+ Add Entry</strong>. Choose <strong>Cash IN</strong> (money received) or <strong>Cash OUT</strong> (money spent). Select a description from the dropdown or type your own note. Enter the amount and tap <strong>Save Entry</strong>. For Cash IN you can also record who the money came from. For Cash OUT you can record who was paid.</p>
+      <h4>Cash IN Examples</h4>
+      <p>&#x1f4b5; <em>Riti gives you $500 for float (change money):</em> Cash IN &rarr; select "Riti" &rarr; Being For "Float (change money)" &rarr; Amount $500 &rarr; Save. Description shows: "From Riti for float (change money)."</p>
+      <p>&#x1f4b5; <em>Kamwatie gives you $2,000 to purchase stock:</em> Cash IN &rarr; select "Kamwatie" &rarr; Being For "Purchases (money to buy stock)" &rarr; Amount $2,000 &rarr; Save.</p>
+
+      <h4>Cash OUT Examples</h4>
+      <p>&#x1f4b8; <em>You pay the Landlord $1,000 rent:</em> Cash OUT &rarr; select "Landlord" &rarr; Being For "Land Rental" &rarr; Amount $1,000 &rarr; Save. Description shows: "Paid Landlord to pay land rental."</p>
+      <p>&#x1f4b8; <em>You buy stock from a supplier (e.g. Kamwatie):</em> Cash OUT &rarr; select "Kamwatie" &rarr; Being For opens the purchase form &rarr; fill in items purchased &rarr; Save. The purchase is recorded and stock levels update automatically.</p>
 
       <h4>Automatic Entries</h4>
-      <p>These are created automatically — you do not need to add them manually:</p>
-      <ul>
-        <li>Cash sales (not credit sales) from the <strong>CHECKOUT</strong> section automatically create Cash IN entries</li>
-        <li>Shop purchases from the <strong>PURCHASE RECORD</strong> section automatically create Cash OUT entries in this section</li>
-        <li>Every <strong>cash purchase</strong> in Purchase Record creates a Cash OUT entry</li>
-        <li>Every <strong>debtor deposit</strong> (repayment received) creates a Cash IN entry</li>
-      </ul>
-
-      <h4>Editing an Entry</h4>
-      <p>Within <strong>30 minutes</strong> of adding an entry, tap the row to open an edit modal where you can change the type, amount, or note. You can also delete the entry from this modal. After 30 minutes entries are locked.</p>
+      <p>You don't need to manually add these &mdash; they happen on their own: cash sales from Checkout (Cash IN), cash purchases from Purchase Record (Cash OUT), and debtor repayments (Cash IN).</p>
 
       <h4>Filtering</h4>
-      <p>Use the filter tabs to view <strong>All Entries</strong>, <strong>Cash In</strong> only, or <strong>Cash Out</strong> only. Apply a date filter (Today, Single Date, or Date Range) to review cash flow for any period.</p>
-
-      <h4>Understanding the Summary</h4>
-      <ul>
-        <li><strong>Opening Balance:</strong> Starting amount for the period</li>
-        <li><strong>Total IN:</strong> All money received in the filtered period</li>
-        <li><strong>Total OUT:</strong> All money spent in the filtered period</li>
-        <li><strong>Closing Balance:</strong> Opening + IN − OUT</li>
-      </ul>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>Green rows and + amounts are Cash IN; red rows and − amounts are Cash OUT</li>
-        <li>Keep descriptions detailed so you can trace every transaction later</li>
-      </ul>
+      <p>Use Filter to view Cash In only, Cash Out only, or by date range. The summary boxes show Total Records and Net Balance.</p>
     `
   },
   { 
     name: 'PURCHASE RECORD',  
     component: PurchaseRecord,
     helpContent: `
-      <h3>Purchase Record – How to Use</h3>
-      <p><strong>Record every stock purchase you make from suppliers to restock your shop.</strong></p>
+      <h3>Purchase Record</h3>
+      <p>This page records every purchase you make from suppliers to restock your shop.</p>
 
-      <h4>Adding a Purchase</h4>
-      <p>Tap <strong>+ Add Purchase</strong>. Search for and select a supplier, then choose the purchase date. In the Products table, enter the <strong>QTY</strong>, search and select the <strong>Product</strong>, enter the <strong>pack unit × pack size</strong>, and enter the <strong>Cost Price</strong> set by the supplier. The <strong>Total Cost</strong> is calculated automatically as the sum of (Qty × Unit × Cost Price) for all rows. Tap <strong>+ Add New Product</strong> to add more lines. Optionally add notes (e.g. invoice number) and take a photo of the receipt. Choose <strong>Cash Paid</strong> or <strong>Buy on Credit</strong>, then tap <strong>Save Purchase</strong>.</p>
+      <h4>How It Works</h4>
+      <p>Tap <strong>+ Add Purchase</strong> &rarr; search and select a supplier &rarr; add items with QTY, description, pack size, and cost price &rarr; enter the invoice reference number &rarr; choose Cash Paid or Buy on Credit &rarr; Save.</p>
 
-      <h4>Cash vs Credit Purchases</h4>
-      <ul>
-        <li><strong>Cash Paid:</strong> A Cash OUT entry is automatically created in Cash Record</li>
-        <li><strong>Buy on Credit:</strong> The amount is added to that supplier's balance in Creditors</li>
-      </ul>
+      <h4>Examples</h4>
+      <p>&#x1f6cd;&#xfe0f; <em>You buy 5 cartons of rice (24 packs each) at $120 per carton from Kamwatie, paying cash:</em> Select "Kamwatie" &rarr; Cash Paid &rarr; add row: QTY=5, Description="Rice", PackSize=24&times;1kg, Cost=$120 &rarr; Ref="INV-001" &rarr; Save. Stock increases by 120 units (5&times;24). A Cash OUT of $600 is created automatically.</p>
+      <p>&#x1f6cd;&#xfe0f; <em>You buy on credit from Tikanboi:</em> Same steps but choose "Buy on Credit" &rarr; set due date. No cash leaves, but the amount is added to Tikanboi's creditor balance.</p>
 
-      <h4>Editing a Purchase</h4>
-      <p>Within <strong>30 minutes</strong> of saving, tap any purchase row to open the details view. A pencil ✏️ icon appears — tap it to edit products, quantities, cost prices, or notes. After 30 minutes the record is locked.</p>
-
-      <h4>Filtering Purchases</h4>
-      <p>Use the filter button to view by <strong>Payment Type</strong> (All, Cash, or Credit) and <strong>Date</strong> (Today, Single Date, or Date Range).</p>
-
-      <h4>Understanding the Table</h4>
-      <ul>
-        <li><strong>Supplier:</strong> Who you bought from</li>
-        <li><strong>Products:</strong> Summary of goods purchased</li>
-        <li><strong>Total:</strong> Total cost of the purchase</li>
-        <li><strong>Notes:</strong> Invoice number or reference</li>
-      </ul>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>Tap any row to view full purchase details</li>
-        <li>Always photograph the supplier receipt as proof</li>
-        <li>Stock levels in Inventory update automatically when a purchase is saved</li>
-      </ul>
+      <h4>Key Features</h4>
+      <p>&#x1f4f8; <strong>Receipt Photo</strong> &mdash; take a photo of the supplier's invoice as proof of purchase.</p>
+      <p>&#x26a0;&#xfe0f; <strong>Cash Balance Check</strong> &mdash; if the total exceeds your current cash balance, the app warns you and suggests using credit instead.</p>
+      <p>&#x1f4e6; <strong>Auto Stock Update</strong> &mdash; stock levels in Inventory increase automatically based on QTY &times; Pack Unit.</p>
     `
   },
   { 
     name: 'DEBTORS',          
     component: Debtors,
     helpContent: `
-      <h3>Debtors – How to Use</h3>
-      <p><strong>Track customers who take goods on credit and manage everything they owe you.</strong></p>
+      <h3>Debtors</h3>
+      <p>Debtors are customers who owe your business money because they bought on credit.</p>
 
-      <h4>Adding a Debtor</h4>
-      <p>Tap <strong>+ Add Debtor</strong> and fill in their full name, phone, WhatsApp or email, address, and an agreed repayment due date. Once saved they appear as a card on the main list.</p>
+      <h4>How It Works</h4>
+      <p>When a customer buys on credit in Checkout, they become a debtor here automatically. Each debtor's card shows their total owed, total paid, and remaining balance.</p>
 
-      <h4>How Debts Are Added Automatically</h4>
-      <p>When you complete a <strong>Buy on Credit</strong> sale in Checkout, the total is automatically added to that customer's running balance here in Debtors. You do not need to enter it manually.</p>
+      <h4>Examples</h4>
+      <p>&#x1f464; <em>John bought $200 of goods on credit last week. Today he pays back $100:</em> Open John's profile &rarr; Debt History tab &rarr; tap Deposit &rarr; enter $100 &rarr; optionally take a photo of the receipt &rarr; Save. His balance drops from $200 to $100. A Cash IN entry is created automatically.</p>
+      <p>&#x1f464; <em>You want to check who owes you the most:</em> Tap the sort button (&uarr;&darr;) &rarr; choose "Balance: High to Low". The debtor with the highest unpaid amount appears first.</p>
 
-      <h4>Viewing a Debtor's Profile</h4>
-      <p>Tap any debtor card to open their profile. Two tabs are available:</p>
-      <ul>
-        <li><strong>Details</strong> – contact information. Tap the pencil ✏️ icon to edit name, phone, WhatsApp, email, address, or due date.</li>
-        <li><strong>Debt History</strong> – a full table of every credit sale and deposit in date order, with a running balance column so you always know exactly what they owe.</li>
-      </ul>
+      <h4>Debtor Profile Tabs</h4>
+      <p><strong>Details</strong> &mdash; name, phone, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Debt History</strong> &mdash; every credit sale and every deposit (repayment), with dates and running balance.</p>
 
-      <h4>Recording a Deposit (Repayment)</h4>
-      <p>When the debtor pays you back, open their profile → <strong>Debt History</strong> tab → tap <strong>Deposit</strong>. Enter the amount paid and optionally take a photo of the receipt as proof. The running balance updates immediately. Deposits can be edited within <strong>30 minutes</strong> of recording — after that they are locked.</p>
-
-      <h4>Editing a Credit Sale Entry</h4>
-      <p>Within <strong>2 hours</strong> of a credit sale being recorded, a pencil ✏️ icon appears on that row in the Debt History tab. Tap it to correct the product name, quantity, or price. After 2 hours the entry is locked.</p>
-
-      <h4>Sending a Payment Reminder (Notify)</h4>
-      <p>In the Debt History tab, tap <strong>Notify</strong>. A pre-written reminder message is prepared with the debtor's name, outstanding balance, and due date status. Choose to send via <strong>WhatsApp</strong>, <strong>Email</strong>, or <strong>SMS</strong> — the chosen app opens with the message ready to send.</p>
-
-      <h4>Generating a PDF Statement</h4>
-      <p>Tap the <strong>PDF</strong> button in the Debt History tab to generate a full A4 debt statement with the Kadaele Services letterhead, all transactions, and the current balance. The share sheet opens so you can send it via WhatsApp, email, or any other app.</p>
-
-      <h4>Sorting and Searching</h4>
-      <p>Use the search bar to find a debtor by name. Tap the sort button (↕) to order the list by <em>Balance: High to Low</em>, <em>Due Date</em>, or <em>Most Recently Updated</em>.</p>
-
-      <h4>Overdue Warning in Checkout</h4>
-      <p>If a debtor's repayment due date has passed and they still have an outstanding balance, a red blocking warning appears in Checkout when you try to sell to them on credit again. The sale is blocked until their balance is cleared.</p>
+      <h4>Overdue Warning</h4>
+      <p>If a debtor's repayment date has passed and they still owe money, they are flagged as overdue. You cannot sell to them on credit again until they clear their balance.</p>
     `
   },
   { 
     name: 'CREDITORS',          
     component: Creditors,
     helpContent: `
-      <h3>Creditors – How to Use</h3>
-      <p><strong>Track suppliers or individuals that your business owes money to.</strong></p>
+      <h3>Creditors</h3>
+      <p>Creditors are suppliers or people your business owes money to because you bought on credit.</p>
 
-      <h4>How Creditors Are Created</h4>
-      <p>Creditor records are created automatically when you save a <strong>Buy on Credit</strong> purchase in Purchase Record and link it to a supplier. The purchase amount is added to that supplier's outstanding balance here in Creditors. You do not need to create them manually.</p>
+      <h4>How It Works</h4>
+      <p>When you make a credit purchase in Purchase Record, the supplier becomes a creditor here automatically. Each creditor card shows total owed, total paid, and remaining balance.</p>
 
-      <h4>Viewing a Creditor's Profile</h4>
-      <p>Tap any creditor card to open their profile. Two tabs are available:</p>
-      <ul>
-        <li><strong>Details</strong> – contact information. Tap the pencil ✏️ icon to edit their details.</li>
-        <li><strong>Debt History</strong> – a full table of every credit purchase and payment made, with a running balance showing exactly how much you still owe them.</li>
-      </ul>
+      <h4>Examples</h4>
+      <p>&#x1f3ea; <em>You owe Kamwatie $500 for stock bought on credit. Today you pay $300:</em> Open Kamwatie's profile &rarr; Debt History tab &rarr; tap Deposit &rarr; enter $300 &rarr; Save. Balance drops from $500 to $200.</p>
+      <p>&#x1f3ea; <em>You want to see which creditor payment is due soonest:</em> Tap sort (&uarr;&darr;) &rarr; choose "Due Date". The creditor whose payment is due first appears at the top.</p>
 
-      <h4>Recording a Payment to a Creditor</h4>
-      <p>Open the creditor profile → <strong>Debt History</strong> tab → tap <strong>Deposit</strong>. Enter the amount you are paying them and optionally take a photo of the receipt. The running balance updates immediately. Payments can be edited within <strong>30 minutes</strong> of recording — after that they are locked.</p>
+      <h4>Creditor Profile Tabs</h4>
+      <p><strong>Details</strong> &mdash; name, phone, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Debt History</strong> &mdash; every credit purchase and every deposit (payment you made), with dates and running balance.</p>
 
-      <h4>Editing a Purchase Entry</h4>
-      <p>Within <strong>2 hours</strong> of a credit purchase being recorded, a pencil ✏️ icon appears on that row in the Debt History tab. Tap it to correct product details, quantity, or cost price. After 2 hours the entry is locked.</p>
-
-      <h4>Sending a Reminder (Notify)</h4>
-      <p>Tap <strong>Notify</strong> in the Debt History tab to generate a message showing what you owe this creditor. Send it to yourself via WhatsApp, Email, or SMS as a personal payment reminder.</p>
-
-      <h4>Generating a PDF Statement</h4>
-      <p>Tap the <strong>PDF</strong> button to generate a full A4 statement of the purchase and payment history with this creditor. Share it via WhatsApp or email for your own records or to confirm balances with the creditor.</p>
-
-      <h4>Sorting and Searching</h4>
-      <p>Use the search bar to find a creditor by name. Tap the sort button (↕) to order by <em>Balance: High to Low</em>, <em>Due Date</em>, or <em>Most Recently Updated</em>.</p>
+      <h4>Payment Reminders</h4>
+      <p>Turn on Creditor Payment Reminders in Settings to receive alarm notifications at 8:30 AM, 12:00 PM, and 4:30 PM when you have outstanding creditor balances.</p>
     `
   },
   { 
     name: 'SUPPLIERS',          
     component: Suppliers,
     helpContent: `
-      <h3>Suppliers – How to Use</h3>
-      <p><strong>Maintain a directory of all the suppliers and vendors you buy stock from.</strong></p>
+      <h3>Suppliers</h3>
+      <p>Suppliers are the businesses or people you buy your shop stock from.</p>
 
-      <h4>Adding a New Supplier</h4>
-      <p>Tap <strong>+ Add Supplier</strong>. Fill in their full name, gender, phone number, WhatsApp or email (at least one required), and address. Tap <strong>Save</strong>. The supplier is now available to select when recording purchases in Purchase Record.</p>
+      <h4>How It Works</h4>
+      <p>Tap <strong>+ Add Supplier</strong> to register a new supplier with their name and contact details. Once added, they appear in the Purchase Record dropdown and in the Cash Record "Paid To" list.</p>
 
-      <h4>Viewing a Supplier's Profile</h4>
-      <p>Tap any supplier card to open their full profile. Two tabs are available:</p>
-      <ul>
-        <li><strong>Details</strong> – contact information. Tap the pencil ✏️ icon to update their details.</li>
-        <li><strong>Purchase History</strong> – a record of all purchases made from this supplier, with amounts and dates.</li>
-      </ul>
+      <h4>Examples</h4>
+      <p>&#x1f4e6; <em>You start buying from a new wholesaler called "Pacific Traders":</em> Tap + Add Supplier &rarr; name: "Pacific Traders" &rarr; phone, email, address &rarr; Save. Now you can select them when recording purchases.</p>
+      <p>&#x1f4e6; <em>You want to see all purchases from Kamwatie:</em> Open Kamwatie's profile &rarr; Purchase History tab. Every purchase made from Kamwatie is listed with date, items, and total.</p>
 
-      <h4>Contacting a Supplier</h4>
-      <p>From the supplier's Details tab you can quickly reach them via WhatsApp or email directly from the app to place reorders or follow up on deliveries.</p>
+      <h4>Supplier Profile Tabs</h4>
+      <p><strong>Details</strong> &mdash; name, phone, WhatsApp, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Purchase History</strong> &mdash; all purchases from this supplier.</p>
 
-      <h4>Sorting and Searching</h4>
-      <p>Use the search bar to find a supplier by name. Tap the sort button (↕) to order by <em>Balance: High to Low</em>, <em>Due Date</em>, or <em>Most Recently Updated</em>.</p>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>Always add a supplier before recording a purchase — Purchase Record requires a supplier to be selected</li>
-        <li>Keep WhatsApp numbers up to date for quick reorder messages</li>
-        <li>View purchase history to see which suppliers you rely on most</li>
-      </ul>
+      <h4>Quick Contact</h4>
+      <p>From the Details tab, tap the WhatsApp or email icons to contact the supplier directly to place reorders or follow up on deliveries.</p>
     `
   },
   { 
     name: 'INVENTORY',        
     component: Inventory,
     helpContent: `
-      <h3>Inventory – How to Use</h3>
-      <p><strong>View all products in your shop and monitor their current stock levels in real time.</strong></p>
+      <h3>Inventory</h3>
+      <p>This page shows every product in your shop and how many units you have in stock right now.</p>
 
-      <h4>Searching Products</h4>
-      <p>Type in the search box at the top to instantly filter products by name. The result count updates as you type.</p>
+      <h4>How It Works</h4>
+      <p>All products are listed alphabetically. Use the search box to find a product by name. Stock levels update automatically from sales and purchases.</p>
 
-      <h4>Understanding the Table</h4>
-      <ul>
-        <li><strong>Product Name:</strong> The name as it appears in Checkout searches</li>
-        <li><strong>Selling Price:</strong> The price charged to customers</li>
-        <li><strong>Category:</strong> Product category for organisation</li>
-        <li><strong>Quantity:</strong> Current stock level on hand</li>
-        <li><strong>Status:</strong> Colour-coded stock badge:
-          <ul>
-            <li>🟢 <strong>In Stock</strong> — more than 5 units remaining</li>
-            <li>🟡 <strong>Low Stock</strong> — 1 to 5 units remaining</li>
-            <li>🔴 <strong>Out of Stock</strong> — 0 units</li>
-          </ul>
-        </li>
-        <li><strong>Barcode:</strong> Tap the barcode thumbnail to view the full barcode image</li>
-      </ul>
+      <h4>Examples</h4>
+      <p>&#x1f4e6; <em>You want to check if you need to reorder rice:</em> Search "Rice" &rarr; check the Quantity column. If it shows &#x1f7e1; Low Stock (1&ndash;5 units) or &#x1f534; Out of Stock (0 units), it's time to reorder.</p>
+      <p>&#x1f4e6; <em>You want to see all products and their prices:</em> Just scroll through the table. Each row shows the product name, selling price, category, quantity, stock status, and barcode.</p>
 
-      <h4>How Stock Levels Change</h4>
-      <ul>
-        <li>Stock is <strong>automatically deducted</strong> every time a sale is completed in Checkout</li>
-        <li>Stock is <strong>automatically increased</strong> when a purchase is saved in Purchase Record</li>
-        <li>To add new products or manually adjust stock, go to <strong>Settings</strong></li>
-      </ul>
+      <h4>Stock Status Colours</h4>
+      <p>&#x1f7e2; <strong>In Stock</strong> &mdash; more than 5 units. &#x1f7e1; <strong>Low Stock</strong> &mdash; 1 to 5 units remaining. &#x1f534; <strong>Out of Stock</strong> &mdash; 0 units, cannot be sold.</p>
 
-      <h4>Tips</h4>
-      <ul>
-        <li>Table header stays fixed when you scroll down</li>
-        <li>Check this screen regularly and reorder when you see 🟡 Low Stock warnings</li>
-        <li>Products are sorted alphabetically for easy browsing</li>
-      </ul>
+      <h4>How Stock Changes</h4>
+      <p>Stock goes <strong>down</strong> when you sell in Checkout. Stock goes <strong>up</strong> when you save a purchase in Purchase Record. To add new products or manually adjust stock, go to Settings.</p>
     `
   },
   {
     name: 'CASH RECONCILIATION',
     component: CashReconciliation,
     helpContent: `
-      <h3>Cash Reconciliation – How to Use</h3>
-      <p><strong>Open and close each business day and reconcile the cash drawer.</strong></p>
+      <h3>Cash Reconciliation</h3>
+      <p>This page controls opening and closing the shop each day. It makes sure the cash in the drawer matches what the app expects.</p>
 
-      <h4>Opening the Day</h4>
-      <p>At the start of each shift, go to the <strong>Today</strong> tab and enter the <strong>Opening Float</strong> — the cash already in the drawer before any sales. Tap <strong>Open Day</strong>. The app records who opened the day automatically based on the logged-in account.</p>
+      <h4>How It Works</h4>
+      <p>At the start of the day, enter your <strong>Opening Float</strong> (the cash already in the drawer) and tap <strong>Open Day</strong>. The app then tracks all cash in and cash out throughout the day. At the end of the day, count the physical cash, enter it, and tap <strong>Close Day</strong>.</p>
 
-      <h4>Live Cash Summary</h4>
-      <p>Once the day is open, the summary updates automatically as sales, purchases, and debtor payments are recorded throughout the day:</p>
-      <ul>
-        <li><strong>Opening Float:</strong> Starting cash entered at open</li>
-        <li><strong>Cash In today:</strong> All cash sales + debtor repayments received</li>
-        <li><strong>Cash Out today:</strong> All cash purchases and payments made</li>
-        <li><strong>Expected Cash Now:</strong> Float + In − Out (what should be in the drawer)</li>
-      </ul>
+      <h4>Examples</h4>
+      <p>&#x1f3ea; <em>Morning: You have $200 in the drawer to start:</em> Open Day &rarr; Opening Float = $200. The app now tracks everything from this starting point.</p>
+      <p>&#x1f3ea; <em>End of day: You count $1,350 in the drawer:</em> Close Day &rarr; Counted Cash = $1,350. If the app expected $1,350, it shows &#x2705; Balanced. If you count $1,300, it shows &#x26a0;&#xfe0f; Short by $50 and you must add a note explaining why.</p>
+      <p>&#x1f3ea; <em>You closed the shop but forgot to record a sale:</em> Go to Records tab &rarr; tap today's record &rarr; tap &#x1f513; Re-Open Shop &rarr; record the forgotten entry &rarr; then Close Day again.</p>
 
-      <h4>Closing the Day</h4>
-      <p>At end of shift, count the physical cash in the drawer and enter the amount in <strong>Counted Cash</strong>. If the counted amount differs from expected, <strong>Notes are required</strong>. Tap <strong>Close Day</strong> — the record is then locked.</p>
-
-      <h4>Difference Indicators</h4>
-      <ul>
-        <li>✅ <strong>Balanced</strong> — counted matches expected exactly</li>
-        <li>⚠️ <strong>Short</strong> — cash missing from drawer</li>
-        <li>⚠️ <strong>Over</strong> — extra cash in drawer</li>
-      </ul>
+      <h4>Why This Matters</h4>
+      <p>Cash reconciliation prevents theft and errors. If the counted cash doesn't match the expected amount, there's either missing money or an unrecorded transaction that needs to be found.</p>
 
       <h4>Records Tab</h4>
-      <p>View all past daily reconciliation records. Tap any record to see the full breakdown including who opened and closed, float, expected, counted, and difference.</p>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>Always open the day before recording any sales for accurate reconciliation</li>
-        <li>Works fully offline — records sync to the cloud when internet returns</li>
-        <li>The Admin app uses this data to report daily expected vs counted cash</li>
-      </ul>
+      <p>View all past daily records. Tap any record to see the full breakdown: who opened, who closed, float, expected cash, counted cash, and any difference.</p>
     `
   },
-
   { 
     name: 'SETTINGS',         
     component: Settings,
     helpContent: `
-      <h3>Settings – How to Use</h3>
-      <p><strong>Manage your products, notifications, forgotten entries, and app preferences.</strong></p>
+      <h3>Settings</h3>
+      <p>Manage your products, app appearance, notifications, and record forgotten transactions.</p>
 
       <h4>Appearance</h4>
-      <p>Toggle <strong>Dark Mode / Light Mode</strong> to switch the app theme. Your preference is saved automatically and applies across the whole app.</p>
+      <p>Toggle between <strong>Dark Mode</strong> and <strong>Light Mode</strong>. Your choice is saved automatically.</p>
 
       <h4>Notifications</h4>
-      <ul>
-        <li><strong>Low Stock Alert:</strong> Sends a notification when any product drops to 5 units or fewer in stock.</li>
-        <li><strong>Creditor Payment Reminder:</strong> Rings an alarm at 8:30 AM, 12:00 PM, and 4:30 PM reminding you of any outstanding amounts your business owes to creditors.</li>
-      </ul>
+      <p>&#x1f4e6; <strong>Low Stock Alert</strong> &mdash; get notified when any product drops to 5 units or fewer so you can reorder in time.</p>
+      <p>&#x1f4b3; <strong>Creditor Payment Reminder</strong> &mdash; alarm reminders at 8:30 AM, 12:00 PM, and 4:30 PM when you owe money to creditors.</p>
 
       <h4>Forgotten Entries</h4>
       <p>Use these when you forgot to record something on the day it happened:</p>
-      <ul>
-        <li><strong>Record Forgotten Sale:</strong> Record a past cash or credit sale with a manual back-date. Choose the products, quantities, payment type, and the actual date the sale occurred. The sale will appear in Sales Record with the correct date.</li>
-        <li><strong>Record Forgotten Cash Entry:</strong> Record a past Cash IN or Cash OUT entry with a manual back-date. Useful for cash transactions you forgot to enter on the day.</li>
-      </ul>
+      <p>&#x1f6d2; <em>Example: You made a $50 cash sale yesterday but forgot to record it:</em> Tap "Record Forgotten Sale" &rarr; select the product and quantity &rarr; set yesterday's date &rarr; choose Cash &rarr; Save. It appears in Sales Record with the correct date.</p>
+      <p>&#x1f4b5; <em>Example: You paid $100 for electricity 3 days ago:</em> Tap "Record Forgotten Cash Entry" &rarr; Cash OUT &rarr; amount $100 &rarr; set the date &rarr; Save.</p>
 
-      <h4>Managing Products (Inventory)</h4>
-      <p>The Manage Inventory section lets you:</p>
-      <ul>
-        <li>Add new products with name, selling price, category, stock quantity, and barcode image</li>
-        <li>Edit existing product details</li>
-        <li>Update stock quantities manually</li>
-        <li>Delete products no longer sold</li>
-      </ul>
-      <p><em>Products added here are immediately available in Checkout searches and Inventory.</em></p>
-
-      <h4>Tips</h4>
-      <ul>
-        <li>Use categories to keep your product list organised</li>
-        <li>Enable the Creditor Reminder so you never forget to pay a supplier on time</li>
-        <li>Use Forgotten Entries sparingly — always try to record sales and cash on the day they happen</li>
-      </ul>
+      <h4>Manage Inventory</h4>
+      <p>Add new products (name, price, category, barcode), edit existing ones, update stock manually, or delete products no longer sold. Products added here are immediately available in Checkout.</p>
     `
   },
 ];
@@ -405,6 +253,37 @@ function App() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
 
+  // ── Store open/close state ────────────────────────────────────────────────
+  const [storeIsOpen, setStoreIsOpen] = useState(null); // null = loading, true/false
+  const [showClosedModal, setShowClosedModal] = useState(false);
+  const [closedModalMessage, setClosedModalMessage] = useState('');
+
+  const checkStoreStatus = useCallback(async () => {
+    try {
+      const todayStr = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      })();
+      const allRecs = await dataService.getDailyCashRecords();
+      const todayRec = (allRecs || []).find(r => r.business_date === todayStr);
+
+      if (!todayRec) {
+        setStoreIsOpen(false);
+        setClosedModalMessage('The shop has not been opened today. Please open the day in Cash Reconciliation before using the app.');
+        setShowClosedModal(true);
+      } else if (todayRec.status === 'closed') {
+        setStoreIsOpen(false);
+        setClosedModalMessage('The shop is currently closed. Please re-open the day in Cash Reconciliation to continue.');
+        setShowClosedModal(true);
+      } else {
+        setStoreIsOpen(true);
+        setShowClosedModal(false);
+      }
+    } catch (e) {
+      console.error('Error checking store status:', e);
+      setStoreIsOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -419,6 +298,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (currentUser) checkStoreStatus();
+  }, [currentUser, checkStoreStatus]);
+
+  useEffect(() => {
     const goOnline  = () => setIsOnline(true);
     const goOffline = () => setIsOnline(false);
     window.addEventListener('online',  goOnline);
@@ -429,20 +312,18 @@ function App() {
     };
   }, []);
 
-  // ── Hardware back button: confirm before exiting ───────────────────────
+  // ── Hardware back button ────────────────────────────────────────────────
   useEffect(() => {
     let listener;
     const setup = async () => {
       try {
         listener = await CapApp.addListener('backButton', ({ canGoBack }) => {
-          // If a modal/overlay is open (any element with overlay class), let browser handle it
           const overlay = document.querySelector('.d-overlay, .sr-modal-overlay, .pr-modal-overlay, .st-modal-overlay, .modal-overlay');
-          if (overlay) return; // let the existing modal close handlers deal with it
-          // Otherwise confirm app exit
+          if (overlay) return;
           const confirmed = window.confirm('Close Kadaele Shopkeeper?');
           if (confirmed) CapApp.exitApp();
         });
-      } catch (_) { /* not native — ignore */ }
+      } catch (_) { /* not native */ }
     };
     setup();
     return () => { listener?.remove?.(); };
@@ -463,6 +344,45 @@ function App() {
   const navigateToPage = (index) => {
     setCurrentPageIndex(index);
     setShowMenuModal(false);
+  };
+
+  // Called by CashReconciliation when store opens/closes
+  const handleStoreStatusChange = (isOpen) => {
+    setStoreIsOpen(isOpen);
+    if (!isOpen) {
+      setClosedModalMessage('The shop is now closed. Re-open in Cash Reconciliation to continue using the app.');
+      setShowClosedModal(true);
+    } else {
+      setShowClosedModal(false);
+    }
+  };
+
+  // Closed modal OK → navigate to Cash Reconciliation + scroll to open button
+  const handleClosedModalOk = () => {
+    setShowClosedModal(false);
+    setCurrentPageIndex(CASH_RECON_INDEX);
+    setTimeout(() => {
+      const btn = document.querySelector('.cr-btn-open, .cr-btn-reopen');
+      if (btn) {
+        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        btn.style.boxShadow = '0 0 0 4px rgba(102, 126, 234, 0.5)';
+        setTimeout(() => { btn.style.boxShadow = ''; }, 2000);
+      }
+    }, 400);
+  };
+
+  // Page navigation — lock all pages except Cash Reconciliation & Settings when shop is closed
+  const handlePageNavigation = (index) => {
+    if (index === CASH_RECON_INDEX || index === SETTINGS_INDEX) {
+      navigateToPage(index);
+      return;
+    }
+    if (!storeIsOpen) {
+      setClosedModalMessage('The shop must be open before you can use this page. Please open the day in Cash Reconciliation first.');
+      setShowClosedModal(true);
+      return;
+    }
+    navigateToPage(index);
   };
 
   if (isCheckingAuth) {
@@ -519,9 +439,41 @@ function App() {
 
       <main className="app-main">
         <CurrentPageComponent
-          isUnlocked={true}
+          isUnlocked={!!storeIsOpen}
+          storeIsOpen={!!storeIsOpen}
+          onStoreStatusChange={handleStoreStatusChange}
         />
       </main>
+
+      {/* ── Shop Closed Modal ── */}
+      {showClosedModal && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
+        }}>
+          <div style={{
+            background:'var(--surface, #fff)', color:'var(--text-primary, #1a1a1a)',
+            borderRadius:'16px', padding:'28px 24px', maxWidth:'360px', width:'100%',
+            textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>&#x1f512;</div>
+            <h3 style={{ margin:'0 0 12px', fontSize:'18px', fontWeight:700 }}>Shop is Closed</h3>
+            <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.6', color:'var(--text-secondary, #666)' }}>
+              {closedModalMessage}
+            </p>
+            <button
+              onClick={handleClosedModalOk}
+              style={{
+                width:'100%', padding:'12px', fontSize:'15px', fontWeight:700,
+                background:'linear-gradient(135deg, #667eea, #764ba2)', color:'#fff',
+                border:'none', borderRadius:'10px', cursor:'pointer',
+              }}
+            >
+              OK &mdash; Go to Cash Reconciliation
+            </button>
+          </div>
+        </div>
+      )}
 
       {showHelpModal && (
         <div className="modal-overlay" onClick={() => setShowHelpModal(false)}>
@@ -551,10 +503,10 @@ function App() {
                 {PAGES.map((page, index) => (
                   <button
                     key={index}
-                    className={`menu-item${currentPageIndex === index ? ' active' : ''}`}
-                    onClick={() => navigateToPage(index)}
+                    className={`menu-item${currentPageIndex === index ? ' active' : ''}${!storeIsOpen && index !== CASH_RECON_INDEX && index !== SETTINGS_INDEX ? ' menu-item-locked' : ''}`}
+                    onClick={() => handlePageNavigation(index)}
                   >
-                    {page.name}
+                    {!storeIsOpen && index !== CASH_RECON_INDEX && index !== SETTINGS_INDEX ? '&#x1f512; ' : ''}{page.name}
                   </button>
                 ))}
               </div>
