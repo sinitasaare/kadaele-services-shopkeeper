@@ -472,7 +472,7 @@ function CashReconciliation({ onStoreStatusChange }) {
           </div>
 
           <div className="cr-closed-msg">
-            <span className="cr-closed-icon">\U0001f512</span>
+            <span className="cr-closed-icon">🔒</span>
             <span className="cr-closed-title">Day Closed</span>
             <span className="cr-closed-sub">
               {isReopenable
@@ -483,7 +483,7 @@ function CashReconciliation({ onStoreStatusChange }) {
 
           {isReopenable && (
             <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
-              \U0001f513 Re-Open Shop
+              🔓 Re-Open Shop
             </button>
           )}
         </>
