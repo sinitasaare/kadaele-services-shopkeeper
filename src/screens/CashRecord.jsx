@@ -123,340 +123,420 @@ function getSupplierRecord(name, suppliersList) {
   ) || null;
 }
 
-// ── Operational Expenses Modal (mini-purchase modal) ────────────────────────
-// Opens when a supplier is selected in PAID TO and user clicks BEING FOR.
-// Similar to AddPurchaseModal but title = "Operational Expenses bought at [supplier]"
-// and PackSize unit field is editable (not locked).
-function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose }) {
+// ── Add Operational Assets Modal ─────────────────────────────────────────────
+// Opens when user clicks BEING FOR and the PAID TO name is a known supplier.
+// Mirrors the Admin app's AssetFormModal exactly, but supports multiple items
+// per submission and pre-populates supplierName from the selected PAID TO name.
+// Each item saved is written individually to the operational_assets collection.
+function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList, onSave, onClose }) {
   const { fmt } = useCurrency();
-  const [paymentType, setPaymentType] = useState('cash');
-  const [dueDate, setDueDate]         = useState('');
-  const [purchaseDate, setPurchaseDate] = useState(() => {
+
+  const todayStr = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  });
-  const [rows, setRows] = useState([{
-    id: 1, qty: '', description: '', descSearch: '', showDescDrop: false,
-    costPrice: '',
-  }]);
-  const [goods, setGoods]           = useState([]);
-  const [invoiceRef, setInvoiceRef] = useState('');
-  const [notes, setNotes]           = useState('');
-  const [receiptPhoto, setReceiptPhoto] = useState(null);
-  const [saving, setSaving]         = useState(false);
-  const [fieldError, setFieldError] = useState(null);
-  const [cashBalance, setCashBalance] = useState(null);
+  };
+
+  // Supplier search state (the supplier name field has a live dropdown)
+  const [supplierSearch, setSupplierSearch]   = useState(initialSupplierName || '');
+  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
+  const [resolvedSupplierId, setResolvedSupplierId] = useState(initialSupplierId || null);
+
+  // Shared fields across all items in this submission
+  const [paymentType, setPaymentType] = useState('cash');
+  const [invoiceRef, setInvoiceRef]   = useState('');
+  const [date, setDate]               = useState(todayStr());
+  const [saving, setSaving]           = useState(false);
+
+  // Each item row: { id, name, qty, costPrice }
   const nextId = useRef(2);
+  const [items, setItems] = useState([{ id: 1, name: '', qty: '', costPrice: '' }]);
+
+  const [cashBalance, setCashBalance] = useState(null);
 
   useEffect(() => {
-    dataService.getGoods().then(d => setGoods(d || []));
     dataService.getCashEntries().then(entries => {
       const bal = (entries || []).reduce((sum, e) =>
         sum + (e.type === 'in' ? (e.amount || 0) : -(e.amount || 0)), 0);
       setCashBalance(bal);
     });
-    const unsub = dataService.onGoodsChange(g => setGoods(g || []));
-    return () => unsub();
   }, []);
 
-  const getTodayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const filteredSuppliers = (() => {
+    const q = supplierSearch.toLowerCase();
+    return suppliersList.filter(s =>
+      (s.name || s.customerName || '').toLowerCase().includes(q)
+    );
+  })();
+
+  const updateItem = (id, field, val) =>
+    setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: val } : it));
+
+  const addItem = () => {
+    setItems(prev => [...prev, { id: nextId.current++, name: '', qty: '', costPrice: '' }]);
   };
 
-  const addRow = () => setRows(prev => [...prev, {
-    id: nextId.current++, qty: '', description: '', descSearch: '',
-    showDescDrop: false, costPrice: '',
-  }]);
-  const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
-  const updateRow = (id, field, val) =>
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+  const removeItem = (id) => setItems(prev => prev.filter(it => it.id !== id));
 
-  const descResults = (search) => {
-    if (!search.trim()) return [];
-    const t = search.toLowerCase();
-    const tier1 = [], tier2 = [], tier3 = [];
-    for (const g of goods) {
-      const name = (g.name || '').toLowerCase();
-      const words = name.split(/\s+/);
-      if (words[0]?.startsWith(t)) tier1.push(g);
-      else if (words[1]?.startsWith(t)) tier2.push(g);
-      else if (words[2]?.startsWith(t)) tier3.push(g);
-    }
-    return [...tier1, ...tier2, ...tier3].slice(0, 12);
-  };
+  const grandTotal = items.reduce((sum, it) =>
+    sum + (parseFloat(it.qty) || 0) * (parseFloat(it.costPrice) || 0), 0);
 
-  const itemTotal = rows.reduce((sum, r) =>
-    sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
-
-  const takePhoto = async () => {
-    if (!Capacitor.isNativePlatform()) {
-      const input = document.createElement('input');
-      input.type = 'file'; input.accept = 'image/*'; input.capture = 'camera';
-      input.onchange = e => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = ev => setReceiptPhoto(ev.target.result);
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
-    } else {
-      try {
-        const { Camera } = await import('@capacitor/camera');
-        const image = await Camera.getPhoto({ quality: 70, allowEditing: false, resultType: 'dataUrl' });
-        setReceiptPhoto(image.dataUrl);
-      } catch { /* ignore */ }
-    }
+  const lastItemComplete = () => {
+    const last = items[items.length - 1];
+    return last && last.name.trim() && parseFloat(last.qty) > 0 && parseFloat(last.costPrice) >= 0;
   };
 
   const handleSave = async () => {
+    const supplierName = supplierSearch.trim();
+    if (!supplierName) { alert('Please enter or select a supplier name.'); return; }
     if (!invoiceRef.trim()) { alert('Please enter a Ref / invoice number.'); return; }
-    if (!purchaseDate) { alert('Please select a purchase date.'); return; }
-    for (const r of rows) {
-      if (!r.description?.trim()) {
-        setFieldError({ rowId: r.id, field: 'description', message: 'Select an item first' });
-        return;
-      }
-      if (!parseFloat(r.qty) > 0 && !r.qty) {
-        setFieldError({ rowId: r.id, field: 'qty', message: 'Enter a quantity' });
-        return;
-      }
-      if (!parseFloat(r.costPrice) > 0 && !r.costPrice) {
-        setFieldError({ rowId: r.id, field: 'costPrice', message: 'Enter a cost' });
-        return;
-      }
+    if (!date) { alert('Please select a date.'); return; }
+
+    const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty) > 0);
+    if (validItems.length === 0) { alert('Please add at least one item with a name and quantity.'); return; }
+
+    for (const it of validItems) {
+      if (!it.name.trim()) { alert('All items must have a name.'); return; }
+      if (!(parseFloat(it.qty) > 0)) { alert('All items must have a quantity greater than 0.'); return; }
+      if (parseFloat(it.costPrice) < 0) { alert('Cost price cannot be negative.'); return; }
     }
-    setFieldError(null);
-    const validRows = rows.filter(r => r.description.trim() && parseFloat(r.qty) > 0);
-    if (validRows.length === 0) { alert('Please add at least one item.'); return; }
 
-    const total = validRows.reduce((s, r) =>
-      s + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
-
-    if (paymentType === 'cash' && cashBalance !== null && total > cashBalance) {
-      alert(`Total (${fmt(total)}) exceeds Cash Balance (${fmt(cashBalance)}). Reduce amount or use Credit.`);
+    if (paymentType === 'cash' && cashBalance !== null && grandTotal > cashBalance) {
+      alert(`Total (${fmt(grandTotal)}) exceeds your current Cash Balance (${fmt(cashBalance)}). Reduce amount or switch to Credit.`);
       return;
     }
 
     setSaving(true);
     try {
-      const items = validRows.map(r => ({
-        qty: parseFloat(r.qty),
-        description: r.description.trim(),
-        costPrice: parseFloat(r.costPrice) || 0,
-        subtotal: (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0),
-      }));
+      const dateISO = new Date(date + 'T12:00:00').toISOString();
+      const savedItems = [];
 
-      await dataService.addPurchase({
-        supplierName, supplierId: supplierId || null,
-        paymentType, creditorId: paymentType === 'credit' ? supplierId : null,
-        dueDate: paymentType === 'credit' ? dueDate : null,
-        date: new Date(purchaseDate + 'T12:00:00').toISOString(),
-        items, total,
-        notes: notes.trim(), invoiceRef: invoiceRef.trim(),
-        receiptPhoto: receiptPhoto || null,
-      });
+      for (const it of validItems) {
+        const qty       = parseFloat(it.qty) || 0;
+        const costPrice = parseFloat(it.costPrice) || 0;
+        const subtotal  = qty * costPrice;
 
-      // Write each item to Operational Assets
-      const purchaseDateISO = new Date(purchaseDate + 'T12:00:00').toISOString();
-      for (const item of items) {
         await dataService.addOperationalAsset({
-          name: item.description,
-          qty: item.qty,
-          costPrice: item.costPrice,
-          subtotal: item.subtotal,
+          name: it.name.trim(),
+          qty,
+          costPrice,
+          subtotal,
           supplierName,
-          supplierId: supplierId || null,
+          supplierId: resolvedSupplierId || null,
           invoiceRef: invoiceRef.trim(),
           paymentType,
-          date: purchaseDateISO,
+          date: dateISO,
           source: 'purchase',
         });
+
+        savedItems.push({ name: it.name.trim(), qty, costPrice, subtotal });
       }
 
-      // Build summary for description
-      const itemNames = items.map(i => i.description).join(', ');
       onSave({
+        supplierName,
+        supplierId: resolvedSupplierId || null,
         paymentType,
-        total,
+        total: grandTotal,
         invoiceRef: invoiceRef.trim(),
-        itemsSummary: itemNames,
+        itemsSummary: savedItems.map(i => i.name).join(', '),
+        items: savedItems,
       });
     } catch (e) {
       console.error(e);
       alert('Failed to save. Please try again.');
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="pr-modal-overlay" style={{ zIndex: 4000 }}>
-      <div className="pr-modal-content">
-        <div className="pr-modal-header">
-          <h2 style={{ fontSize: '15px' }}>Operational Expenses bought at {supplierName}</h2>
-          <button className="pr-modal-close" onClick={onClose}><X size={20}/></button>
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px',
+    }}>
+      <div style={{
+        background: 'var(--surface, white)', color: 'var(--text-primary, #111)',
+        borderRadius: '14px', width: '100%', maxWidth: '480px',
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.3)', overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '18px 20px', borderBottom: '1px solid var(--border, #e5e7eb)',
+          flexShrink: 0,
+        }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>🔧 Add Operational Assets</h2>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary, #6b7280)', padding: '4px', borderRadius: '4px',
+            display: 'flex', alignItems: 'center',
+          }}><X size={20}/></button>
         </div>
-        <div className="pr-modal-body">
+
+        {/* Body */}
+        <div style={{ overflowY: 'auto', padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          {/* Supplier Name with dropdown */}
+          <div style={{ position: 'relative' }}>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary, #374151)' }}>
+              Supplier Name *
+            </label>
+            <input
+              style={{
+                width: '100%', padding: '10px 12px', border: '2px solid var(--border, #e5e7eb)',
+                borderRadius: '8px', fontSize: '14px', background: 'var(--surface, white)',
+                color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+              }}
+              value={supplierSearch}
+              placeholder="Search or type supplier name…"
+              onChange={e => {
+                setSupplierSearch(e.target.value);
+                setShowSupplierDrop(true);
+                setResolvedSupplierId(null);
+              }}
+              onFocus={() => setShowSupplierDrop(true)}
+              onBlur={() => setTimeout(() => setShowSupplierDrop(false), 180)}
+            />
+            {showSupplierDrop && filteredSuppliers.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 500,
+                background: 'var(--surface, white)', border: '1px solid var(--border, #e5e7eb)',
+                borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                maxHeight: '160px', overflowY: 'auto',
+              }}>
+                {filteredSuppliers.map(s => {
+                  const n = s.name || s.customerName || '';
+                  return (
+                    <button key={s.id}
+                      onMouseDown={() => {
+                        setSupplierSearch(n);
+                        setResolvedSupplierId(s.id);
+                        setShowSupplierDrop(false);
+                      }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left',
+                        padding: '10px 14px', background: 'none', border: 'none',
+                        cursor: 'pointer', fontSize: '14px', color: 'var(--text-primary, #111)',
+                      }}
+                    >{n}</button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Payment Type */}
-          <div className="pr-field">
-            <label>Payment Type *</label>
-            <div className="pr-pay-type-row">
-              {[['cash','💵 Cash Paid'],['credit','📋 Buy on Credit']].map(([pt, lbl]) => (
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary, #374151)' }}>
+              Payment Type
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[['cash', '💵 Cash'], ['credit', '📋 Credit']].map(([pt, lbl]) => (
                 <button key={pt} type="button"
-                  className={`pr-pay-type-btn${paymentType===pt?(pt==='cash'?' pr-pay-cash-active':' pr-pay-credit-active'):''}`}
                   onClick={() => setPaymentType(pt)}
-                >{lbl}</button>
+                  style={{
+                    flex: 1, padding: '9px', borderRadius: '8px', border: '2px solid',
+                    borderColor: paymentType === pt ? (pt === 'cash' ? '#16a34a' : '#4f46e5') : 'var(--border, #d1d5db)',
+                    background: paymentType === pt ? (pt === 'cash' ? '#f0fdf4' : '#eef2ff') : 'var(--surface, white)',
+                    fontWeight: paymentType === pt ? 700 : 400,
+                    cursor: 'pointer', fontSize: '13px', color: 'var(--text-primary, #111)',
+                  }}>{lbl}</button>
               ))}
             </div>
-            <p style={{fontSize:'11px',marginTop:'4px',color:paymentType==='credit'?'#4f46e5':'#6b7280'}}>
-              {paymentType==='cash'
+            <p style={{ fontSize: '11px', marginTop: '4px', color: paymentType === 'credit' ? '#4f46e5' : '#6b7280' }}>
+              {paymentType === 'cash'
                 ? 'Cash paid now — a Cash OUT entry will be recorded.'
-                : 'Goods received, pay later — creditor balance updated.'}
+                : 'Items received, pay later — no immediate cash deducted.'}
             </p>
           </div>
 
-          {paymentType === 'credit' && (
-            <div className="pr-date-inline">
-              <label className="pr-date-inline-label">Due Date</label>
-              <input type="date" className="pr-date-inline-input"
-                value={dueDate} onChange={e => setDueDate(e.target.value)} />
+          {/* Invoice / Ref */}
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary, #374151)' }}>
+              Invoice / Ref *
+            </label>
+            <input
+              style={{
+                width: '100%', padding: '10px 12px', border: '2px solid var(--border, #e5e7eb)',
+                borderRadius: '8px', fontSize: '14px', background: 'var(--surface, white)',
+                color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+              }}
+              value={invoiceRef}
+              placeholder="Receipt or invoice number…"
+              onChange={e => setInvoiceRef(e.target.value)}
+            />
+          </div>
+
+          {/* Date */}
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary, #374151)' }}>
+              Date *
+            </label>
+            <input
+              type="date"
+              style={{
+                width: '100%', padding: '10px 12px', border: '2px solid var(--border, #e5e7eb)',
+                borderRadius: '8px', fontSize: '14px', background: 'var(--surface, white)',
+                color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+              }}
+              value={date}
+              max={todayStr()}
+              onChange={e => setDate(e.target.value)}
+            />
+          </div>
+
+          {/* Items */}
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary, #374151)' }}>
+              Items *
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {items.map((it, idx) => {
+                const subtotal = (parseFloat(it.qty) || 0) * (parseFloat(it.costPrice) || 0);
+                return (
+                  <div key={it.id} style={{
+                    border: '1.5px solid var(--border, #e5e7eb)', borderRadius: '10px',
+                    padding: '12px', background: 'var(--background, #f9fafb)',
+                    display: 'flex', flexDirection: 'column', gap: '10px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#667eea' }}>Item {idx + 1}</span>
+                      {items.length > 1 && (
+                        <button onClick={() => removeItem(it.id)} style={{
+                          background: '#fee2e2', border: 'none', borderRadius: '6px',
+                          padding: '4px 8px', cursor: 'pointer', color: '#dc2626',
+                          display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px',
+                        }}>
+                          <Trash2 size={12}/> Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Asset Name */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>
+                        Asset Name *
+                      </label>
+                      <input
+                        style={{
+                          width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)',
+                          borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)',
+                          color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+                        }}
+                        value={it.name}
+                        placeholder="e.g. Generator, Office Chair…"
+                        onChange={e => updateItem(it.id, 'name', e.target.value)}
+                      />
+                    </div>
+
+                    {/* Qty + Cost side by side */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>
+                          Quantity *
+                        </label>
+                        <input type="number" min="0" step="1"
+                          style={{
+                            width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)',
+                            borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)',
+                            color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+                          }}
+                          value={it.qty}
+                          placeholder="0"
+                          onChange={e => updateItem(it.id, 'qty', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>
+                          Unit Cost
+                        </label>
+                        <input type="number" min="0" step="0.01"
+                          style={{
+                            width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)',
+                            borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)',
+                            color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+                          }}
+                          value={it.costPrice}
+                          placeholder="0.00"
+                          onChange={e => updateItem(it.id, 'costPrice', e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Subtotal preview */}
+                    {(parseFloat(it.qty) > 0 || parseFloat(it.costPrice) > 0) && (
+                      <div style={{
+                        padding: '6px 10px', background: '#f0f4ff',
+                        border: '1px solid #c7d2fe', borderRadius: '7px',
+                        fontSize: '12px', color: '#4338ca', fontWeight: 600,
+                      }}>
+                        Subtotal: {fmt(subtotal)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          )}
 
-          <div className="pr-date-inline">
-            <label className="pr-date-inline-label">Purchase Date *</label>
-            <input type="date" className="pr-date-inline-input"
-              value={purchaseDate} max={getTodayStr()}
-              onChange={e => setPurchaseDate(e.target.value)} />
-          </div>
-
-          {/* Items table */}
-          <div className="pr-field">
-            <label>Items Purchased *</label>
-            <div className="pr-items-table-wrapper">
-              <table className="pr-items-tbl">
-                <thead>
-                  <tr>
-                    <th className="pr-ith pr-ith-qty">QTY</th>
-                    <th className="pr-ith pr-ith-desc">DESCRIPTION</th>
-                    <th className="pr-ith pr-ith-cost">COST</th>
-                    <th className="pr-ith" style={{width:'24px'}}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(row => {
-                    const results = descResults(row.descSearch);
-                    return (
-                      <tr key={row.id}>
-                        <td className="pr-itd pr-itd-qty">
-                          <input type="number" className="pr-it-input pr-it-qty"
-                            placeholder="0" min="0" step="1" value={row.qty}
-                            onChange={e => { updateRow(row.id, 'qty', e.target.value); setFieldError(null); }} />
-                        </td>
-                        <td className="pr-itd pr-itd-desc" style={{position:'relative'}}>
-                          <input type="text" className="pr-it-input pr-it-desc"
-                            placeholder="Search inventory…"
-                            value={row.descSearch !== undefined ? row.descSearch : row.description}
-                            onChange={e => {
-                              updateRow(row.id, 'descSearch', e.target.value);
-                              updateRow(row.id, 'showDescDrop', true);
-                            }}
-                            onFocus={() => updateRow(row.id, 'showDescDrop', true)}
-                            onBlur={() => setTimeout(() => updateRow(row.id, 'showDescDrop', false), 180)}
-                          />
-                          {row.showDescDrop && results.length > 0 && (
-                            <div className="pr-desc-drop" style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',maxHeight:'140px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
-                              {results.map(g => (
-                                <div key={g.id} className="pr-desc-drop-item"
-                                  onMouseDown={() => {
-                                    updateRow(row.id, 'description', g.name || '');
-                                    updateRow(row.id, 'descSearch', g.name || '');
-                                    updateRow(row.id, 'showDescDrop', false);
-                                  }}>
-                                  {g.name}{g.size ? <span style={{color:'#6b7280',fontSize:'0.85em',marginLeft:4}}>{g.size}</span> : null}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        {fieldError?.rowId === row.id && (
-                          <td style={{padding:0,position:'relative',border:'none'}}>
-                            <div style={{position:'absolute',top:'50%',left:'4px',transform:'translateY(-50%)',background:'#ef4444',color:'white',fontSize:'11px',fontWeight:600,padding:'4px 8px',borderRadius:'6px',whiteSpace:'nowrap',zIndex:2000}}>
-                              ← {fieldError.message}
-                            </div>
-                          </td>
-                        )}
-                        <td className="pr-itd pr-itd-cost">
-                          <input type="number" className="pr-it-input pr-it-cost"
-                            placeholder="0.00" min="0" step="0.01" value={row.costPrice}
-                            onChange={e => { updateRow(row.id, 'costPrice', e.target.value); setFieldError(null); }} />
-                        </td>
-                        <td className="pr-itd pr-itd-del">
-                          {rows.length > 1 && (
-                            <button className="pr-item-remove" onClick={() => removeRow(row.id)}>
-                              <Trash2 size={14}/>
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {(() => {
-              const last = rows[rows.length - 1];
-              const ok = last?.description?.trim() && parseFloat(last.qty) > 0 && parseFloat(last.costPrice) > 0;
-              return (
-                <button className={"pr-add-row-btn" + (ok ? "" : " pr-add-row-btn-disabled")}
-                  onClick={addRow} disabled={!ok}>
-                  <Plus size={14}/> Add Item
-                </button>
-              );
-            })()}
-          </div>
-
-          <div className="pr-total-row">
-            <span>Total Cost</span>
-            <span className="pr-total-val">{fmt(itemTotal)}</span>
-          </div>
-          {paymentType === 'cash' && cashBalance !== null && itemTotal > cashBalance && itemTotal > 0 && (
-            <div style={{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:'6px',padding:'8px 12px',fontSize:'12px',color:'#b91c1c',marginTop:'4px'}}>
-              ⚠️ Total exceeds Cash Balance ({fmt(cashBalance)}).
-            </div>
-          )}
-
-          <div className="pr-ref-inline">
-            <label className="pr-ref-label">Ref *</label>
-            <input type="text" className="pr-ref-input" placeholder="Invoice / receipt number…"
-              value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} />
-          </div>
-
-          <div className="pr-field">
-            <label>Notes <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
-            <textarea className="pr-input" rows={2} placeholder="Additional notes…"
-              value={notes} onChange={e => setNotes(e.target.value)}
-              style={{resize:'vertical',minHeight:'48px'}} />
-          </div>
-
-          <div style={{display:'flex',gap:'8px',marginTop:'4px'}}>
-            <button type="button" onClick={takePhoto}
-              style={{flex:1,padding:'8px',background:'var(--surface)',border:'1.5px dashed var(--border)',borderRadius:'8px',cursor:'pointer',fontSize:'13px',color:'var(--text-secondary)'}}>
-              📸 {receiptPhoto ? 'Retake Photo' : 'Receipt Photo'}
+            {/* Add another item button */}
+            <button
+              onClick={addItem}
+              disabled={!lastItemComplete()}
+              style={{
+                marginTop: '10px', width: '100%', padding: '10px',
+                border: '1.5px dashed var(--border, #d1d5db)', borderRadius: '8px',
+                background: lastItemComplete() ? 'var(--surface, white)' : 'var(--background, #f9fafb)',
+                color: lastItemComplete() ? '#667eea' : '#9ca3af',
+                cursor: lastItemComplete() ? 'pointer' : 'not-allowed',
+                fontSize: '13px', fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              }}
+            >
+              <Plus size={14}/> Add Another Item
             </button>
           </div>
-          {receiptPhoto && (
-            <div style={{marginTop:'6px',textAlign:'center'}}>
-              <img src={receiptPhoto} alt="receipt" style={{maxWidth:'100%',maxHeight:'120px',borderRadius:'6px',border:'1px solid var(--border)'}} />
+
+          {/* Grand total */}
+          {grandTotal > 0 && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '10px 14px', background: '#f0f4ff',
+              border: '1.5px solid #c7d2fe', borderRadius: '10px',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '14px', color: '#4338ca' }}>Grand Total</span>
+              <span style={{ fontWeight: 800, fontSize: '15px', color: '#3730a3' }}>{fmt(grandTotal)}</span>
+            </div>
+          )}
+
+          {/* Cash balance warning */}
+          {paymentType === 'cash' && cashBalance !== null && grandTotal > cashBalance && grandTotal > 0 && (
+            <div style={{
+              background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px',
+              padding: '10px 12px', fontSize: '12px', color: '#b91c1c',
+            }}>
+              ⚠️ Total ({fmt(grandTotal)}) exceeds Cash Balance ({fmt(cashBalance)}).
             </div>
           )}
         </div>
-        <div className="pr-modal-footer">
-          <button className="pr-btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="pr-btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Purchase'}
+
+        {/* Footer */}
+        <div style={{
+          display: 'flex', gap: '10px', padding: '16px 20px',
+          borderTop: '1px solid var(--border, #e5e7eb)', flexShrink: 0,
+        }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '12px', borderRadius: '8px',
+            border: '1.5px solid var(--border, #e5e7eb)',
+            background: 'var(--surface, white)', color: 'var(--text-primary, #111)',
+            cursor: 'pointer', fontWeight: 600, fontSize: '14px',
+          }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{
+            flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+            background: saving ? '#9ca3af' : '#f59e0b', color: 'white',
+            cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '14px',
+          }}>
+            {saving ? 'Saving…' : 'Save Assets'}
           </button>
         </div>
       </div>
@@ -655,8 +735,11 @@ function CashRecord({ isUnlocked = false }) {
   };
 
   const getResolvedName = () => {
+    // For Cash Out, personSearch holds the typed/selected supplier name
+    // For Cash In Others mode, personSearch holds the typed creditor name
     if (isOthersMode) return personSearch.trim() || personName.trim();
-    return personName.trim();
+    if (personName.trim()) return personName.trim();
+    return personSearch.trim();
   };
 
   const filteredOthersList = (() => {
@@ -691,42 +774,47 @@ function CashRecord({ isUnlocked = false }) {
     }
   };
 
-  // Called when OperationalExpensesModal saves
-  // addPurchase() already created the purchase record + cash entry (cash) or creditor (credit)
+  // Called when AddOperationalAssetsModal saves.
+  // The modal only writes operational_assets records directly.
+  // For cash purchases we must also create the cash OUT entry here.
   const handleExpensesSaved = async (result) => {
     setExpensesResult(result);
     setShowExpensesModal(false);
-    const name = getResolvedName();
-    const items = result.itemsSummary || 'items';
 
-    // Update the auto-created cash entry's note to our format
+    const supplierName = result.supplierName || getResolvedName();
+    const note = `Paid ${supplierName} for ref: ${result.invoiceRef}`;
+
     if (result.paymentType === 'cash') {
       try {
-        const allEntries = await dataService.getCashEntries() || [];
-        // Find the most recent purchase-source entry with matching invoiceRef
-        const match = [...allEntries].reverse().find(e =>
-          e.source === 'purchase' && e.invoiceRef === result.invoiceRef
-        );
-        if (match) {
-          await dataService.updateCashEntry(match.id, {
-            note: `Paid ${name} for ${items}.`
-          });
-        }
-      } catch (e) { console.error('Error updating purchase cash entry note:', e); }
-      // Auto-fill amount from the purchase total
+        const now = new Date();
+        await dataService.addCashEntry({
+          type: TYPE_OUT,
+          amount: result.total,
+          note,
+          date: now.toISOString(),
+          source: 'purchase',
+          business_date: now.toISOString().slice(0, 10),
+          invoiceRef: result.invoiceRef,
+        });
+      } catch (e) { console.error('Error creating cash entry for asset purchase:', e); }
       setNewAmount(String(result.total));
     } else {
-      // Credit — no cash entry, set amount to 0 (informational)
       setNewAmount('0');
     }
+
     if (result.invoiceRef) setRefNumber(result.invoiceRef);
     setBeingForKey('__supplier_purchase__');
+    // Update personName/personSearch so the parent modal reflects the (possibly changed) supplier
+    if (!isOthersMode) {
+      setPersonName(result.supplierName || getResolvedName());
+    } else {
+      setPersonSearch(result.supplierName || getResolvedName());
+    }
   };
 
   const buildNote = () => {
     const name = getResolvedName();
     if (newType === TYPE_IN) {
-      // Cash In: "From [name] [reason phrase]."
       const reasonObj = CASH_IN_REASONS.find(r => r.key === cashInReasonKey);
       const phrase = reasonObj?.phrase || '';
       if (name && phrase) return `From ${name} ${phrase}.`;
@@ -735,12 +823,8 @@ function CashRecord({ isUnlocked = false }) {
     } else {
       // Cash Out with supplier purchase
       if (beingForKey === '__supplier_purchase__' && expensesResult) {
-        const items = expensesResult.itemsSummary || 'items';
-        if (expensesResult.paymentType === 'cash') {
-          return `Paid ${name} for ${items}.`;
-        } else {
-          return `Owed ${name} for ${items}.`;
-        }
+        const supplierName = expensesResult.supplierName || name;
+        return `Paid ${supplierName} for ref: ${expensesResult.invoiceRef}`;
       }
       // Cash Out with regular reason
       const phrase = beingForKey === 'other'
@@ -756,9 +840,9 @@ function CashRecord({ isUnlocked = false }) {
     const name = getResolvedName();
     if (!name) return false;
 
-    // Supplier purchase — purchase is already saved, just need to close
+    // Supplier purchase — assets + cash entry already saved, just need to confirm close
     if (newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) {
-      return true; // allow close even for credit (amount=0)
+      return true;
     }
 
     const amt = parseFloat(newAmount);
@@ -777,10 +861,8 @@ function CashRecord({ isUnlocked = false }) {
     const name = getResolvedName();
     if (!name) { alert(`Please enter who the cash is ${newType === TYPE_IN ? 'from' : 'paid to'}.`); return; }
 
-    // ── Supplier purchase (already saved by OperationalExpensesModal) ──
+    // ── Supplier purchase (assets + cash entry already saved by handleExpensesSaved) ──
     if (newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) {
-      // Purchase + cash entry (or creditor) already created by addPurchase.
-      // Just close and reload.
       closeAddModal();
       await loadEntries();
       return;
@@ -1072,17 +1154,21 @@ function CashRecord({ isUnlocked = false }) {
               </div>
             </div>
 
-            {/* Amount — always first */}
-            <div className="cj-modal-field">
-              <label>Amount</label>
-              <input type="number" className="cj-modal-input" placeholder="0.00"
-                value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01" />
-              {newType === TYPE_OUT && (
-                <div style={{ fontSize:'12px', color:'#6b7280', marginTop:'4px' }}>
-                  Current cash balance: {fmt(Math.max(0, currentBalance))}
-                </div>
-              )}
-            </div>
+            {/* Amount — hide for supplier purchases since it's auto-set from the assets modal */}
+            {!(newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) && (
+              <div className="cj-modal-field">
+                <label>Amount</label>
+                <input type="number" className="cj-modal-input" placeholder="0.00"
+                  value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01"
+                  readOnly={newType === TYPE_OUT && !!expensesResult}
+                />
+                {newType === TYPE_OUT && (
+                  <div style={{ fontSize:'12px', color:'#6b7280', marginTop:'4px' }}>
+                    Current cash balance: {fmt(Math.max(0, currentBalance))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Cash In fields ── */}
             {newType === TYPE_IN && (
@@ -1175,68 +1261,66 @@ function CashRecord({ isUnlocked = false }) {
             {/* ── Cash Out fields ── */}
             {newType === TYPE_OUT && (
               <>
-                {/* Paid To */}
+                {/* Paid To — live supplier search dropdown */}
                 <div className="cj-modal-field" style={{ position:'relative' }}>
                   <label>Paid To</label>
-                  {isOthersMode ? (
-                    <>
-                      <input
-                        className="cj-modal-input"
-                        value={personSearch}
-                        onChange={e => { setPersonSearch(e.target.value); setShowSearchDrop(true); }}
-                        onFocus={() => setShowSearchDrop(true)}
-                        onBlur={() => setTimeout(() => setShowSearchDrop(false), 200)}
-                        placeholder="Search from Suppliers list…"
-                        autoFocus
-                      />
-                      {showSearchDrop && filteredOthersList.length > 0 && (
-                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                          {filteredOthersList.map(s => {
-                            const n = s.name || s.customerName;
-                            return (
-                              <button key={s.id} className="cj-desc-dropdown-item"
-                                onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
-                                {n}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
-                        onClick={() => { setIsOthersMode(false); setPersonName(''); setPersonSearch(''); }}>
-                        ← Back to list
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      className={`cj-desc-trigger${personName ? ' has-value' : ''}`}
-                      onClick={() => setShowNameDrop(o => !o)}
-                    >
-                      <span className="cj-desc-trigger-text">{personName || 'Select name…'}</span>
-                      <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
-                    </button>
-                  )}
-                  {showNameDrop && !isOthersMode && (
-                    <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {PAID_TO_NAMES.map(n => (
-                        <button key={n} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>{n}</button>
-                      ))}
-                    </div>
-                  )}
+                  <input
+                    className="cj-modal-input"
+                    value={personSearch || personName}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setPersonSearch(val);
+                      setPersonName('');
+                      setShowNameDrop(true);
+                      // Reset being-for whenever supplier changes
+                      setBeingForKey(''); setExpensesResult(null);
+                      setOtherReasonText(''); setShowOtherReasonInput(false);
+                    }}
+                    onFocus={() => setShowNameDrop(true)}
+                    onBlur={() => setTimeout(() => setShowNameDrop(false), 200)}
+                    placeholder="Search supplier or type name…"
+                  />
+                  {showNameDrop && (() => {
+                    const q = (personSearch || '').toLowerCase();
+                    const matches = suppliersList.filter(s =>
+                      (s.name || s.customerName || '').toLowerCase().includes(q)
+                    );
+                    return matches.length > 0 ? (
+                      <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+                        {matches.map(s => {
+                          const n = s.name || s.customerName;
+                          return (
+                            <button key={s.id} className="cj-desc-dropdown-item"
+                              onMouseDown={() => {
+                                setPersonName(n);
+                                setPersonSearch(n);
+                                setIsOthersMode(false);
+                                setShowNameDrop(false);
+                                setBeingForKey(''); setExpensesResult(null);
+                              }}>
+                              {n}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Being For */}
                 <div className="cj-modal-field" style={{ position:'relative' }}>
                   <label>Being For</label>
                   {beingForKey === '__supplier_purchase__' && expensesResult ? (
-                    /* Supplier purchase already saved — show summary */
+                    /* Supplier purchase already saved — show ref-based summary */
                     <div style={{padding:'8px 12px',background:expensesResult.paymentType==='cash'?'#f0fdf4':'#eff6ff',
                       border:`1.5px solid ${expensesResult.paymentType==='cash'?'#16a34a':'#3b82f6'}`,
                       borderRadius:'8px',fontSize:'13px',color:expensesResult.paymentType==='cash'?'#166534':'#1e40af'}}>
-                      <div style={{fontWeight:600,marginBottom:'2px'}}>
+                      <div style={{fontWeight:700,marginBottom:'2px'}}>
                         {expensesResult.paymentType === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {expensesResult.invoiceRef}
                       </div>
-                      <div style={{fontSize:'12px',opacity:0.85}}>{expensesResult.itemsSummary}</div>
+                      <div style={{fontSize:'12px',opacity:0.85,marginTop:'2px'}}>
+                        Paid {expensesResult.supplierName} for ref: {expensesResult.invoiceRef}
+                      </div>
                     </div>
                   ) : (
                     <button
@@ -1246,7 +1330,7 @@ function CashRecord({ isUnlocked = false }) {
                       <span className="cj-desc-trigger-text">
                         {(() => {
                           const name = getResolvedName();
-                          if (name && isKnownSupplier(name, suppliersList)) return 'Tap to add purchase…';
+                          if (name && isKnownSupplier(name, suppliersList)) return '🔧 Tap to add operational assets…';
                           if (beingForKey === 'other' && otherReasonText) return otherReasonText;
                           if (beingForKey) return PAID_TO_REASONS.find(r => r.key === beingForKey)?.label;
                           return 'Select reason…';
@@ -1308,14 +1392,15 @@ function CashRecord({ isUnlocked = false }) {
         />
       )}
 
-      {/* ── Operational Expenses Modal (supplier purchase from Cash Out) ── */}
+      {/* ── Add Operational Assets Modal (supplier purchase from Cash Out) ── */}
       {showExpensesModal && (() => {
         const name = getResolvedName();
         const sup = getSupplierRecord(name, suppliersList);
         return (
-          <OperationalExpensesModal
-            supplierName={name}
-            supplierId={sup?.id || null}
+          <AddOperationalAssetsModal
+            initialSupplierName={name}
+            initialSupplierId={sup?.id || null}
+            suppliersList={suppliersList}
             onSave={handleExpensesSaved}
             onClose={() => setShowExpensesModal(false)}
           />
