@@ -6,6 +6,7 @@ import SalesRecord from './screens/SalesRecord';
 import CashRecord from './screens/CashRecord';
 import PurchaseRecord from './screens/PurchaseRecord';
 import Debtors from './screens/Debtors';
+import AdvanceOrders from './screens/AdvanceOrders';
 import Creditors from './screens/Creditors';
 import Suppliers from './screens/Suppliers';
 import Inventory from './screens/Inventory';
@@ -22,8 +23,8 @@ import './App.css';
 })();
 
 // Cash Reconciliation page index (used for navigation from closed modal)
-const CASH_RECON_INDEX = 8;
-const SETTINGS_INDEX   = 9;
+const CASH_RECON_INDEX = 9;
+const SETTINGS_INDEX   = 10;
 
 const PAGES = [
   { 
@@ -111,6 +112,27 @@ const PAGES = [
       <p>&#x1f4f8; <strong>Receipt Photo</strong> &mdash; take a photo of the supplier's invoice as proof of purchase.</p>
       <p>&#x26a0;&#xfe0f; <strong>Cash Balance Check</strong> &mdash; if the total exceeds your current cash balance, the app warns you and suggests using credit instead.</p>
       <p>&#x1f4e6; <strong>Auto Stock Update</strong> &mdash; stock levels in Inventory increase automatically based on QTY &times; Pack Unit.</p>
+    `
+  },
+  { 
+    name: 'ADVANCED ORDERS',
+    component: AdvanceOrders,
+    helpContent: `
+      <h3>Advanced Orders</h3>
+      <p>Advanced Orders are customer orders that are paid for in advance before the goods are delivered or collected. Each entry here represents a customer who has given you money upfront for products they have ordered.</p>
+
+      <h4>How It Works</h4>
+      <p>New advance order customers are created from the <strong>Cash Record</strong> section &mdash; tap <strong>+ Add Entry</strong> &rarr; Cash IN &rarr; select &ldquo;Others&rdquo; as the source &rarr; choose <strong>Create New Customer Advanced Order</strong>. This records the cash received and adds the customer to this list at the same time.</p>
+
+      <h4>Viewing an Order</h4>
+      <p>Tap any customer card to open their profile. The <strong>Details</strong> tab shows their contact information and the <strong>Debt History</strong> tab shows a full ledger of what was ordered, the advance paid, and any remaining balance.</p>
+
+      <h4>Examples</h4>
+      <p>&#x1f6d2; <em>A customer places an advance order for $150 of groceries and pays upfront:</em> Record the payment in Cash Record &rarr; Cash IN &rarr; Others &rarr; Create New Customer Advanced Order &rarr; fill in their details and items ordered. The customer then appears here.</p>
+      <p>&#x1f6d2; <em>You want to check which advance orders are still outstanding:</em> Browse the list here. Each card shows the customer name and remaining balance owed.</p>
+
+      <h4>Sort &amp; Search</h4>
+      <p>Use the search bar to find a customer by name. Use the sort button (&uarr;&darr;) to order by balance, due date, or most recently modified.</p>
     `
   },
   { 
@@ -202,21 +224,32 @@ const PAGES = [
     component: CashReconciliation,
     helpContent: `
       <h3>Cash Reconciliation</h3>
-      <p>This page controls opening and closing the shop each day. It makes sure the cash in the drawer matches what the app expects.</p>
+      <p>This page controls opening and closing the shop each business day. It ensures the physical cash in your drawer always matches what the system expects.</p>
 
-      <h4>How It Works</h4>
-      <p>At the start of the day, enter your <strong>Opening Float</strong> (the cash already in the drawer) and tap <strong>Open Day</strong>. The app then tracks all cash in and cash out throughout the day. At the end of the day, count the physical cash, enter it, and tap <strong>Close Day</strong>.</p>
+      <h4>Opening the Day</h4>
+      <p>At the start of trading, enter your <strong>Opening Float</strong> (the cash already in the drawer as change money) and tap <strong>Open Day</strong>. The app begins tracking all cash in and out from this point.</p>
 
-      <h4>Examples</h4>
-      <p>&#x1f3ea; <em>Morning: You have $200 in the drawer to start:</em> Open Day &rarr; Opening Float = $200. The app now tracks everything from this starting point.</p>
-      <p>&#x1f3ea; <em>End of day: You count $1,350 in the drawer:</em> Close Day &rarr; Counted Cash = $1,350. If the app expected $1,350, it shows &#x2705; Balanced. If you count $1,300, it shows &#x26a0;&#xfe0f; Short by $50 and you must add a note explaining why.</p>
-      <p>&#x1f3ea; <em>You closed the shop but forgot to record a sale:</em> Go to Records tab &rarr; tap today's record &rarr; tap &#x1f513; Re-Open Shop &rarr; record the forgotten entry &rarr; then Close Day again.</p>
+      <h4>Live Cash Summary</h4>
+      <p>While the day is open, the <strong>Live Cash Summary</strong> card shows: your opening float, total cash received today, total cash paid out today, and the <strong>Expected Cash</strong> that should currently be in the drawer.</p>
 
-      <h4>Why This Matters</h4>
-      <p>Cash reconciliation prevents theft and errors. If the counted cash doesn't match the expected amount, there's either missing money or an unrecorded transaction that needs to be found.</p>
+      <h4>Closing the Day</h4>
+      <p>At the end of trading, physically count the cash in your drawer, enter the amount in <strong>Counted Cash</strong>, and tap <strong>Close Day</strong>. The app immediately shows whether you are <strong>&#x2705; Balanced</strong>, <strong>&#x26a0;&#xfe0f; Short</strong>, or <strong>&#x26a0;&#xfe0f; Surplus</strong>.</p>
+      <p>If there is a discrepancy, a notes field appears and an explanation is <strong>required</strong> before the day can be closed.</p>
+
+      <h4>Multiple Sessions</h4>
+      <p>If you need to continue trading after closing (e.g. you forgot to record a sale), tap <strong>&#x1f513; Re-Open Shop</strong>. Each stretch of trading is saved as a separate session. The Records tab shows a full breakdown of every session, including who opened and closed each one, and the reconciliation note for each.</p>
+
+      <h4>Reconciliation Notes</h4>
+      <p>Each closed session shows a summary note: <em>&ldquo;Balanced&rdquo;</em>, <em>&ldquo;There was a shortage by $X and [name] says &lsquo;[reason]&rsquo;&rdquo;</em>, or a surplus equivalent. This creates a permanent, readable audit trail.</p>
+
+      <h4>Business Day Cutoff</h4>
+      <p>If your shop trades past midnight, set a <strong>Business Day Cutoff</strong> time in Settings &rarr; Cash Reconciliation. Sessions opened before the cutoff hour are automatically assigned to the previous business day, so overnight trading is correctly grouped.</p>
+
+      <h4>Auto-Close</h4>
+      <p>If a session is still open when the business day ends (cutoff passes), it is automatically closed and flagged as <strong>Unreconciled</strong>. You will see a warning banner on that record in the Records tab.</p>
 
       <h4>Records Tab</h4>
-      <p>View all past daily records. Tap any record to see the full breakdown: who opened, who closed, float, expected cash, counted cash, and any difference.</p>
+      <p>View all past daily records. Tap any record to see the full breakdown: every session, who opened and closed each one, float, expected cash, counted cash, the reconciliation note, and any checkout unlocks.</p>
     `
   },
   { 
@@ -260,10 +293,12 @@ function App() {
 
   const checkStoreStatus = useCallback(async () => {
     try {
-      await dataService.autoCloseStaleOpenSessions();
-      const businessDate = dataService.currentBusinessDate();
+      const todayStr = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      })();
       const allRecs = await dataService.getDailyCashRecords();
-      const todayRec = (allRecs || []).find(r => r.business_date === businessDate);
+      const todayRec = (allRecs || []).find(r => r.business_date === todayStr);
 
       if (!todayRec) {
         setStoreIsOpen(false);
