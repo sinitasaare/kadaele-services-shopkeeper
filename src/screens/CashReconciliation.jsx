@@ -259,6 +259,7 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
   // Open Day form
   const [openingFloat, setOpeningFloat] = useState('');
   const [openingSaving, setOpeningSaving] = useState(false);
+  const [reopenFloat, setReopenFloat] = useState('');
 
   // Close Day form
   const [countedCash, setCountedCash]   = useState('');
@@ -407,9 +408,12 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
       const diff = todayRecord.counted_cash - todayRecord.expected_cash;
 
       const handleReopenToday = async () => {
+        const float = parseFloat(reopenFloat);
+        if (isNaN(float) || float < 0) { alert('Please enter a valid Opening Float (0 or more).'); return; }
         if (!window.confirm('Re-open the shop? A new session will start.')) return;
         try {
-          await dataService.reopenDay(today);
+          await dataService.reopenDay(today, float);
+          setReopenFloat('');
           if (onStoreStatusChange) onStoreStatusChange(true);
           await loadData();
         } catch (e) { alert('Failed to re-open: ' + e.message); }
@@ -471,10 +475,26 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
           <div className="cr-closed-msg">
             <span className="cr-closed-icon">🔒</span>
             <span className="cr-closed-title">Day Closed</span>
-            <span className="cr-closed-sub">Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.</span>
+            <span className="cr-closed-sub">Enter your Opening Float, then tap Re-Open Shop to start a new session.</span>
           </div>
 
-          <button className="cr-btn cr-btn-reopen" ref={reopenBtnRef} onClick={handleReopenToday}>
+          <div className="cr-card" style={{ marginBottom: 0 }}>
+            <div className="cr-field">
+              <label className="cr-label">Opening Float for New Session ($)</label>
+              <input
+                type="number"
+                className="cr-input"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                value={reopenFloat}
+                onChange={e => setReopenFloat(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <button className="cr-btn cr-btn-reopen" ref={reopenBtnRef} onClick={handleReopenToday}
+            disabled={reopenFloat === ''}>
             🔓 Re-Open Shop
           </button>
         </>
