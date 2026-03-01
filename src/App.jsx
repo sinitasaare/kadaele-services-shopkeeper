@@ -426,34 +426,27 @@ function App() {
       </header>
 
       <div className="page-navigation">
-        <button
-          onClick={() => {
-            if (!storeIsOpen) {
-              setShowClosedModal(true);
-            } else {
-              setShowHelpModal(true);
-            }
-          }}
-          className="nav-icon-btn"
-          aria-label="Help"
-        >
-          <HelpCircle size={24} />
-        </button>
+        {storeIsOpen && (
+          <button
+            onClick={() => setShowHelpModal(true)}
+            className="nav-icon-btn"
+            aria-label="Help"
+          >
+            <HelpCircle size={24} />
+          </button>
+        )}
+        {!storeIsOpen && <div style={{ width: 40 }} />}
         <h2 className="page-title">{PAGES[currentPageIndex].name}</h2>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-          <button
-            onClick={() => {
-              if (!storeIsOpen) {
-                setShowClosedModal(true);
-              } else {
-                setShowMenuModal(true);
-              }
-            }}
-            className="nav-icon-btn"
-            aria-label="Menu"
-          >
-            <Menu size={24} />
-          </button>
+          {storeIsOpen && (
+            <button
+              onClick={() => setShowMenuModal(true)}
+              className="nav-icon-btn"
+              aria-label="Menu"
+            >
+              <Menu size={24} />
+            </button>
+          )}
         </div>
       </div>
 
