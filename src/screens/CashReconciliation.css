@@ -253,7 +253,6 @@
   padding: 0 20px 16px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .cr-session-label {
   margin: 0 -20px 12px;
