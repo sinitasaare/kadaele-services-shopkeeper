@@ -46,6 +46,7 @@ const DATA_KEYS = {
   DAILY_CASH: 'daily_cash',
   LAST_SYNC: 'last_sync',
   SETTINGS: 'app_settings',
+  OPERATIONAL_ASSETS: 'operational_assets',
 };
 
 class DataService {
@@ -2466,6 +2467,74 @@ class DataService {
       const d = e.date || e.createdAt;
       return d ? d.slice(0, 10) === business_date : false;
     });
+  }
+
+  // ── Operational Assets ────────────────────────────────────────────────────
+  async getOperationalAssets() {
+    try {
+      if (this.isOnline && auth.currentUser && !this._operationalAssetsFetched) {
+        this._operationalAssetsFetched = true;
+        try {
+          const snap = await getDocs(collection(db, 'operational_assets'));
+          const fbAssets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const local = await localforage.getItem(DATA_KEYS.OPERATIONAL_ASSETS) || [];
+          const fbIds = new Set(fbAssets.map(a => a.id));
+          const localOnly = local.filter(a => !fbIds.has(a.id));
+          const merged = [...fbAssets, ...localOnly]
+            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+          await localforage.setItem(DATA_KEYS.OPERATIONAL_ASSETS, merged);
+          return merged;
+        } catch (err) {
+          console.error('Error fetching operational assets from Firebase:', err);
+        }
+      }
+      return await localforage.getItem(DATA_KEYS.OPERATIONAL_ASSETS) || [];
+    } catch (error) {
+      console.error('Error getting operational assets:', error);
+      return [];
+    }
+  }
+
+  async addOperationalAsset(asset) {
+    try {
+      const assets = await localforage.getItem(DATA_KEYS.OPERATIONAL_ASSETS) || [];
+      const newAsset = {
+        id: this.generateId(),
+        name: asset.name || '',
+        qty: parseFloat(asset.qty) || 0,
+        costPrice: parseFloat(asset.costPrice) || 0,
+        subtotal: parseFloat(asset.subtotal) || 0,
+        supplierName: asset.supplierName || '',
+        supplierId: asset.supplierId || null,
+        purchaseId: asset.purchaseId || null,
+        invoiceRef: asset.invoiceRef || '',
+        paymentType: asset.paymentType || 'cash',
+        date: asset.date || new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        source: asset.source || 'purchase',
+      };
+      assets.unshift(newAsset);
+      await localforage.setItem(DATA_KEYS.OPERATIONAL_ASSETS, assets);
+
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'operational_assets', newAsset.id), {
+            ...newAsset,
+            createdAt: serverTimestamp(),
+          }, { merge: true });
+        } catch (err) {
+          console.error('Error syncing operational asset to Firebase:', err);
+          await this.addToSyncQueue({ type: 'operational_asset', data: newAsset });
+        }
+      } else {
+        await this.addToSyncQueue({ type: 'operational_asset', data: newAsset });
+      }
+
+      return newAsset;
+    } catch (error) {
+      console.error('Error adding operational asset:', error);
+      throw error;
+    }
   }
 
 
