@@ -820,3 +820,38 @@
 }
 [data-theme="dark"] .st-currency-option:hover { background: var(--surface-2, #0f172a); }
 [data-theme="dark"] .st-currency-selected { background: #1e1e3a; }
+
+/* ── Business Day Cutoff ── */
+.st-setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.st-cutoff-select {
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1.5px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--background, #f9fafb);
+  color: var(--text-primary, #111827);
+  width: 100%;
+  cursor: pointer;
+  appearance: auto;
+}
+.st-cutoff-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.st-cutoff-example {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #667eea;
+  font-style: italic;
+}
+[data-theme="dark"] .st-cutoff-select {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
