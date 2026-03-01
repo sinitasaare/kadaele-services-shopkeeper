@@ -1186,7 +1186,6 @@ function CashRecord({ isUnlocked = false }) {
     setSuppliersList(supps || []);
     setAdvanceOrdersList(advOrders || []);
   };
-  };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
   const handleNameSelect = (name) => {
