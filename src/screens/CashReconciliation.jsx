@@ -245,13 +245,16 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-function CashReconciliation({ onStoreStatusChange }) {
+function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
   const [activeTab, setActiveTab]       = useState('today');
   const [loading, setLoading]           = useState(true);
   const [todayRecord, setTodayRecord]   = useState(null);
   const [records, setRecords]           = useState([]);
   const [liveSummary, setLiveSummary]   = useState(null);
   const [detailRecord, setDetailRecord] = useState(null);
+  const [showClosedTabModal, setShowClosedTabModal] = useState(false);
+
+  const reopenBtnRef = React.useRef(null);
 
   // Open Day form
   const [openingFloat, setOpeningFloat] = useState('');
@@ -471,7 +474,7 @@ function CashReconciliation({ onStoreStatusChange }) {
             <span className="cr-closed-sub">Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.</span>
           </div>
 
-          <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
+          <button className="cr-btn cr-btn-reopen" ref={reopenBtnRef} onClick={handleReopenToday}>
             🔓 Re-Open Shop
           </button>
         </>
@@ -625,7 +628,13 @@ function CashReconciliation({ onStoreStatusChange }) {
         </button>
         <button
           className={`cr-tab ${activeTab === 'records' ? 'active' : ''}`}
-          onClick={() => setActiveTab('records')}
+          onClick={() => {
+            if (!storeIsOpen) {
+              setShowClosedTabModal(true);
+            } else {
+              setActiveTab('records');
+            }
+          }}
         >
           Records
         </button>
@@ -644,6 +653,47 @@ function CashReconciliation({ onStoreStatusChange }) {
           onReopen={() => { loadData(); }}
           onStoreStatusChange={onStoreStatusChange}
         />
+      )}
+
+      {/* ── Shop Closed modal (shown when RECORDS tab clicked while closed) ── */}
+      {showClosedTabModal && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
+        }}>
+          <div style={{
+            background:'var(--surface, #fff)', color:'var(--text-primary, #1a1a1a)',
+            borderRadius:'16px', padding:'28px 24px', maxWidth:'360px', width:'100%',
+            textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>🔒</div>
+            <h3 style={{ margin:'0 0 12px', fontSize:'18px', fontWeight:700 }}>Shop is Closed</h3>
+            <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.6', color:'var(--text-secondary, #666)' }}>
+              The shop is currently closed. Re-open the shop first to view records or use the app.
+            </p>
+            <button
+              onClick={() => {
+                setShowClosedTabModal(false);
+                setActiveTab('today');
+                setTimeout(() => {
+                  const btn = reopenBtnRef.current || document.querySelector('.cr-btn-reopen, .cr-btn-open');
+                  if (btn) {
+                    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    btn.style.boxShadow = '0 0 0 4px rgba(102, 126, 234, 0.5)';
+                    setTimeout(() => { btn.style.boxShadow = ''; }, 2000);
+                  }
+                }, 300);
+              }}
+              style={{
+                width:'100%', padding:'12px', fontSize:'15px', fontWeight:700,
+                background:'linear-gradient(135deg, #667eea, #764ba2)', color:'#fff',
+                border:'none', borderRadius:'10px', cursor:'pointer',
+              }}
+            >
+              OK &mdash; Go to Cash Reconciliation
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
