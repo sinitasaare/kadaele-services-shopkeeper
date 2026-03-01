@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Edit2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Edit2, X, Plus, Trash2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './CashRecord.css';
+import './PurchaseRecord.css';
 
 const TYPE_IN  = 'in';
 const TYPE_OUT = 'out';
@@ -87,291 +89,378 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
   );
 }
 
-// ── Sub-modal: Cash From (Cash IN) ───────────────────────────────────────────
-const CASH_FROM_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Others'];
-const CASH_FROM_REASONS = [
-  { key: 'float',        label: 'Float (change money)',      phrase: 'for float (change money)' },
-  { key: 'purchases',    label: 'Purchases (money to pay stock)', phrase: 'to purchase stock' },
-  { key: 'safe_keeping', label: 'For Safe Keeping',          phrase: 'for Safe Keeping' },
+// ── Dropdown constants ──────────────────────────────────────────────────────
+const CASH_FROM_NAMES = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Landlord', 'Others'];
+const PAID_TO_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Landlord', 'Others'];
+
+const CASH_IN_REASONS = [
+  { key: 'float',        label: 'Float (change money)',           phrase: 'for float (change money)' },
+  { key: 'purchases',    label: 'Purchases (money to buy stock)', phrase: 'to purchase stock' },
+  { key: 'safe_keeping', label: 'Safe Keeping',                   phrase: 'for safe keeping' },
 ];
 
-function CashFromModal({ onSave, onCancel }) {
-  const [from, setFrom]             = useState('');
-  const [isOthers, setIsOthers]     = useState(false);
-  const [showFromDrop, setShowFromDrop] = useState(false);
-  const [reason, setReason]         = useState('');
-  const [showReasonDrop, setShowReasonDrop] = useState(false);
+const PAID_TO_REASONS = [
+  { key: 'advance',      label: 'Cash Advance',      phrase: 'for cash advance' },
+  { key: 'electricity',  label: 'Electricity bill',   phrase: 'to pay electricity bill' },
+  { key: 'rent',         label: 'Land Rental',        phrase: 'to pay land rental' },
+  { key: 'other',        label: 'Other reason…',      phrase: '' },
+];
 
-  const handleNameSelect = (name) => {
-    setShowFromDrop(false);
-    if (name === 'Others') { setIsOthers(true); setFrom(''); }
-    else                   { setIsOthers(false); setFrom(name); }
-  };
-
-  const handleSave = () => {
-    if (!from.trim())   { alert('Please enter who the cash is from.'); return; }
-    if (!reason)        { alert('Please select a reason.'); return; }
-    const r = CASH_FROM_REASONS.find(x => x.key === reason);
-    onSave(`Cash from ${from.trim()} ${r.phrase}.`);
-  };
-
-  return (
-    <div className="cj-sub-overlay">
-      <div className="cj-sub-modal">
-        <h3 className="cj-sub-title">Cash From</h3>
-
-        {/* Cash From field */}
-        <div className="cj-modal-field" style={{ position:'relative' }}>
-          <label>Cash From</label>
-          {isOthers ? (
-            <input
-              className="cj-modal-input"
-              value={from}
-              onChange={e => setFrom(e.target.value)}
-              placeholder="Type name…"
-              autoFocus
-            />
-          ) : (
-            <button
-              className={`cj-desc-trigger${from ? ' has-value' : ''}`}
-              onClick={() => setShowFromDrop(o => !o)}
-            >
-              <span className="cj-desc-trigger-text">{from || 'Select name…'}</span>
-              <span className="cj-desc-chevron">{showFromDrop ? '▲' : '▼'}</span>
-            </button>
-          )}
-          {showFromDrop && !isOthers && (
-            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-              {CASH_FROM_NAMES.map(n => (
-                <button key={n} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>{n}</button>
-              ))}
-            </div>
-          )}
-          {isOthers && (
-            <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
-              onClick={() => { setIsOthers(false); setFrom(''); }}>
-              ← Back to list
-            </button>
-          )}
-        </div>
-
-        {/* Being For field */}
-        <div className="cj-modal-field" style={{ position:'relative' }}>
-          <label>Being For</label>
-          <button
-            className={`cj-desc-trigger${reason ? ' has-value' : ''}`}
-            onClick={() => setShowReasonDrop(o => !o)}
-          >
-            <span className="cj-desc-trigger-text">
-              {reason ? CASH_FROM_REASONS.find(x => x.key === reason)?.label : 'Select reason…'}
-            </span>
-            <span className="cj-desc-chevron">{showReasonDrop ? '▲' : '▼'}</span>
-          </button>
-          {showReasonDrop && (
-            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-              {CASH_FROM_REASONS.map(r => (
-                <button key={r.key} className={`cj-desc-dropdown-item${reason === r.key ? ' selected' : ''}`}
-                  onMouseDown={() => { setReason(r.key); setShowReasonDrop(false); }}>
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="cj-modal-buttons">
-          <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="cj-modal-save" onClick={handleSave}>Save</button>
-        </div>
-      </div>
-    </div>
+// Helper: check if a PAID TO name is a known supplier (loaded at runtime)
+function isKnownSupplier(name, suppliersList) {
+  if (!name) return false;
+  const low = name.toLowerCase().trim();
+  return suppliersList.some(s =>
+    (s.name || s.customerName || '').toLowerCase().trim() === low
   );
 }
 
-// ── Sub-modal: Cash Out ───────────────────────────────────────────────────────
-const PAID_TO_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Others'];
-const PAID_TO_REASONS = [
-  { key: 'advance',      label: 'Cash Advance',         phrase: 'for Cash Advance' },
-  { key: 'electricity',  label: 'Pay electricity bill',  phrase: 'to pay electricity bill' },
-  { key: 'stationary',   label: 'Buy stationary',        phrase: 'to buy stationary' },
-  { key: 'rent',         label: 'Pay rent',              phrase: 'to pay rent' },
-  { key: 'other',        label: 'Other reason…',         phrase: '' },
-];
+function getSupplierRecord(name, suppliersList) {
+  if (!name) return null;
+  const low = name.toLowerCase().trim();
+  return suppliersList.find(s =>
+    (s.name || s.customerName || '').toLowerCase().trim() === low
+  ) || null;
+}
 
-function WithdrawalSubModal({ onSave, onCancel }) {
-  const [paidTo, setPaidTo]             = useState('');
-  const [isOthers, setIsOthers]         = useState(false);
-  const [supplierSearch, setSupplierSearch] = useState('');
-  const [suppliers, setSuppliers]       = useState([]);
-  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
-  const [showNameDrop, setShowNameDrop] = useState(false);
-  const [reason, setReason]             = useState('');
-  const [showReasonDrop, setShowReasonDrop] = useState(false);
-  const [otherReason, setOtherReason]   = useState('');
-  const [showOtherModal, setShowOtherModal] = useState(false);
-  const [refNumber, setRefNumber]       = useState('');
+// ── Operational Expenses Modal (mini-purchase modal) ────────────────────────
+// Opens when a supplier is selected in PAID TO and user clicks BEING FOR.
+// Similar to AddPurchaseModal but title = "Operational Expenses bought at [supplier]"
+// and PackSize unit field is editable (not locked).
+function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose }) {
+  const { fmt } = useCurrency();
+  const [paymentType, setPaymentType] = useState('cash');
+  const [dueDate, setDueDate]         = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+  const [rows, setRows] = useState([{
+    id: 1, qty: '', description: '', descSearch: '', showDescDrop: false,
+    costPrice: '', packUnit: '', packSize: '',
+  }]);
+  const [goods, setGoods]           = useState([]);
+  const [invoiceRef, setInvoiceRef] = useState('');
+  const [notes, setNotes]           = useState('');
+  const [receiptPhoto, setReceiptPhoto] = useState(null);
+  const [saving, setSaving]         = useState(false);
+  const [fieldError, setFieldError] = useState(null);
+  const [cashBalance, setCashBalance] = useState(null);
+  const nextId = useRef(2);
 
   useEffect(() => {
-    dataService.getSuppliers().then(s => setSuppliers(s || []));
+    dataService.getGoods().then(d => setGoods(d || []));
+    dataService.getCashEntries().then(entries => {
+      const bal = (entries || []).reduce((sum, e) =>
+        sum + (e.type === 'in' ? (e.amount || 0) : -(e.amount || 0)), 0);
+      setCashBalance(bal);
+    });
+    const unsub = dataService.onGoodsChange(g => setGoods(g || []));
+    return () => unsub();
   }, []);
 
-  const filteredSuppliers = suppliers.filter(s =>
-    (s.name || s.customerName || '').toLowerCase().includes(supplierSearch.toLowerCase())
-  );
+  const getTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
 
-  const handleNameSelect = (name) => {
-    setShowNameDrop(false);
-    if (name === 'Others') {
-      setIsOthers(true);
-      setPaidTo('');
-      setSupplierSearch('');
+  const addRow = () => setRows(prev => [...prev, {
+    id: nextId.current++, qty: '', description: '', descSearch: '',
+    showDescDrop: false, costPrice: '', packUnit: '', packSize: '',
+  }]);
+  const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
+  const updateRow = (id, field, val) =>
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+
+  const descResults = (search) => {
+    if (!search.trim()) return [];
+    const t = search.toLowerCase();
+    const tier1 = [], tier2 = [], tier3 = [];
+    for (const g of goods) {
+      const name = (g.name || '').toLowerCase();
+      const words = name.split(/\s+/);
+      if (words[0]?.startsWith(t)) tier1.push(g);
+      else if (words[1]?.startsWith(t)) tier2.push(g);
+      else if (words[2]?.startsWith(t)) tier3.push(g);
+    }
+    return [...tier1, ...tier2, ...tier3].slice(0, 12);
+  };
+
+  const itemTotal = rows.reduce((sum, r) =>
+    sum + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
+
+  const takePhoto = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*'; input.capture = 'camera';
+      input.onchange = e => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = ev => setReceiptPhoto(ev.target.result);
+          reader.readAsDataURL(file);
+        }
+      };
+      input.click();
     } else {
-      setIsOthers(false);
-      setPaidTo(name);
-      setSupplierSearch('');
+      try {
+        const { Camera } = await import('@capacitor/camera');
+        const image = await Camera.getPhoto({ quality: 70, allowEditing: false, resultType: 'dataUrl' });
+        setReceiptPhoto(image.dataUrl);
+      } catch { /* ignore */ }
     }
   };
 
-  const handleReasonSelect = (key) => {
-    setShowReasonDrop(false);
-    setReason(key);
-    if (key === 'other') setShowOtherModal(true);
-    else setOtherReason('');
-  };
+  const handleSave = async () => {
+    if (!invoiceRef.trim()) { alert('Please enter a Ref / invoice number.'); return; }
+    if (!purchaseDate) { alert('Please select a purchase date.'); return; }
+    for (const r of rows) {
+      if (!r.description?.trim()) {
+        setFieldError({ rowId: r.id, field: 'description', message: 'Select an item first' });
+        return;
+      }
+      if (!parseFloat(r.qty) > 0 && !r.qty) {
+        setFieldError({ rowId: r.id, field: 'qty', message: 'Enter a quantity' });
+        return;
+      }
+      if (!parseFloat(r.costPrice) > 0 && !r.costPrice) {
+        setFieldError({ rowId: r.id, field: 'costPrice', message: 'Enter a cost' });
+        return;
+      }
+    }
+    setFieldError(null);
+    const validRows = rows.filter(r => r.description.trim() && parseFloat(r.qty) > 0);
+    if (validRows.length === 0) { alert('Please add at least one item.'); return; }
 
-  const getPhrase = () => {
-    if (reason === 'other') return otherReason.trim() ? `for ${otherReason.trim()}` : '';
-    return PAID_TO_REASONS.find(r => r.key === reason)?.phrase || '';
-  };
+    const total = validRows.reduce((s, r) =>
+      s + (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0), 0);
 
-  const handleSave = () => {
-    const name = isOthers ? supplierSearch.trim() || paidTo.trim() : paidTo.trim();
-    if (!name) { alert('Please enter who the cash is paid to.'); return; }
-    if (!reason) { alert('Please select a reason.'); return; }
-    if (reason === 'other' && !otherReason.trim()) { alert('Please enter the reason.'); return; }
-    const phrase = getPhrase();
-    onSave({
-      note: `Paid ${name} ${phrase}.`,
-      invoiceRef: refNumber.trim() || '',
-    });
-  };
+    if (paymentType === 'cash' && cashBalance !== null && total > cashBalance) {
+      alert(`Total (${fmt(total)}) exceeds Cash Balance (${fmt(cashBalance)}). Reduce amount or use Credit.`);
+      return;
+    }
 
-  // Other Reason child modal
-  if (showOtherModal) {
-    return (
-      <div className="cj-sub-overlay">
-        <div className="cj-sub-modal">
-          <h3 className="cj-sub-title">Enter Reason</h3>
-          <div className="cj-modal-field">
-            <label>Reason for payment</label>
-            <input className="cj-modal-input" value={otherReason} onChange={e => setOtherReason(e.target.value)}
-              placeholder="Describe the reason…" autoFocus />
-          </div>
-          <div className="cj-modal-buttons">
-            <button className="cj-modal-cancel" onClick={() => { setShowOtherModal(false); setReason(''); }}>Cancel</button>
-            <button className="cj-modal-save" onClick={() => {
-              if (!otherReason.trim()) { alert('Please enter a reason.'); return; }
-              setShowOtherModal(false);
-            }}>Done</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    setSaving(true);
+    try {
+      const items = validRows.map(r => ({
+        qty: parseFloat(r.qty),
+        description: r.description.trim(),
+        costPrice: parseFloat(r.costPrice) || 0,
+        subtotal: (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0),
+        packUnit: r.packUnit || '',
+        packSize: r.packSize || '',
+        packDisplay: r.packUnit ? `${r.packUnit}\u00d7${r.packSize||'?'}` : '',
+        stockToAdd: (parseFloat(r.qty)||0) * (parseFloat(r.packUnit)||0),
+      }));
+
+      await dataService.addPurchase({
+        supplierName, supplierId: supplierId || null,
+        paymentType, creditorId: paymentType === 'credit' ? supplierId : null,
+        dueDate: paymentType === 'credit' ? dueDate : null,
+        date: new Date(purchaseDate + 'T12:00:00').toISOString(),
+        items, total,
+        notes: notes.trim(), invoiceRef: invoiceRef.trim(),
+        receiptPhoto: receiptPhoto || null,
+      });
+
+      // Build summary for description
+      const itemNames = items.map(i => i.description).join(', ');
+      onSave({
+        paymentType,
+        total,
+        invoiceRef: invoiceRef.trim(),
+        itemsSummary: itemNames,
+      });
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save. Please try again.');
+    } finally { setSaving(false); }
+  };
 
   return (
-    <div className="cj-sub-overlay">
-      <div className="cj-sub-modal">
-        <h3 className="cj-sub-title">Cash Out</h3>
+    <div className="pr-modal-overlay" style={{ zIndex: 4000 }}>
+      <div className="pr-modal-content">
+        <div className="pr-modal-header">
+          <h2 style={{ fontSize: '15px' }}>Operational Expenses bought at {supplierName}</h2>
+          <button className="pr-modal-close" onClick={onClose}><X size={20}/></button>
+        </div>
+        <div className="pr-modal-body">
 
-        {/* Paid To field */}
-        <div className="cj-modal-field" style={{ position:'relative' }}>
-          <label>Paid To</label>
-          {isOthers ? (
-            <>
-              <input
-                className="cj-modal-input"
-                value={supplierSearch}
-                onChange={e => { setSupplierSearch(e.target.value); setShowSupplierDrop(true); }}
-                onFocus={() => setShowSupplierDrop(true)}
-                onBlur={() => setTimeout(() => setShowSupplierDrop(false), 200)}
-                placeholder="Search from Suppliers list…"
-                autoFocus
-              />
-              {showSupplierDrop && filteredSuppliers.length > 0 && (
-                <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                  {filteredSuppliers.map(s => {
-                    const name = s.name || s.customerName;
+          {/* Payment Type */}
+          <div className="pr-field">
+            <label>Payment Type *</label>
+            <div className="pr-pay-type-row">
+              {[['cash','💵 Cash Paid'],['credit','📋 Buy on Credit']].map(([pt, lbl]) => (
+                <button key={pt} type="button"
+                  className={`pr-pay-type-btn${paymentType===pt?(pt==='cash'?' pr-pay-cash-active':' pr-pay-credit-active'):''}`}
+                  onClick={() => setPaymentType(pt)}
+                >{lbl}</button>
+              ))}
+            </div>
+            <p style={{fontSize:'11px',marginTop:'4px',color:paymentType==='credit'?'#4f46e5':'#6b7280'}}>
+              {paymentType==='cash'
+                ? 'Cash paid now — a Cash OUT entry will be recorded.'
+                : 'Goods received, pay later — creditor balance updated.'}
+            </p>
+          </div>
+
+          {paymentType === 'credit' && (
+            <div className="pr-date-inline">
+              <label className="pr-date-inline-label">Due Date</label>
+              <input type="date" className="pr-date-inline-input"
+                value={dueDate} onChange={e => setDueDate(e.target.value)} />
+            </div>
+          )}
+
+          <div className="pr-date-inline">
+            <label className="pr-date-inline-label">Purchase Date *</label>
+            <input type="date" className="pr-date-inline-input"
+              value={purchaseDate} max={getTodayStr()}
+              onChange={e => setPurchaseDate(e.target.value)} />
+          </div>
+
+          {/* Items table */}
+          <div className="pr-field">
+            <label>Items Purchased *</label>
+            <div className="pr-items-table-wrapper">
+              <table className="pr-items-tbl">
+                <thead>
+                  <tr>
+                    <th className="pr-ith pr-ith-qty">QTY</th>
+                    <th className="pr-ith pr-ith-desc">DESCRIPTION</th>
+                    <th className="pr-ith pr-ith-pack">PACKSIZE</th>
+                    <th className="pr-ith pr-ith-cost">COST</th>
+                    <th className="pr-ith" style={{width:'24px'}}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(row => {
+                    const results = descResults(row.descSearch);
                     return (
-                      <button key={s.id} className="cj-desc-dropdown-item"
-                        onMouseDown={() => { setSupplierSearch(name); setShowSupplierDrop(false); }}>
-                        {name}
-                      </button>
+                      <tr key={row.id}>
+                        <td className="pr-itd pr-itd-qty">
+                          <input type="number" className="pr-it-input pr-it-qty"
+                            placeholder="0" min="0" step="1" value={row.qty}
+                            onChange={e => { updateRow(row.id, 'qty', e.target.value); setFieldError(null); }} />
+                        </td>
+                        <td className="pr-itd pr-itd-desc" style={{position:'relative'}}>
+                          <input type="text" className="pr-it-input pr-it-desc"
+                            placeholder="Search inventory…"
+                            value={row.descSearch !== undefined ? row.descSearch : row.description}
+                            onChange={e => {
+                              updateRow(row.id, 'descSearch', e.target.value);
+                              updateRow(row.id, 'showDescDrop', true);
+                            }}
+                            onFocus={() => updateRow(row.id, 'showDescDrop', true)}
+                            onBlur={() => setTimeout(() => updateRow(row.id, 'showDescDrop', false), 180)}
+                          />
+                          {row.showDescDrop && results.length > 0 && (
+                            <div className="pr-desc-drop" style={{position:'absolute',top:'100%',left:0,right:0,zIndex:1000,background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',maxHeight:'140px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
+                              {results.map(g => (
+                                <div key={g.id} className="pr-desc-drop-item"
+                                  onMouseDown={() => {
+                                    updateRow(row.id, 'description', g.name || '');
+                                    updateRow(row.id, 'descSearch', g.name || '');
+                                    updateRow(row.id, 'packSize', g.size || '');
+                                    updateRow(row.id, 'showDescDrop', false);
+                                  }}>
+                                  {g.name}{g.size ? <span style={{color:'#6b7280',fontSize:'0.85em',marginLeft:4}}>{g.size}</span> : null}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        {fieldError?.rowId === row.id && (
+                          <td style={{padding:0,position:'relative',border:'none'}}>
+                            <div style={{position:'absolute',top:'50%',left:'4px',transform:'translateY(-50%)',background:'#ef4444',color:'white',fontSize:'11px',fontWeight:600,padding:'4px 8px',borderRadius:'6px',whiteSpace:'nowrap',zIndex:2000}}>
+                              ← {fieldError.message}
+                            </div>
+                          </td>
+                        )}
+                        <td className="pr-itd pr-itd-pack">
+                          <div className="pr-pack-pair">
+                            <input type="text" className="pr-it-input pr-it-pack-unit"
+                              placeholder="unit" value={row.packUnit}
+                              disabled={!row.description}
+                              onChange={e => { updateRow(row.id, 'packUnit', e.target.value); setFieldError(null); }} />
+                            <span className="pr-pack-x">&times;</span>
+                            <input type="text" className="pr-it-input pr-it-pack-size"
+                              placeholder="size" value={row.packSize}
+                              disabled={!row.description}
+                              onChange={e => updateRow(row.id, 'packSize', e.target.value)} />
+                          </div>
+                        </td>
+                        <td className="pr-itd pr-itd-cost">
+                          <input type="number" className="pr-it-input pr-it-cost"
+                            placeholder="0.00" min="0" step="0.01" value={row.costPrice}
+                            disabled={!row.description}
+                            onChange={e => { updateRow(row.id, 'costPrice', e.target.value); setFieldError(null); }} />
+                        </td>
+                        <td className="pr-itd pr-itd-del">
+                          {rows.length > 1 && (
+                            <button className="pr-item-remove" onClick={() => removeRow(row.id)}>
+                              <Trash2 size={14}/>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
                     );
                   })}
-                </div>
-              )}
-              <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
-                onClick={() => { setIsOthers(false); setPaidTo(''); setSupplierSearch(''); }}>
-                ← Back to list
-              </button>
-            </>
-          ) : (
-            <button
-              className={`cj-desc-trigger${paidTo ? ' has-value' : ''}`}
-              onClick={() => setShowNameDrop(o => !o)}
-            >
-              <span className="cj-desc-trigger-text">{paidTo || 'Select name…'}</span>
-              <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
-            </button>
-          )}
-          {showNameDrop && !isOthers && (
-            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-              {PAID_TO_NAMES.map(n => (
-                <button key={n} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>{n}</button>
-              ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
-
-        {/* Being For field */}
-        <div className="cj-modal-field" style={{ position:'relative' }}>
-          <label>Being For</label>
-          <button
-            className={`cj-desc-trigger${reason ? ' has-value' : ''}`}
-            onClick={() => setShowReasonDrop(o => !o)}
-          >
-            <span className="cj-desc-trigger-text">
-              {reason === 'other' && otherReason
-                ? otherReason
-                : reason
-                  ? PAID_TO_REASONS.find(r => r.key === reason)?.label
-                  : 'Select reason…'}
-            </span>
-            <span className="cj-desc-chevron">{showReasonDrop ? '▲' : '▼'}</span>
-          </button>
-          {showReasonDrop && (
-            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-              {PAID_TO_REASONS.map(r => (
-                <button key={r.key} className={`cj-desc-dropdown-item${reason === r.key ? ' selected' : ''}`}
-                  onMouseDown={() => handleReasonSelect(r.key)}>
-                  {r.label}
+            {(() => {
+              const last = rows[rows.length - 1];
+              const ok = last?.description?.trim() && parseFloat(last.qty) > 0 && parseFloat(last.costPrice) > 0;
+              return (
+                <button className={"pr-add-row-btn" + (ok ? "" : " pr-add-row-btn-disabled")}
+                  onClick={addRow} disabled={!ok}>
+                  <Plus size={14}/> Add Item
                 </button>
-              ))}
+              );
+            })()}
+          </div>
+
+          <div className="pr-total-row">
+            <span>Total Cost</span>
+            <span className="pr-total-val">{fmt(itemTotal)}</span>
+          </div>
+          {paymentType === 'cash' && cashBalance !== null && itemTotal > cashBalance && itemTotal > 0 && (
+            <div style={{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:'6px',padding:'8px 12px',fontSize:'12px',color:'#b91c1c',marginTop:'4px'}}>
+              ⚠️ Total exceeds Cash Balance ({fmt(cashBalance)}).
+            </div>
+          )}
+
+          <div className="pr-ref-inline">
+            <label className="pr-ref-label">Ref *</label>
+            <input type="text" className="pr-ref-input" placeholder="Invoice / receipt number…"
+              value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} />
+          </div>
+
+          <div className="pr-field">
+            <label>Notes <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
+            <textarea className="pr-input" rows={2} placeholder="Additional notes…"
+              value={notes} onChange={e => setNotes(e.target.value)}
+              style={{resize:'vertical',minHeight:'48px'}} />
+          </div>
+
+          <div style={{display:'flex',gap:'8px',marginTop:'4px'}}>
+            <button type="button" onClick={takePhoto}
+              style={{flex:1,padding:'8px',background:'var(--surface)',border:'1.5px dashed var(--border)',borderRadius:'8px',cursor:'pointer',fontSize:'13px',color:'var(--text-secondary)'}}>
+              📸 {receiptPhoto ? 'Retake Photo' : 'Receipt Photo'}
+            </button>
+          </div>
+          {receiptPhoto && (
+            <div style={{marginTop:'6px',textAlign:'center'}}>
+              <img src={receiptPhoto} alt="receipt" style={{maxWidth:'100%',maxHeight:'120px',borderRadius:'6px',border:'1px solid var(--border)'}} />
             </div>
           )}
         </div>
-
-        {/* Ref Number */}
-        <div className="cj-modal-field">
-          <label>Reference Number <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
-          <input className="cj-modal-input" value={refNumber} onChange={e => setRefNumber(e.target.value)}
-            placeholder="Invoice / receipt ref…" />
-        </div>
-
-        <div className="cj-modal-buttons">
-          <button className="cj-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="cj-modal-save" onClick={handleSave}>Save</button>
+        <div className="pr-modal-footer">
+          <button className="pr-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pr-btn-save" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Purchase'}
+          </button>
         </div>
       </div>
     </div>
@@ -430,12 +519,16 @@ function CashRecord({ isUnlocked = false }) {
   const [suppliersList, setSuppliersList]      = useState([]);
   const [refNumber, setRefNumber]              = useState('');
   // Cash In specific
-  const [cashInDesc, setCashInDesc]            = useState('');
+  const [cashInReasonKey, setCashInReasonKey]  = useState('');
+  const [showCashInReasonDrop, setShowCashInReasonDrop] = useState(false);
   // Cash Out specific
   const [beingForKey, setBeingForKey]          = useState('');
   const [showBeingForDrop, setShowBeingForDrop] = useState(false);
   const [otherReasonText, setOtherReasonText]  = useState('');
   const [showOtherReasonInput, setShowOtherReasonInput] = useState(false);
+  // Operational Expenses modal (supplier purchase from Cash Out)
+  const [showExpensesModal, setShowExpensesModal] = useState(false);
+  const [expensesResult, setExpensesResult]       = useState(null); // {paymentType, total, invoiceRef, itemsSummary}
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -530,9 +623,10 @@ function CashRecord({ isUnlocked = false }) {
     setPersonName(''); setIsOthersMode(false); setPersonSearch('');
     setShowNameDrop(false); setShowSearchDrop(false);
     setRefNumber('');
-    setCashInDesc('');
+    setCashInReasonKey(''); setShowCashInReasonDrop(false);
     setBeingForKey(''); setShowBeingForDrop(false);
     setOtherReasonText(''); setShowOtherReasonInput(false);
+    setShowExpensesModal(false); setExpensesResult(null);
   };
   const openAddModal = async () => {
     resetAddModal();
@@ -549,6 +643,9 @@ function CashRecord({ isUnlocked = false }) {
 
   const handleNameSelect = (name) => {
     setShowNameDrop(false);
+    // Reset being-for and expenses when name changes
+    setBeingForKey(''); setExpensesResult(null);
+    setOtherReasonText(''); setShowOtherReasonInput(false);
     if (name === 'Others') {
       setIsOthersMode(true);
       setPersonName('');
@@ -586,17 +683,69 @@ function CashRecord({ isUnlocked = false }) {
     }
   };
 
+  // When BEING FOR is clicked and paid-to is a supplier → open expenses modal
+  const handleBeingForClick = () => {
+    const name = getResolvedName();
+    if (name && isKnownSupplier(name, suppliersList)) {
+      // Open the operational expenses modal instead of the dropdown
+      setShowExpensesModal(true);
+    } else {
+      setShowBeingForDrop(o => !o);
+    }
+  };
+
+  // Called when OperationalExpensesModal saves
+  // addPurchase() already created the purchase record + cash entry (cash) or creditor (credit)
+  const handleExpensesSaved = async (result) => {
+    setExpensesResult(result);
+    setShowExpensesModal(false);
+    const name = getResolvedName();
+    const items = result.itemsSummary || 'items';
+
+    // Update the auto-created cash entry's note to our format
+    if (result.paymentType === 'cash') {
+      try {
+        const allEntries = await dataService.getCashEntries() || [];
+        // Find the most recent purchase-source entry with matching invoiceRef
+        const match = [...allEntries].reverse().find(e =>
+          e.source === 'purchase' && e.invoiceRef === result.invoiceRef
+        );
+        if (match) {
+          await dataService.updateCashEntry(match.id, {
+            note: `Paid ${name} for ${items}.`
+          });
+        }
+      } catch (e) { console.error('Error updating purchase cash entry note:', e); }
+      // Auto-fill amount from the purchase total
+      setNewAmount(String(result.total));
+    } else {
+      // Credit — no cash entry, set amount to 0 (informational)
+      setNewAmount('0');
+    }
+    if (result.invoiceRef) setRefNumber(result.invoiceRef);
+    setBeingForKey('__supplier_purchase__');
+  };
+
   const buildNote = () => {
     const name = getResolvedName();
     if (newType === TYPE_IN) {
-      // Cash In: "Cash from {name}. {description}"
-      const desc = cashInDesc.trim();
-      if (name && desc) return `Cash from ${name}. ${desc}`;
-      if (name) return `Cash from ${name}.`;
-      if (desc) return desc;
+      // Cash In: "From [name] [reason phrase]."
+      const reasonObj = CASH_IN_REASONS.find(r => r.key === cashInReasonKey);
+      const phrase = reasonObj?.phrase || '';
+      if (name && phrase) return `From ${name} ${phrase}.`;
+      if (name) return `From ${name}.`;
       return '';
     } else {
-      // Cash Out: "Paid {name} {phrase}."
+      // Cash Out with supplier purchase
+      if (beingForKey === '__supplier_purchase__' && expensesResult) {
+        const items = expensesResult.itemsSummary || 'items';
+        if (expensesResult.paymentType === 'cash') {
+          return `Paid ${name} for ${items}.`;
+        } else {
+          return `Owed ${name} for ${items}.`;
+        }
+      }
+      // Cash Out with regular reason
       const phrase = beingForKey === 'other'
         ? (otherReasonText.trim() ? `for ${otherReasonText.trim()}` : '')
         : (PAID_TO_REASONS.find(r => r.key === beingForKey)?.phrase || '');
@@ -607,10 +756,19 @@ function CashRecord({ isUnlocked = false }) {
   };
 
   const canSave = () => {
-    const amt = parseFloat(newAmount);
-    if (isNaN(amt) || amt <= 0) return false;
     const name = getResolvedName();
     if (!name) return false;
+
+    // Supplier purchase — purchase is already saved, just need to close
+    if (newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) {
+      return true; // allow close even for credit (amount=0)
+    }
+
+    const amt = parseFloat(newAmount);
+    if (isNaN(amt) || amt <= 0) return false;
+    if (newType === TYPE_IN) {
+      if (!cashInReasonKey) return false;
+    }
     if (newType === TYPE_OUT) {
       if (!beingForKey) return false;
       if (beingForKey === 'other' && !otherReasonText.trim()) return false;
@@ -619,10 +777,21 @@ function CashRecord({ isUnlocked = false }) {
   };
 
   const handleSaveEntry = async () => {
-    const amount = parseFloat(newAmount);
-    if (isNaN(amount) || amount <= 0) { alert('Please enter a valid amount.'); return; }
     const name = getResolvedName();
     if (!name) { alert(`Please enter who the cash is ${newType === TYPE_IN ? 'from' : 'paid to'}.`); return; }
+
+    // ── Supplier purchase (already saved by OperationalExpensesModal) ──
+    if (newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) {
+      // Purchase + cash entry (or creditor) already created by addPurchase.
+      // Just close and reload.
+      closeAddModal();
+      await loadEntries();
+      return;
+    }
+
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount) || amount <= 0) { alert('Please enter a valid amount.'); return; }
+    if (newType === TYPE_IN && !cashInReasonKey) { alert('Please select a reason.'); return; }
     if (newType === TYPE_OUT && !beingForKey) { alert('Please select a reason.'); return; }
     if (newType === TYPE_OUT && beingForKey === 'other' && !otherReasonText.trim()) { alert('Please enter the reason.'); return; }
 
@@ -882,8 +1051,10 @@ function CashRecord({ isUnlocked = false }) {
                   onClick={() => {
                     setPersonName(''); setIsOthersMode(false); setPersonSearch('');
                     setShowNameDrop(false); setShowSearchDrop(false); setRefNumber('');
-                    setCashInDesc(''); setBeingForKey(''); setShowBeingForDrop(false);
+                    setCashInReasonKey(''); setShowCashInReasonDrop(false);
+                    setBeingForKey(''); setShowBeingForDrop(false);
                     setOtherReasonText(''); setShowOtherReasonInput(false);
+                    setExpensesResult(null); setShowExpensesModal(false);
                     setNewType(TYPE_IN);
                   }}>
                   Cash In
@@ -893,8 +1064,10 @@ function CashRecord({ isUnlocked = false }) {
                   onClick={() => {
                     setPersonName(''); setIsOthersMode(false); setPersonSearch('');
                     setShowNameDrop(false); setShowSearchDrop(false); setRefNumber('');
-                    setCashInDesc(''); setBeingForKey(''); setShowBeingForDrop(false);
+                    setCashInReasonKey(''); setShowCashInReasonDrop(false);
+                    setBeingForKey(''); setShowBeingForDrop(false);
                     setOtherReasonText(''); setShowOtherReasonInput(false);
+                    setExpensesResult(null); setShowExpensesModal(false);
                     setNewType(TYPE_OUT);
                   }}>
                   Cash Out
@@ -967,11 +1140,30 @@ function CashRecord({ isUnlocked = false }) {
                   )}
                 </div>
 
-                {/* Description */}
-                <div className="cj-modal-field">
-                  <label>Description</label>
-                  <input className="cj-modal-input" value={cashInDesc} onChange={e => setCashInDesc(e.target.value)}
-                    placeholder="e.g. Float, Purchases, Safe Keeping…" />
+                {/* Being For (reason dropdown) */}
+                <div className="cj-modal-field" style={{ position:'relative' }}>
+                  <label>Being For</label>
+                  <button
+                    className={`cj-desc-trigger${cashInReasonKey ? ' has-value' : ''}`}
+                    onClick={() => setShowCashInReasonDrop(o => !o)}
+                  >
+                    <span className="cj-desc-trigger-text">
+                      {cashInReasonKey
+                        ? CASH_IN_REASONS.find(r => r.key === cashInReasonKey)?.label
+                        : 'Select reason…'}
+                    </span>
+                    <span className="cj-desc-chevron">{showCashInReasonDrop ? '▲' : '▼'}</span>
+                  </button>
+                  {showCashInReasonDrop && (
+                    <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+                      {CASH_IN_REASONS.map(r => (
+                        <button key={r.key} className={`cj-desc-dropdown-item${cashInReasonKey === r.key ? ' selected' : ''}`}
+                          onMouseDown={() => { setCashInReasonKey(r.key); setShowCashInReasonDrop(false); }}>
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Ref Number */}
@@ -1039,19 +1231,33 @@ function CashRecord({ isUnlocked = false }) {
                 {/* Being For */}
                 <div className="cj-modal-field" style={{ position:'relative' }}>
                   <label>Being For</label>
-                  <button
-                    className={`cj-desc-trigger${beingForKey ? ' has-value' : ''}`}
-                    onClick={() => setShowBeingForDrop(o => !o)}
-                  >
-                    <span className="cj-desc-trigger-text">
-                      {beingForKey === 'other' && otherReasonText
-                        ? otherReasonText
-                        : beingForKey
-                          ? PAID_TO_REASONS.find(r => r.key === beingForKey)?.label
-                          : 'Select reason…'}
-                    </span>
-                    <span className="cj-desc-chevron">{showBeingForDrop ? '▲' : '▼'}</span>
-                  </button>
+                  {beingForKey === '__supplier_purchase__' && expensesResult ? (
+                    /* Supplier purchase already saved — show summary */
+                    <div style={{padding:'8px 12px',background:expensesResult.paymentType==='cash'?'#f0fdf4':'#eff6ff',
+                      border:`1.5px solid ${expensesResult.paymentType==='cash'?'#16a34a':'#3b82f6'}`,
+                      borderRadius:'8px',fontSize:'13px',color:expensesResult.paymentType==='cash'?'#166534':'#1e40af'}}>
+                      <div style={{fontWeight:600,marginBottom:'2px'}}>
+                        {expensesResult.paymentType === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {expensesResult.invoiceRef}
+                      </div>
+                      <div style={{fontSize:'12px',opacity:0.85}}>{expensesResult.itemsSummary}</div>
+                    </div>
+                  ) : (
+                    <button
+                      className={`cj-desc-trigger${beingForKey ? ' has-value' : ''}`}
+                      onClick={handleBeingForClick}
+                    >
+                      <span className="cj-desc-trigger-text">
+                        {(() => {
+                          const name = getResolvedName();
+                          if (name && isKnownSupplier(name, suppliersList)) return 'Tap to add purchase…';
+                          if (beingForKey === 'other' && otherReasonText) return otherReasonText;
+                          if (beingForKey) return PAID_TO_REASONS.find(r => r.key === beingForKey)?.label;
+                          return 'Select reason…';
+                        })()}
+                      </span>
+                      <span className="cj-desc-chevron">{showBeingForDrop ? '▲' : '▼'}</span>
+                    </button>
+                  )}
                   {showBeingForDrop && (
                     <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
                       {PAID_TO_REASONS.map(r => (
@@ -1104,6 +1310,20 @@ function CashRecord({ isUnlocked = false }) {
           onClose={() => setEditEntry(null)}
         />
       )}
+
+      {/* ── Operational Expenses Modal (supplier purchase from Cash Out) ── */}
+      {showExpensesModal && (() => {
+        const name = getResolvedName();
+        const sup = getSupplierRecord(name, suppliersList);
+        return (
+          <OperationalExpensesModal
+            supplierName={name}
+            supplierId={sup?.id || null}
+            onSave={handleExpensesSaved}
+            onClose={() => setShowExpensesModal(false)}
+          />
+        );
+      })()}
     </div>
   );
 }
