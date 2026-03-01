@@ -2376,7 +2376,7 @@ class DataService {
   }
 
   // ── Re-open a closed day (admin override) ─────────────────────────────────
-  async reopenDay(business_date) {
+  async reopenDay(business_date, reopenFloatAmount) {
     const user    = auth.currentUser;
     const today   = business_date || this.todayStr();
     const now     = new Date().toISOString();
@@ -2387,7 +2387,7 @@ class DataService {
     const closeSessions = Array.isArray(existing.close_sessions) ? [...existing.close_sessions] : [];
     if (existing.counted_cash !== null && existing.counted_cash !== undefined) {
       closeSessions.push({
-        reopen_float:     existing.counted_cash,   // counted cash becomes the float for the next session
+        reopen_float:     reopenFloatAmount !== undefined ? reopenFloatAmount : existing.counted_cash,
         expected_cash:    existing.expected_cash,
         counted_cash:     existing.counted_cash,
         difference:       existing.difference,
@@ -2405,6 +2405,7 @@ class DataService {
       ...existing,
       status:           'open',
       locked:           false,
+      opening_float:    reopenFloatAmount !== undefined ? reopenFloatAmount : (existing.counted_cash ?? existing.opening_float ?? 0),
       counted_cash:     null,
       difference:       0,
       notes:            '',
@@ -2604,18 +2605,20 @@ class DataService {
   }
 
   // ── Users (Kadaele Staffs) — read from 'users' Firestore collection ─────────
+  // Uses the same localforage key ('kadaele_users') as the Admin app so that
+  // changes made in Admin are available offline in Shopkeeper and vice versa.
   async getUsers() {
     try {
       if (this.isOnline && auth.currentUser) {
         const snap = await getDocs(collection(db, 'users'));
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        await localforage.setItem('ks_users', users);
+        await localforage.setItem('kadaele_users', users);
         return users;
       }
     } catch (err) {
       console.error('Error fetching users from Firebase:', err);
     }
-    return await localforage.getItem('ks_users') || [];
+    return await localforage.getItem('kadaele_users') || [];
   }
 
   // ════════════════════════════════════════════════════════════════════
