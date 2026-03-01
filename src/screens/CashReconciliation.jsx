@@ -387,26 +387,37 @@ function CashReconciliation({ onStoreStatusChange }) {
     // ── Day is closed ──
     if (todayRecord.status === 'closed') {
       const diff = todayRecord.counted_cash - todayRecord.expected_cash;
+
+      const handleReopenToday = async () => {
+        if (!window.confirm('Re-open the shop? A new session will start.')) return;
+        try {
+          await dataService.reopenDay(today);
+          if (onStoreStatusChange) onStoreStatusChange(true);
+          await loadData();
+        } catch (e) { alert('Failed to re-open: ' + e.message); }
+      };
+
       return (
         <>
           {renderStatusBanner()}
           <div className="cr-card">
-            <p className="cr-card-title">Today's Summary</p>
+            <p className="cr-card-title">Day Summary</p>
+
             <div className="cr-summary-row">
               <span className="cr-summary-label">Opening Float</span>
               <span className="cr-summary-value">{fmt(todayRecord.opening_float)}</span>
             </div>
             <div className="cr-summary-row">
-              <span className="cr-summary-label">Cash In (sales + payments)</span>
+              <span className="cr-summary-label">Sessions Cash In</span>
               <span className="cr-summary-value in">+{fmt(liveSummary?.sum_in || 0)}</span>
             </div>
             <div className="cr-summary-row">
-              <span className="cr-summary-label">Cash Out (purchases + expenses)</span>
+              <span className="cr-summary-label">Sessions Cash Out</span>
               <span className="cr-summary-value out">-{fmt(liveSummary?.sum_out || 0)}</span>
             </div>
             <hr className="cr-divider" />
             <div className="cr-summary-row">
-              <span className="cr-summary-label">Expected Cash</span>
+              <span className="cr-summary-label">Expected Cash in Drawer</span>
               <span className="cr-summary-value expected">{fmt(todayRecord.expected_cash)}</span>
             </div>
             <div className="cr-summary-row">
@@ -417,23 +428,37 @@ function CashReconciliation({ onStoreStatusChange }) {
               <span className="cr-summary-label">Difference</span>
               <span className={`cr-summary-value ${diff === 0 ? 'diff-zero' : diff < 0 ? 'diff-neg' : 'diff-pos'}`}>
                 {diff >= 0 ? '+' : ''}{fmt(diff)}
-                {diff < 0 && ' ⚠️ Short'}
-                {diff > 0 && ' ⚠️ Surplus'}
-                {diff === 0 && ' ✅ Balanced'}
+                {diff < 0 && ' \u26a0\ufe0f Short'}
+                {diff > 0 && ' \u26a0\ufe0f Surplus'}
+                {diff === 0 && ' \u2705 Balanced'}
               </span>
             </div>
+            <hr className="cr-divider" />
+            <div className="cr-summary-row">
+              <span className="cr-summary-label">Closed by</span>
+              <span className="cr-summary-value">{todayRecord.closed_by_name || '\u2014'}</span>
+            </div>
+            <div className="cr-summary-row" style={{ borderBottom: 'none' }}>
+              <span className="cr-summary-label">Closed at</span>
+              <span className="cr-summary-value">{formatTime(todayRecord.closed_at_client)}</span>
+            </div>
             {todayRecord.notes ? (
-              <div className="cr-summary-row">
+              <div className="cr-summary-row" style={{ borderBottom: 'none', marginTop: 4 }}>
                 <span className="cr-summary-label">Notes</span>
                 <span className="cr-summary-value" style={{ textAlign:'right', maxWidth:'65%', fontSize:13 }}>{todayRecord.notes}</span>
               </div>
             ) : null}
           </div>
+
           <div className="cr-closed-msg">
-            <span className="cr-closed-icon">🔒</span>
+            <span className="cr-closed-icon">\U0001f512</span>
             <span className="cr-closed-title">Day Closed</span>
-            <span className="cr-closed-sub">This day's record is locked. View it in the Records tab.</span>
+            <span className="cr-closed-sub">Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.</span>
           </div>
+
+          <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
+            \U0001f513 Re-Open Shop
+          </button>
         </>
       );
     }
