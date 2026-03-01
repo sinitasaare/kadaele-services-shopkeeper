@@ -1057,6 +1057,7 @@ function CashRecord({ isUnlocked = false }) {
   const [showSearchDrop, setShowSearchDrop]    = useState(false);
   const [creditorsList, setCreditorsList]      = useState([]);
   const [suppliersList, setSuppliersList]      = useState([]);
+  const [usersList, setUsersList]              = useState([]);
   const [refNumber, setRefNumber]              = useState('');
   // Others-mode sub-dropdown (Advance Orders List vs Create New)
   const [showOthersSubDrop, setShowOthersSubDrop] = useState(false);
@@ -1176,15 +1177,17 @@ function CashRecord({ isUnlocked = false }) {
   const openAddModal = async () => {
     resetAddModal();
     setShowAddModal(true);
-    // Pre-load creditors, suppliers, and advance orders for dropdowns
-    const [creds, supps, advOrders] = await Promise.all([
+    // Pre-load creditors, suppliers, advance orders, and users for dropdowns
+    const [creds, supps, advOrders, users] = await Promise.all([
       dataService.getCreditors(),
       dataService.getSuppliers(),
       dataService.getAdvanceOrders(),
+      dataService.getUsers(),
     ]);
     setCreditorsList(creds || []);
     setSuppliersList(supps || []);
     setAdvanceOrdersList(advOrders || []);
+    setUsersList(users || []);
   };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
@@ -1624,22 +1627,6 @@ function CashRecord({ isUnlocked = false }) {
               </div>
             </div>
 
-            {/* Amount — hide for supplier purchases since it's auto-set from the assets modal */}
-            {!(newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) && (
-              <div className="cj-modal-field">
-                <label>Amount</label>
-                <input type="number" className="cj-modal-input" placeholder="0.00"
-                  value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01"
-                  readOnly={newType === TYPE_OUT && !!expensesResult}
-                />
-                {newType === TYPE_OUT && (
-                  <div style={{ fontSize:'12px', color:'#6b7280', marginTop:'4px' }}>
-                    Current cash balance: {fmt(Math.max(0, currentBalance))}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ── Cash In fields ── */}
             {newType === TYPE_IN && (
               <>
@@ -1746,9 +1733,49 @@ function CashRecord({ isUnlocked = false }) {
                   )}
                   {showNameDrop && !isOthersMode && (
                     <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {CASH_FROM_NAMES.map(n => (
-                        <button key={n} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>{n}</button>
-                      ))}
+                      {/* Firebase users */}
+                      {usersList.length > 0
+                        ? usersList.map(u => {
+                            const n = u.fullName || u.username || '';
+                            return (
+                              <button key={u.id} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>
+                                {n}
+                                {u.role ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({u.role})</span> : null}
+                              </button>
+                            );
+                          })
+                        : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No users found…</div>
+                      }
+                      {/* Advance Orders List */}
+                      <div
+                        className="cj-desc-dropdown-item"
+                        style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setIsOthersMode(true);
+                          setPersonName('');
+                          setPersonSearch('');
+                          setShowNameDrop(false);
+                          setTimeout(() => setShowSearchDrop(true), 50);
+                        }}
+                      >
+                        📋 Advance Orders List
+                      </div>
+                      {/* Create New Advance Order */}
+                      <div
+                        className="cj-desc-dropdown-item"
+                        style={{ fontWeight:600, color:'#f59e0b' }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setShowNameDrop(false);
+                          setIsOthersMode(true);
+                          setPersonName('');
+                          setPersonSearch('');
+                          setShowCreateAdvanceModal(true);
+                        }}
+                      >
+                        ➕ Create New Customer Advanced Order
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1777,6 +1804,14 @@ function CashRecord({ isUnlocked = false }) {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Amount */}
+                <div className="cj-modal-field">
+                  <label>Amount</label>
+                  <input type="number" className="cj-modal-input" placeholder="0.00"
+                    value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01"
+                  />
                 </div>
 
                 {/* Ref Number */}
@@ -1888,6 +1923,20 @@ function CashRecord({ isUnlocked = false }) {
                     <input className="cj-modal-input" value={otherReasonText}
                       onChange={e => setOtherReasonText(e.target.value)}
                       placeholder="Describe the reason…" autoFocus />
+                  </div>
+                )}
+
+                {/* Amount — hide for supplier purchases since it's auto-set from the assets modal */}
+                {!(beingForKey === '__supplier_purchase__' && expensesResult) && (
+                  <div className="cj-modal-field">
+                    <label>Amount</label>
+                    <input type="number" className="cj-modal-input" placeholder="0.00"
+                      value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01"
+                      readOnly={!!expensesResult}
+                    />
+                    <div style={{ fontSize:'12px', color:'#6b7280', marginTop:'4px' }}>
+                      Current cash balance: {fmt(Math.max(0, currentBalance))}
+                    </div>
                   </div>
                 )}
 
