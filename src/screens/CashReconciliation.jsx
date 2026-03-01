@@ -5,8 +5,10 @@ import './CashReconciliation.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// todayStr uses currentBusinessDate from dataService
 function todayStr() {
-  return dataService.currentBusinessDate();
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function fmt(amount) {
@@ -27,7 +29,18 @@ function formatTime(iso) {
 
 // ── Detail Modal ─────────────────────────────────────────────────────────────
 
-function SessionBlock({ label, openedBy, openedAt, float, expected, counted, closedBy, closedAt, isLastSession, isDayClosed, isReopenable, onReopen, reopening }) {
+function buildNoteLabel(counted, expected, notes, closedByName) {
+  if (counted === null || counted === undefined || expected === null || expected === undefined) return null;
+  const diff = parseFloat(counted) - parseFloat(expected);
+  const sym = dataService.getCurrencySymbol?.() || '$';
+  const fmtVal = (v) => `${sym}${Math.abs(v).toFixed(2)}`;
+  if (diff === 0) return '✅ Balanced';
+  if (diff < 0) return `There was a shortage by ${fmtVal(diff)} and ${closedByName || 'staff'} says "${notes || '—'}"`;
+  return `There was a SURPLUS by ${fmtVal(diff)} and ${closedByName || 'staff'} says "${notes || '—'}"`;
+}
+
+function SessionBlock({ label, openedBy, openedAt, float, expected, counted, notes, closedBy, closedAt, isLastSession, isDayClosed, onReopen, reopening }) {
+  const noteLabel = buildNoteLabel(counted, expected, notes, closedBy);
   return (
     <div className="cr-session-block">
       {label && (
@@ -55,6 +68,13 @@ function SessionBlock({ label, openedBy, openedAt, float, expected, counted, clo
         <span className="cr-summary-label">Counted Cash in drawer</span>
         <span className="cr-summary-value">{counted !== null && counted !== undefined ? fmt(counted) : '—'}</span>
       </div>
+      {noteLabel && (
+        <div className="cr-summary-row cr-note-row">
+          <span className={`cr-session-note ${noteLabel === '✅ Balanced' ? 'note-balanced' : noteLabel.includes('shortage') ? 'note-short' : 'note-surplus'}`}>
+            {noteLabel}
+          </span>
+        </div>
+      )}
       <div className="cr-summary-row">
         <span className="cr-summary-label">Closed by</span>
         <span className="cr-summary-value">{closedBy || '—'}</span>
@@ -63,15 +83,10 @@ function SessionBlock({ label, openedBy, openedAt, float, expected, counted, clo
         <span className="cr-summary-label">Closed at</span>
         <span className="cr-summary-value">{closedAt ? formatTime(closedAt) : '—'}</span>
       </div>
-      {isLastSession && isDayClosed && isReopenable && (
+      {isLastSession && isDayClosed && (
         <button className="cr-btn-reopen" onClick={onReopen} disabled={reopening}>
           {reopening ? 'Reopening…' : '🔓 Re-Open Shop'}
         </button>
-      )}
-      {isLastSession && isDayClosed && !isReopenable && (
-        <div className="cr-past-day-notice">
-          📅 This business day has ended and can no longer be re-opened.
-        </div>
       )}
     </div>
   );
@@ -104,7 +119,6 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
   const sessions = [];
 
   if (!hasMultipleSessions) {
-    // ── Only one session ever — no label ──
     sessions.push({
       label: null,
       openedBy:   record.opened_by_name   || '—',
@@ -112,13 +126,11 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
       float:      record.opening_float    ?? null,
       expected:   record.expected_cash    ?? null,
       counted:    record.counted_cash     ?? null,
+      notes:      record.notes            || '',
       closedBy:   record.closed_by_name   || null,
       closedAt:   record.closed_at_client || null,
     });
   } else {
-    // ── Session 1 ──
-    // Opened: root record's original open fields
-    // Closed: close_sessions[0] holds the close data for session 1
     sessions.push({
       label:    'First Session',
       openedBy: record.opened_by_name   || '—',
@@ -126,13 +138,11 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
       float:    record.opening_float    ?? null,
       expected: closeSessions[0].expected_cash  ?? null,
       counted:  closeSessions[0].counted_cash   ?? null,
+      notes:    closeSessions[0].notes          || '',
       closedBy: closeSessions[0].closed_by_name || null,
       closedAt: closeSessions[0].closed_at      || null,
     });
 
-    // ── Sessions 2 … N-1 (middle sessions from close_sessions[1] onward) ──
-    // Session i+1 was opened by close_sessions[i-1].reopened_by_name
-    // and its close data lives in close_sessions[i]
     for (let i = 1; i < closeSessions.length; i++) {
       sessions.push({
         label:    `${ordinals[i] || `#${i+1}`} Session`,
@@ -141,13 +151,12 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
         float:    closeSessions[i].reopen_float        ?? null,
         expected: closeSessions[i].expected_cash       ?? null,
         counted:  closeSessions[i].counted_cash        ?? null,
+        notes:    closeSessions[i].notes               || '',
         closedBy: closeSessions[i].closed_by_name      || null,
         closedAt: closeSessions[i].closed_at           || null,
       });
     }
 
-    // ── Last session (current) ──
-    // Opened by: the last close_sessions entry's reopened_by_name
     const prev = closeSessions[closeSessions.length - 1];
     sessions.push({
       label:    `${ordinals[closeSessions.length] || `#${closeSessions.length+1}`} Session`,
@@ -156,6 +165,7 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
       float:    prev.reopen_float       ?? null,
       expected: record.expected_cash    ?? null,
       counted:  record.counted_cash     ?? null,
+      notes:    record.notes            || '',
       closedBy: record.closed_by_name   || null,
       closedAt: record.closed_at_client || null,
     });
@@ -175,7 +185,6 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
   };
 
   const isDayClosed = record.status === 'closed';
-  const isReopenable = dataService.isBusinessDateReopenable(record.business_date);
 
   return (
     <div className="cr-overlay" onClick={onClose}>
@@ -196,20 +205,6 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
           </div>
         </div>
 
-        {/* Unreconciled warning */}
-        {record.unreconciled && (
-          <div className="cr-unreconciled-banner">
-            ⚠️ This day was not formally reconciled. The session was auto-closed when the business day ended.
-          </div>
-        )}
-
-        {/* Past-day open warning (session still open but day has passed) */}
-        {!isDayClosed && !isReopenable && (
-          <div className="cr-unreconciled-banner">
-            ⚠️ This session was never closed and the business day has now ended. It will be auto-closed shortly.
-          </div>
-        )}
-
         {/* Session blocks */}
         {sessions.map((sess, idx) => (
           <SessionBlock
@@ -220,11 +215,11 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
             float={sess.float}
             expected={sess.expected}
             counted={sess.counted}
+            notes={sess.notes}
             closedBy={sess.closedBy}
             closedAt={sess.closedAt}
             isLastSession={idx === sessions.length - 1}
             isDayClosed={isDayClosed}
-            isReopenable={isReopenable}
             onReopen={handleReopen}
             reopening={reopening}
           />
@@ -407,7 +402,6 @@ function CashReconciliation({ onStoreStatusChange }) {
     // ── Day is closed ──
     if (todayRecord.status === 'closed') {
       const diff = todayRecord.counted_cash - todayRecord.expected_cash;
-      const isReopenable = dataService.isBusinessDateReopenable(todayRecord.business_date);
 
       const handleReopenToday = async () => {
         if (!window.confirm('Re-open the shop? A new session will start.')) return;
@@ -474,18 +468,12 @@ function CashReconciliation({ onStoreStatusChange }) {
           <div className="cr-closed-msg">
             <span className="cr-closed-icon">🔒</span>
             <span className="cr-closed-title">Day Closed</span>
-            <span className="cr-closed-sub">
-              {isReopenable
-                ? 'Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.'
-                : 'This business day has ended. Open a new day when you are ready to start trading again.'}
-            </span>
+            <span className="cr-closed-sub">Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.</span>
           </div>
 
-          {isReopenable && (
-            <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
-              🔓 Re-Open Shop
-            </button>
-          )}
+          <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
+            🔓 Re-Open Shop
+          </button>
         </>
       );
     }
