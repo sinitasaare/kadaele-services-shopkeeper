@@ -2603,6 +2603,21 @@ class DataService {
     }
   }
 
+  // ── Users (Kadaele Staffs) — read from 'users' Firestore collection ─────────
+  async getUsers() {
+    try {
+      if (this.isOnline && auth.currentUser) {
+        const snap = await getDocs(collection(db, 'users'));
+        const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        await localforage.setItem('ks_users', users);
+        return users;
+      }
+    } catch (err) {
+      console.error('Error fetching users from Firebase:', err);
+    }
+    return await localforage.getItem('ks_users') || [];
+  }
+
   // ════════════════════════════════════════════════════════════════════
 
 }
