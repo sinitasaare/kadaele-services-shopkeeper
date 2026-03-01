@@ -310,6 +310,11 @@ body {
   font-weight: 600;
 }
 
+.menu-item-locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Dark mode for modals */
 [data-theme="dark"] .help-modal,
 [data-theme="dark"] .menu-modal {
