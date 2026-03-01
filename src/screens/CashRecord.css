@@ -193,7 +193,7 @@
 
 .cj-col-right  { text-align: right !important; }
 .cj-col-center { text-align: center !important; }
-.cj-note-cell  { font-size: 0.8125rem; color: var(--text-secondary, #888); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.cj-note-cell  { font-size: 0.8125rem; color: var(--text-secondary, #888); white-space: nowrap; }
 
 .cj-amount    { font-weight: 600; }
 .cj-in        { color: #065f46; }
