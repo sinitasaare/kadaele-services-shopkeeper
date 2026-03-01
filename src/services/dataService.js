@@ -60,8 +60,9 @@ class DataService {
     this._creditorsFetchedFromFirebase = false;
     this._suppliersFetchedFromFirebase = false;
     this._goodsFetchedFromFirebase = false;
+    this._salesFetchedFromFirebase = false;
+    this._purchasesFetchedFromFirebase = false;
     this._cashEntriesFetched = false;
-    this._dailyCashFetched = false;
     this._dailyCashFetched = false;
     this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     this._goodsUnsubscribe = null;   // Firebase real-time listener handle for goods
@@ -240,6 +241,11 @@ class DataService {
       this._debtorsFetchedFromFirebase = false;
       this._goodsFetchedFromFirebase = false;
       this._cashEntriesFetched = false;
+      this._salesFetchedFromFirebase = false;
+      this._purchasesFetchedFromFirebase = false;
+      this._creditorsFetchedFromFirebase = false;
+      this._suppliersFetchedFromFirebase = false;
+      this._dailyCashFetched = false;
       
       // Start real-time listeners for debtors and goods (handles remote changes)
       this.startDebtorsListener();
@@ -356,17 +362,9 @@ class DataService {
 
   // Get current server time (or local time if offline)
   async getServerTime() {
-    if (this.isOnline) {
-      try {
-        // TODO: Replace with actual kadaele-services endpoint
-        const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
-        const data = await response.json();
-        return new Date(data.datetime);
-      } catch (error) {
-        console.warn('Could not get server time, using local time:', error);
-        return new Date();
-      }
-    }
+    // Use local device time — Firebase serverTimestamp() handles authoritative
+    // timestamps for stored values.  The external API (worldtimeapi.org) was
+    // unreliable and slow in Solomon Islands, blocking void/refund operations.
     return new Date();
   }
 
@@ -445,20 +443,26 @@ class DataService {
     });
     if (this.isOnline && user) {
       try {
-        const batch = writeBatch(db);
-        goods.forEach(good => {
-          const goodRef = doc(db, 'goods', good.id.toString());
-          batch.set(goodRef, {
-            ...good,
-            updatedAt: serverTimestamp()
-          }, { merge: true });
-        });
-        await batch.commit();
+        await this._batchWrite('goods', goods, g => g.id.toString());
       } catch (error) {
         console.error('Error syncing goods to Firebase:', error);
       }
     }
     return true;
+  }
+
+  // ── Helper: chunked Firestore batch write (max 450 ops per batch) ──────
+  async _batchWrite(collectionName, items, idFn, extraFields = {}) {
+    const CHUNK = 450;
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const chunk = items.slice(i, i + CHUNK);
+      const batch = writeBatch(db);
+      chunk.forEach(item => {
+        const ref = doc(db, collectionName, idFn(item));
+        batch.set(ref, { ...item, updatedAt: serverTimestamp(), ...extraFields }, { merge: true });
+      });
+      await batch.commit();
+    }
   }
 
   async addGood(good) {
@@ -490,20 +494,8 @@ class DataService {
     const index = goods.findIndex(g => g.id === id);
     if (index !== -1) {
       goods[index] = { ...goods[index], ...updates };
+      // setGoods handles both local save AND Firebase batch sync
       await this.setGoods(goods);
-      
-      // Sync to Firebase
-      if (this.isOnline && auth.currentUser) {
-        try {
-          await updateDoc(doc(db, 'goods', id.toString()), {
-            ...updates,
-            updatedAt: serverTimestamp()
-          });
-        } catch (error) {
-          console.error('Error updating good in Firebase:', error);
-        }
-      }
-      
       return goods[index];
     }
     return null;
@@ -618,11 +610,8 @@ class DataService {
         await localforage.setItem(DATA_KEYS.GOODS, goods);
         // Sync reduced stock to Firebase
         if (this.isOnline && auth.currentUser) {
-          const batch = writeBatch(db);
-          goods.forEach(g => {
-            batch.set(doc(db, 'goods', g.id.toString()), { ...g, updatedAt: serverTimestamp() }, { merge: true });
-          });
-          await batch.commit().catch(e => console.error('Stock sync error:', e));
+          await this._batchWrite('goods', goods, g => g.id.toString())
+            .catch(e => console.error('Stock sync error:', e));
         }
       }
     } catch (stockErr) {
@@ -976,29 +965,20 @@ class DataService {
     // Save locally first — full data including any receipt photos
     await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
     
-    // Sync to Firebase if online
+    // Sync to Firebase if online (chunked, strip photos)
     const user = auth.currentUser || await new Promise(resolve => {
       const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
     });
     if (this.isOnline && user) {
       try {
-        const batch = writeBatch(db);
-        debtors.forEach(debtor => {
-          const debtorRef = doc(db, 'debtors', debtor.id.toString());
-          // Strip base64 photo data from deposits before sending to Firestore
-          // (Firestore has a 1 MB document limit; photos would exceed it).
-          // Photos remain in localforage for offline access.
-          const depositsForFirestore = (debtor.deposits || []).map(dep => {
+        const stripped = debtors.map(d => {
+          const depositsForFirestore = (d.deposits || []).map(dep => {
             const { photo: _photo, ...rest } = dep; // eslint-disable-line no-unused-vars
             return rest;
           });
-          batch.set(debtorRef, {
-            ...debtor,
-            deposits: depositsForFirestore,
-            updatedAt: serverTimestamp()
-          }, { merge: true });
+          return { ...d, deposits: depositsForFirestore };
         });
-        await batch.commit();
+        await this._batchWrite('debtors', stripped, d => d.id.toString());
       } catch (error) {
         console.error('Error syncing debtors to Firebase:', error);
       }
@@ -1267,20 +1247,14 @@ class DataService {
     });
     if (this.isOnline && user) {
       try {
-        const batch = writeBatch(db);
-        creditors.forEach(creditor => {
-          const creditorRef = doc(db, 'creditors', creditor.id.toString());
-          const depositsForFirestore = (creditor.deposits || []).map(dep => {
+        const stripped = creditors.map(c => {
+          const depositsForFirestore = (c.deposits || []).map(dep => {
             const { photo: _photo, ...rest } = dep;
             return rest;
           });
-          batch.set(creditorRef, {
-            ...creditor,
-            deposits: depositsForFirestore,
-            updatedAt: serverTimestamp()
-          }, { merge: true });
+          return { ...c, deposits: depositsForFirestore };
         });
-        await batch.commit();
+        await this._batchWrite('creditors', stripped, c => c.id.toString());
       } catch (error) {
         console.error('Error syncing creditors to Firebase:', error);
       }
@@ -1335,20 +1309,14 @@ class DataService {
     });
     if (this.isOnline && user) {
       try {
-        const batch = writeBatch(db);
-        suppliers.forEach(supplier => {
-          const supplierRef = doc(db, 'suppliers', supplier.id.toString());
-          const depositsForFirestore = (supplier.deposits || []).map(dep => {
+        const stripped = suppliers.map(s => {
+          const depositsForFirestore = (s.deposits || []).map(dep => {
             const { photo: _photo, ...rest } = dep;
             return rest;
           });
-          batch.set(supplierRef, {
-            ...supplier,
-            deposits: depositsForFirestore,
-            updatedAt: serverTimestamp()
-          }, { merge: true });
+          return { ...s, deposits: depositsForFirestore };
         });
-        await batch.commit();
+        await this._batchWrite('suppliers', stripped, s => s.id.toString());
       } catch (error) {
         console.error('Error syncing suppliers to Firebase:', error);
       }
@@ -1385,21 +1353,13 @@ class DataService {
     // Save locally first
     await localforage.setItem(DATA_KEYS.INVENTORY, inventory);
     
-    // Sync to Firebase if online
+    // Sync to Firebase if online (chunked)
     const user = auth.currentUser || await new Promise(resolve => {
       const unsub = onAuthStateChanged(auth, u => { unsub(); resolve(u); });
     });
     if (this.isOnline && user) {
       try {
-        const batch = writeBatch(db);
-        inventory.forEach(item => {
-          const inventoryRef = doc(db, 'inventory', item.itemId.toString());
-          batch.set(inventoryRef, {
-            ...item,
-            updatedAt: serverTimestamp()
-          }, { merge: true });
-        });
-        await batch.commit();
+        await this._batchWrite('inventory', inventory, i => i.itemId.toString());
       } catch (error) {
         console.error('Error syncing inventory to Firebase:', error);
       }
@@ -1473,7 +1433,8 @@ class DataService {
           await setDoc(doc(db, 'sales', item.data.id), {
             ...item.data,
             createdAt: serverTimestamp(),
-            date: serverTimestamp(),
+            // NOTE: Do NOT overwrite date with serverTimestamp() — this preserves
+            // the original sale date for backdated / unrecorded entries.
           }, { merge: true });
           synced++;
         }
@@ -1504,6 +1465,35 @@ class DataService {
           await setDoc(doc(db, 'cash_entries', item.data.id), {
             ...item.data,
             createdAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by addPurchase have { type: 'purchase', data: purchase }
+        if (item.type === 'purchase' && item.data) {
+          await setDoc(doc(db, 'purchases', item.data.id), {
+            ...item.data,
+            createdAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by recordCreditorPayment have { type: 'creditor', data: creditor }
+        if (item.type === 'creditor' && item.data) {
+          const depositsForFirestore = (item.data.deposits || []).map(dep => {
+            const { photo: _p, ...rest } = dep;
+            return rest;
+          });
+          await setDoc(doc(db, 'creditors', item.data.id.toString()), {
+            ...item.data,
+            deposits: depositsForFirestore,
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by addGood offline have { type: 'good', data: newGood }
+        if (item.type === 'good' && item.data) {
+          await setDoc(doc(db, 'goods', item.data.id.toString()), {
+            ...item.data,
+            updatedAt: serverTimestamp(),
           }, { merge: true });
           synced++;
         }
@@ -1587,43 +1577,84 @@ class DataService {
     try {
       console.log('🔄 Starting Firebase sync...');
       
+      // Helper: convert Firestore Timestamp to ISO string
+      const tsToISO = (val) => {
+        if (!val) return val;
+        if (typeof val === 'string') return val;
+        if (val.toDate) return val.toDate().toISOString();
+        return val;
+      };
+      
       // Sync goods
       const goodsSnapshot = await getDocs(collection(db, 'goods'));
-      const goods = goodsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const goods = goodsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       await localforage.setItem(DATA_KEYS.GOODS, goods);
       console.log(`✅ Synced ${goods.length} goods`);
       
       // Sync sales
       const salesSnapshot = await getDocs(collection(db, 'sales'));
-      const sales = salesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate?.() || doc.data().date,
-        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
+      const sales = salesSnapshot.docs.map(d => ({
+        id: d.id, ...d.data(),
+        date: tsToISO(d.data().date),
+        createdAt: tsToISO(d.data().createdAt),
       }));
       await localforage.setItem(DATA_KEYS.SALES, sales);
       console.log(`✅ Synced ${sales.length} sales`);
       
       // Sync debtors
       const debtorsSnapshot = await getDocs(collection(db, 'debtors'));
-      const debtors = debtorsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-        lastPurchase: doc.data().lastPurchase?.toDate?.() || doc.data().lastPurchase
+      const debtors = debtorsSnapshot.docs.map(d => ({
+        id: d.id, ...d.data(),
+        createdAt: tsToISO(d.data().createdAt),
+        lastPurchase: tsToISO(d.data().lastPurchase),
+        lastPayment: tsToISO(d.data().lastPayment),
       }));
       await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
       console.log(`✅ Synced ${debtors.length} debtors`);
+
+      // Sync creditors
+      const creditorsSnapshot = await getDocs(collection(db, 'creditors'));
+      const creditors = creditorsSnapshot.docs.map(d => ({
+        id: d.id, ...d.data(),
+        createdAt: tsToISO(d.data().createdAt),
+        lastPurchase: tsToISO(d.data().lastPurchase),
+        lastPayment: tsToISO(d.data().lastPayment),
+      }));
+      await localforage.setItem(DATA_KEYS.CREDITORS, creditors);
+      console.log(`✅ Synced ${creditors.length} creditors`);
+
+      // Sync suppliers
+      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+      const suppliers = suppliersSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      await localforage.setItem(DATA_KEYS.SUPPLIERS, suppliers);
+      console.log(`✅ Synced ${suppliers.length} suppliers`);
+
+      // Sync purchases
+      const purchasesSnapshot = await getDocs(collection(db, 'purchases'));
+      const purchases = purchasesSnapshot.docs.map(d => ({
+        id: d.id, ...d.data(),
+        date: tsToISO(d.data().date),
+        createdAt: tsToISO(d.data().createdAt),
+      }));
+      await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
+      console.log(`✅ Synced ${purchases.length} purchases`);
+
+      // Sync cash entries
+      const cashSnapshot = await getDocs(collection(db, 'cash_entries'));
+      const cashEntries = cashSnapshot.docs.map(d => ({
+        id: d.id, ...d.data(),
+        date: tsToISO(d.data().date),
+        createdAt: tsToISO(d.data().createdAt),
+      }));
+      await localforage.setItem(DATA_KEYS.CASH_ENTRIES, cashEntries);
+      console.log(`✅ Synced ${cashEntries.length} cash entries`);
       
       return { 
         success: true, 
         synced: {
-          goods: goods.length,
-          sales: sales.length,
-          debtors: debtors.length
+          goods: goods.length, sales: sales.length, debtors: debtors.length,
+          creditors: creditors.length, suppliers: suppliers.length,
+          purchases: purchases.length, cashEntries: cashEntries.length,
         }
       };
     } catch (error) {
@@ -1895,11 +1926,8 @@ class DataService {
         if (stockChanged) {
           await localforage.setItem(DATA_KEYS.GOODS, goods);
           if (this.isOnline && auth.currentUser) {
-            const batch = writeBatch(db);
-            goods.forEach(g => {
-              batch.set(doc(db, 'goods', g.id.toString()), { ...g, updatedAt: serverTimestamp() }, { merge: true });
-            });
-            await batch.commit().catch(e => console.error('Purchase stock sync error:', e));
+            await this._batchWrite('goods', goods, g => g.id.toString())
+              .catch(e => console.error('Purchase stock sync error:', e));
           }
         }
       } catch (stockErr) {
@@ -2143,52 +2171,49 @@ class DataService {
 
     try {
       console.log('⬆️ Pushing local data to Firebase...');
+      const idStr = item => item.id.toString();
       
       // Push goods
       const goods = await localforage.getItem(DATA_KEYS.GOODS) || [];
-      const goodsBatch = writeBatch(db);
-      goods.forEach(good => {
-        const goodRef = doc(db, 'goods', good.id.toString());
-        goodsBatch.set(goodRef, {
-          ...good,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      });
-      await goodsBatch.commit();
+      await this._batchWrite('goods', goods, idStr);
       console.log(`✅ Pushed ${goods.length} goods`);
       
       // Push sales
       const sales = await localforage.getItem(DATA_KEYS.SALES) || [];
-      const salesBatch = writeBatch(db);
-      sales.forEach(sale => {
-        const saleRef = doc(db, 'sales', sale.id.toString());
-        salesBatch.set(saleRef, {
-          ...sale,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      });
-      await salesBatch.commit();
+      await this._batchWrite('sales', sales, idStr);
       console.log(`✅ Pushed ${sales.length} sales`);
       
       // Push debtors
       const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
-      const debtorsBatch = writeBatch(db);
-      debtors.forEach(debtor => {
-        const debtorRef = doc(db, 'debtors', debtor.id.toString());
-        debtorsBatch.set(debtorRef, {
-          ...debtor,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      });
-      await debtorsBatch.commit();
+      await this._batchWrite('debtors', debtors, idStr);
       console.log(`✅ Pushed ${debtors.length} debtors`);
+
+      // Push creditors
+      const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
+      await this._batchWrite('creditors', creditors, idStr);
+      console.log(`✅ Pushed ${creditors.length} creditors`);
+
+      // Push suppliers
+      const suppliers = await localforage.getItem(DATA_KEYS.SUPPLIERS) || [];
+      await this._batchWrite('suppliers', suppliers, idStr);
+      console.log(`✅ Pushed ${suppliers.length} suppliers`);
+
+      // Push purchases
+      const purchases = await localforage.getItem(DATA_KEYS.PURCHASES) || [];
+      await this._batchWrite('purchases', purchases, idStr);
+      console.log(`✅ Pushed ${purchases.length} purchases`);
+
+      // Push cash entries
+      const cashEntries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+      await this._batchWrite('cash_entries', cashEntries, idStr);
+      console.log(`✅ Pushed ${cashEntries.length} cash entries`);
       
       return { 
         success: true, 
         pushed: {
-          goods: goods.length,
-          sales: sales.length,
-          debtors: debtors.length
+          goods: goods.length, sales: sales.length, debtors: debtors.length,
+          creditors: creditors.length, suppliers: suppliers.length,
+          purchases: purchases.length, cashEntries: cashEntries.length,
         }
       };
     } catch (error) {
