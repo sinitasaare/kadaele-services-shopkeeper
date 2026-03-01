@@ -889,8 +889,9 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose }) {
                               {results.map(g => (
                                 <div key={g.id}
                                   onMouseDown={() => {
-                                    updateRow(row.id, 'productName', g.name || '');
-                                    updateRow(row.id, 'productSearch', g.name || '');
+                                    const nameWithSize = g.size ? `${g.name} (${g.size})` : (g.name || '');
+                                    updateRow(row.id, 'productName', nameWithSize);
+                                    updateRow(row.id, 'productSearch', nameWithSize);
                                     updateRow(row.id, 'sellingPrice', String(g.price || g.sellingPrice || ''));
                                     updateRow(row.id, 'showDrop', false);
                                   }}
@@ -1063,6 +1064,7 @@ function CashRecord({ isUnlocked = false }) {
   const [showOthersSubDrop, setShowOthersSubDrop] = useState(false);
   const [advanceOrdersList, setAdvanceOrdersList]  = useState([]);
   const [showCreateAdvanceModal, setShowCreateAdvanceModal] = useState(false);
+  const [selectedAdvanceOrder, setSelectedAdvanceOrder] = useState(null); // stores matched order {name, invoiceRef}
   // Cash In specific
   const [cashInReasonKey, setCashInReasonKey]  = useState('');
   const [showCashInReasonDrop, setShowCashInReasonDrop] = useState(false);
@@ -1074,6 +1076,18 @@ function CashRecord({ isUnlocked = false }) {
   // Operational Expenses modal (supplier purchase from Cash Out)
   const [showExpensesModal, setShowExpensesModal] = useState(false);
   const [expensesResult, setExpensesResult]       = useState(null); // {paymentType, total, invoiceRef, itemsSummary}
+
+  // ── Any dropdown currently open? ──────────────────────────────────────────
+  const anyDropOpen = showNameDrop || showSearchDrop || showOthersSubDrop || showCashInReasonDrop || showBeingForDrop;
+
+  // ── Close all dropdowns when clicking outside any dropdown field ──────────
+  const closeAllDropdowns = () => {
+    setShowNameDrop(false);
+    setShowSearchDrop(false);
+    setShowOthersSubDrop(false);
+    setShowCashInReasonDrop(false);
+    setShowBeingForDrop(false);
+  };
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1173,6 +1187,7 @@ function CashRecord({ isUnlocked = false }) {
     setOtherReasonText(''); setShowOtherReasonInput(false);
     setShowExpensesModal(false); setExpensesResult(null);
     setShowOthersSubDrop(false); setShowCreateAdvanceModal(false);
+    setSelectedAdvanceOrder(null);
   };
   const openAddModal = async () => {
     resetAddModal();
@@ -1196,6 +1211,7 @@ function CashRecord({ isUnlocked = false }) {
     // Reset being-for and expenses when name changes
     setBeingForKey(''); setExpensesResult(null);
     setOtherReasonText(''); setShowOtherReasonInput(false);
+    setSelectedAdvanceOrder(null);
     if (name === 'Others') {
       setIsOthersMode(true);
       setPersonName('');
@@ -1204,6 +1220,16 @@ function CashRecord({ isUnlocked = false }) {
       setIsOthersMode(false);
       setPersonName(name);
       setPersonSearch('');
+      // Auto-set Being For if this name matches an advance order
+      if (newType === TYPE_IN && advanceOrdersList.length > 0) {
+        const match = advanceOrdersList.find(o =>
+          (o.name || o.customerName || '').toLowerCase() === name.toLowerCase()
+        );
+        if (match) {
+          setSelectedAdvanceOrder({ name: match.name || match.customerName, invoiceRef: match.invoiceRef || match.id });
+          setCashInReasonKey('__advance_order__');
+        }
+      }
     }
   };
 
@@ -1288,6 +1314,10 @@ function CashRecord({ isUnlocked = false }) {
   const buildNote = () => {
     const name = getResolvedName();
     if (newType === TYPE_IN) {
+      // Advance order customer
+      if (cashInReasonKey === '__advance_order__' && selectedAdvanceOrder) {
+        return `Advance Order by ${selectedAdvanceOrder.name} (${selectedAdvanceOrder.invoiceRef || '—'}).`;
+      }
       const reasonObj = CASH_IN_REASONS.find(r => r.key === cashInReasonKey);
       const phrase = reasonObj?.phrase || '';
       if (name && phrase) return `From ${name} ${phrase}.`;
@@ -1591,6 +1621,13 @@ function CashRecord({ isUnlocked = false }) {
       {/* ── Add Entry modal ── */}
       {showAddModal && isUnlocked && (
         <div className="cj-modal-overlay">
+          {/* Transparent overlay — blocks all interaction when any dropdown is open */}
+          {anyDropOpen && (
+            <div
+              style={{ position:'fixed', inset:0, zIndex:200 }}
+              onPointerDown={() => closeAllDropdowns()}
+            />
+          )}
           <div className="cj-modal-content">
             <h2 className="cj-modal-title">Add Cash Entry</h2>
 
@@ -1631,7 +1668,7 @@ function CashRecord({ isUnlocked = false }) {
             {newType === TYPE_IN && (
               <>
                 {/* Cash From */}
-                <div className="cj-modal-field" style={{ position:'relative' }}>
+                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
                   <label>Cash From</label>
                   {isOthersMode ? (
                     <>
@@ -1685,8 +1722,14 @@ function CashRecord({ isUnlocked = false }) {
                               const n = o.name || o.customerName || '';
                               return (
                                 <button key={o.id} className="cj-desc-dropdown-item"
-                                  onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
-                                  {n}
+                                  onMouseDown={() => {
+                                    setPersonSearch(n);
+                                    setShowSearchDrop(false);
+                                    // Auto-set Being For to advance order
+                                    setSelectedAdvanceOrder({ name: n, invoiceRef: o.invoiceRef || o.id });
+                                    setCashInReasonKey('__advance_order__');
+                                  }}>
+                                  {n}{o.invoiceRef ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({o.invoiceRef})</span> : null}
                                 </button>
                               );
                             })}
@@ -1781,16 +1824,18 @@ function CashRecord({ isUnlocked = false }) {
                 </div>
 
                 {/* Being For (reason dropdown) */}
-                <div className="cj-modal-field" style={{ position:'relative' }}>
+                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
                   <label>Being For</label>
                   <button
                     className={`cj-desc-trigger${cashInReasonKey ? ' has-value' : ''}`}
                     onClick={() => setShowCashInReasonDrop(o => !o)}
                   >
                     <span className="cj-desc-trigger-text">
-                      {cashInReasonKey
-                        ? CASH_IN_REASONS.find(r => r.key === cashInReasonKey)?.label
-                        : 'Select reason…'}
+                      {cashInReasonKey === '__advance_order__' && selectedAdvanceOrder
+                        ? `Advance Order (${selectedAdvanceOrder.invoiceRef || '—'})`
+                        : cashInReasonKey
+                          ? CASH_IN_REASONS.find(r => r.key === cashInReasonKey)?.label
+                          : 'Select reason…'}
                     </span>
                     <span className="cj-desc-chevron">{showCashInReasonDrop ? '▲' : '▼'}</span>
                   </button>
@@ -1798,7 +1843,7 @@ function CashRecord({ isUnlocked = false }) {
                     <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
                       {CASH_IN_REASONS.map(r => (
                         <button key={r.key} className={`cj-desc-dropdown-item${cashInReasonKey === r.key ? ' selected' : ''}`}
-                          onMouseDown={() => { setCashInReasonKey(r.key); setShowCashInReasonDrop(false); }}>
+                          onMouseDown={() => { setCashInReasonKey(r.key); setShowCashInReasonDrop(false); setSelectedAdvanceOrder(null); }}>
                           {r.label}
                         </button>
                       ))}
@@ -1826,54 +1871,148 @@ function CashRecord({ isUnlocked = false }) {
             {/* ── Cash Out fields ── */}
             {newType === TYPE_OUT && (
               <>
-                {/* Paid To — live supplier search dropdown */}
-                <div className="cj-modal-field" style={{ position:'relative' }}>
+                {/* Paid To — users + Suppliers List + Add Operational Assets */}
+                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
                   <label>Paid To</label>
-                  <input
-                    className="cj-modal-input"
-                    value={personSearch || personName}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setPersonSearch(val);
-                      setPersonName('');
-                      setShowNameDrop(true);
-                      // Reset being-for whenever supplier changes
-                      setBeingForKey(''); setExpensesResult(null);
-                      setOtherReasonText(''); setShowOtherReasonInput(false);
-                    }}
-                    onFocus={() => setShowNameDrop(true)}
-                    onBlur={() => setTimeout(() => setShowNameDrop(false), 200)}
-                    placeholder="Search supplier or type name…"
-                  />
-                  {showNameDrop && (() => {
-                    const q = (personSearch || '').toLowerCase();
-                    const matches = suppliersList.filter(s =>
-                      (s.name || s.customerName || '').toLowerCase().includes(q)
-                    );
-                    return matches.length > 0 ? (
-                      <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                        {matches.map(s => {
-                          const n = s.name || s.customerName;
-                          return (
-                            <button key={s.id} className="cj-desc-dropdown-item"
-                              onMouseDown={() => {
-                                setPersonName(n);
-                                setPersonSearch(n);
-                                setIsOthersMode(false);
-                                setShowNameDrop(false);
+                  {isOthersMode ? (
+                    <>
+                      <input
+                        className="cj-modal-input"
+                        value={personSearch}
+                        onChange={e => {
+                          setPersonSearch(e.target.value);
+                          setShowSearchDrop(true);
+                          setBeingForKey(''); setExpensesResult(null);
+                        }}
+                        onFocus={() => setShowOthersSubDrop(true)}
+                        onBlur={() => setTimeout(() => { setShowSearchDrop(false); setShowOthersSubDrop(false); }, 220)}
+                        placeholder="Search suppliers…"
+                        autoFocus
+                      />
+                      {/* Sub-dropdown when focused and not typing */}
+                      {showOthersSubDrop && !personSearch && (
+                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
+                          <div
+                            className="cj-desc-dropdown-item"
+                            style={{ fontWeight:600, color:'#667eea' }}
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setShowOthersSubDrop(false);
+                              setShowSearchDrop(true);
+                            }}
+                          >
+                            📦 Suppliers List
+                          </div>
+                          <div
+                            className="cj-desc-dropdown-item"
+                            style={{ fontWeight:600, color:'#f59e0b' }}
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setShowOthersSubDrop(false);
+                              // Open operational assets modal directly
+                              const name = personSearch.trim() || personName.trim();
+                              setPersonName(name);
+                              setShowExpensesModal(true);
+                            }}
+                          >
+                            🔧 Add Operational Assets
+                          </div>
+                        </div>
+                      )}
+                      {/* Suppliers search dropdown */}
+                      {showSearchDrop && (() => {
+                        const q = personSearch.toLowerCase();
+                        const matches = q
+                          ? suppliersList.filter(s => (s.name || s.customerName || '').toLowerCase().includes(q))
+                          : suppliersList;
+                        return matches.length > 0 ? (
+                          <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
+                            {matches.map(s => {
+                              const n = s.name || s.customerName || '';
+                              return (
+                                <button key={s.id} className="cj-desc-dropdown-item"
+                                  onMouseDown={() => {
+                                    setPersonSearch(n);
+                                    setPersonName(n);
+                                    setShowSearchDrop(false);
+                                    setBeingForKey(''); setExpensesResult(null);
+                                  }}>
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null;
+                      })()}
+                      <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
+                        onClick={() => { setIsOthersMode(false); setPersonName(''); setPersonSearch(''); setBeingForKey(''); setExpensesResult(null); }}>
+                        ← Back to list
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className={`cj-desc-trigger${personName ? ' has-value' : ''}`}
+                      onClick={() => setShowNameDrop(o => !o)}
+                    >
+                      <span className="cj-desc-trigger-text">{personName || 'Select name…'}</span>
+                      <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
+                    </button>
+                  )}
+                  {showNameDrop && !isOthersMode && (
+                    <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+                      {/* Firebase users */}
+                      {usersList.length > 0
+                        ? usersList.map(u => {
+                            const n = u.fullName || u.username || '';
+                            return (
+                              <button key={u.id} className="cj-desc-dropdown-item" onMouseDown={() => {
+                                setPersonName(n); setPersonSearch('');
+                                setIsOthersMode(false); setShowNameDrop(false);
                                 setBeingForKey(''); setExpensesResult(null);
                               }}>
-                              {n}
-                            </button>
-                          );
-                        })}
+                                {n}
+                                {u.role ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({u.role})</span> : null}
+                              </button>
+                            );
+                          })
+                        : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No users found…</div>
+                      }
+                      {/* Suppliers List */}
+                      <div
+                        className="cj-desc-dropdown-item"
+                        style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setIsOthersMode(true);
+                          setPersonName('');
+                          setPersonSearch('');
+                          setShowNameDrop(false);
+                          setTimeout(() => setShowSearchDrop(true), 50);
+                        }}
+                      >
+                        📦 Suppliers List
                       </div>
-                    ) : null;
-                  })()}
+                      {/* Add Operational Assets */}
+                      <div
+                        className="cj-desc-dropdown-item"
+                        style={{ fontWeight:600, color:'#f59e0b' }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setShowNameDrop(false);
+                          setIsOthersMode(true);
+                          setPersonName('');
+                          setPersonSearch('');
+                          setShowExpensesModal(true);
+                        }}
+                      >
+                        🔧 Add Operational Assets
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Being For */}
-                <div className="cj-modal-field" style={{ position:'relative' }}>
+                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
                   <label>Being For</label>
                   {beingForKey === '__supplier_purchase__' && expensesResult ? (
                     /* Supplier purchase already saved — show ref-based summary */
