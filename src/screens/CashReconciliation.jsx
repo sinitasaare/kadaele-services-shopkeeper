@@ -6,8 +6,7 @@ import './CashReconciliation.css';
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return dataService.currentBusinessDate();
 }
 
 function fmt(amount) {
@@ -28,7 +27,7 @@ function formatTime(iso) {
 
 // ── Detail Modal ─────────────────────────────────────────────────────────────
 
-function SessionBlock({ label, openedBy, openedAt, float, expected, counted, closedBy, closedAt, isLastSession, isDayClosed, onReopen, reopening }) {
+function SessionBlock({ label, openedBy, openedAt, float, expected, counted, closedBy, closedAt, isLastSession, isDayClosed, isReopenable, onReopen, reopening }) {
   return (
     <div className="cr-session-block">
       {label && (
@@ -64,10 +63,15 @@ function SessionBlock({ label, openedBy, openedAt, float, expected, counted, clo
         <span className="cr-summary-label">Closed at</span>
         <span className="cr-summary-value">{closedAt ? formatTime(closedAt) : '—'}</span>
       </div>
-      {isLastSession && isDayClosed && (
+      {isLastSession && isDayClosed && isReopenable && (
         <button className="cr-btn-reopen" onClick={onReopen} disabled={reopening}>
           {reopening ? 'Reopening…' : '🔓 Re-Open Shop'}
         </button>
+      )}
+      {isLastSession && isDayClosed && !isReopenable && (
+        <div className="cr-past-day-notice">
+          📅 This business day has ended and can no longer be re-opened.
+        </div>
       )}
     </div>
   );
@@ -171,6 +175,7 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
   };
 
   const isDayClosed = record.status === 'closed';
+  const isReopenable = dataService.isBusinessDateReopenable(record.business_date);
 
   return (
     <div className="cr-overlay" onClick={onClose}>
@@ -191,6 +196,20 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
           </div>
         </div>
 
+        {/* Unreconciled warning */}
+        {record.unreconciled && (
+          <div className="cr-unreconciled-banner">
+            ⚠️ This day was not formally reconciled. The session was auto-closed when the business day ended.
+          </div>
+        )}
+
+        {/* Past-day open warning (session still open but day has passed) */}
+        {!isDayClosed && !isReopenable && (
+          <div className="cr-unreconciled-banner">
+            ⚠️ This session was never closed and the business day has now ended. It will be auto-closed shortly.
+          </div>
+        )}
+
         {/* Session blocks */}
         {sessions.map((sess, idx) => (
           <SessionBlock
@@ -205,6 +224,7 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
             closedAt={sess.closedAt}
             isLastSession={idx === sessions.length - 1}
             isDayClosed={isDayClosed}
+            isReopenable={isReopenable}
             onReopen={handleReopen}
             reopening={reopening}
           />
@@ -387,6 +407,7 @@ function CashReconciliation({ onStoreStatusChange }) {
     // ── Day is closed ──
     if (todayRecord.status === 'closed') {
       const diff = todayRecord.counted_cash - todayRecord.expected_cash;
+      const isReopenable = dataService.isBusinessDateReopenable(todayRecord.business_date);
 
       const handleReopenToday = async () => {
         if (!window.confirm('Re-open the shop? A new session will start.')) return;
@@ -453,12 +474,18 @@ function CashReconciliation({ onStoreStatusChange }) {
           <div className="cr-closed-msg">
             <span className="cr-closed-icon">\U0001f512</span>
             <span className="cr-closed-title">Day Closed</span>
-            <span className="cr-closed-sub">Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.</span>
+            <span className="cr-closed-sub">
+              {isReopenable
+                ? 'Tap below to re-open the shop for a new session, or view the full breakdown in the Records tab.'
+                : 'This business day has ended. Open a new day when you are ready to start trading again.'}
+            </span>
           </div>
 
-          <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
-            \U0001f513 Re-Open Shop
-          </button>
+          {isReopenable && (
+            <button className="cr-btn cr-btn-reopen" onClick={handleReopenToday}>
+              \U0001f513 Re-Open Shop
+            </button>
+          )}
         </>
       );
     }
