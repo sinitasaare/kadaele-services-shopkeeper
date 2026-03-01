@@ -2121,6 +2121,7 @@ class DataService {
         notifLowStock: true,
         notifDailySales: true,
         openingBalance: null,  // one-time starting cash on hand
+        businessDayCutoff: 0,  // hour (0-23) after which a new business day begins; 0 = midnight (no grace window)
         ...(saved || {}),
       };
     } catch (err) {
@@ -2237,6 +2238,67 @@ class DataService {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
+  // ── Business-day cutoff helpers ───────────────────────────────────────────
+  // Returns the cutoff hour (0-23) from settings synchronously (default 0 = midnight).
+  _getCutoffHour() {
+    const v = parseInt(localStorage.getItem('ks_businessDayCutoff'), 10);
+    return isNaN(v) ? 0 : v;
+  }
+
+  // Returns the business date string for RIGHT NOW, accounting for the cutoff.
+  // If cutoff > 0 and current time is before the cutoff, the business date is
+  // yesterday (the overnight session still belongs to the previous business day).
+  currentBusinessDate() {
+    const cutoff = this._getCutoffHour();
+    const now = new Date();
+    if (cutoff > 0 && now.getHours() < cutoff) {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+    }
+    return this.todayStr();
+  }
+
+  // Returns true if the given business_date is still within its re-openable window.
+  isBusinessDateReopenable(business_date) {
+    return business_date === this.currentBusinessDate();
+  }
+
+  // ── Auto-close stale open sessions ────────────────────────────────────────
+  // Called on app load. Any record still 'open' whose business_date is no longer
+  // the current business date gets auto-closed as unreconciled.
+  async autoCloseStaleOpenSessions() {
+    try {
+      const current = this.currentBusinessDate();
+      const all = await this.getDailyCashRecords();
+      for (const rec of (all || [])) {
+        if (rec.status === 'open' && rec.business_date !== current) {
+          const now = new Date().toISOString();
+          const summary = await this.calculateExpectedCash(rec.business_date);
+          const float   = rec.opening_float || 0;
+          const expected = float + summary.sum_in - summary.sum_out;
+          const docData = {
+            ...rec,
+            status:           'closed',
+            locked:           true,
+            counted_cash:     null,
+            expected_cash:    expected,
+            difference:       null,
+            unreconciled:     true,
+            notes:            'Session auto-closed — not formally reconciled before business day ended.',
+            closed_by_uid:    null,
+            closed_by_name:   'System',
+            closed_at_client: now,
+            updatedAt:        now,
+          };
+          await this._saveDailyCashDoc(docData);
+        }
+      }
+    } catch (e) {
+      console.error('autoCloseStaleOpenSessions error:', e);
+    }
+  }
+
   userName() {
     const u = auth.currentUser;
     if (!u) return 'Unknown';
@@ -2303,7 +2365,7 @@ class DataService {
 
   async openDay({ opening_float }) {
     const user  = auth.currentUser;
-    const today = this.todayStr();
+    const today = this.currentBusinessDate();
     const now   = new Date().toISOString();
     const float = parseFloat(opening_float) || 0;
 
@@ -2337,7 +2399,7 @@ class DataService {
 
   async closeDay({ counted_cash, notes }) {
     const user    = auth.currentUser;
-    const today   = this.todayStr();
+    const today   = this.currentBusinessDate();
     const now     = new Date().toISOString();
     const counted = parseFloat(counted_cash) || 0;
 
