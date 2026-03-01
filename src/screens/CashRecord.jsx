@@ -544,6 +544,469 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
   );
 }
 
+// ── Create New Customer Advanced Order Modal ──────────────────────────────────
+function CreateNewCustomerAdvanceOrderModal({ onSave, onClose }) {
+  const { fmt } = useCurrency();
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState('details');
+
+  // Customer Details tab
+  const [fullName, setFullName]   = useState('');
+  const [gender, setGender]       = useState('');
+  const [phone, setPhone]         = useState('');
+  const [whatsapp, setWhatsapp]   = useState('');
+  const [email, setEmail]         = useState('');
+  const [address, setAddress]     = useState('');
+
+  // Advance Order tab
+  const [invoiceRef, setInvoiceRef] = useState('');
+  const [date, setDate]             = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  // Rows: { id, qty, productName, productSearch, showDrop, dropTop, dropLeft, dropWidth, sellingPrice }
+  const nextId = useRef(2);
+  const [rows, setRows] = useState([{
+    id: 1, qty: '', productName: '', productSearch: '', showDrop: false,
+    dropTop: 0, dropLeft: 0, dropWidth: 180, sellingPrice: '',
+  }]);
+  const [goods, setGoods] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [detailsError, setDetailsError] = useState('');
+
+  useEffect(() => {
+    dataService.getGoods().then(d => setGoods(d || []));
+    const unsub = dataService.onGoodsChange?.(g => setGoods(g || []));
+    return () => unsub?.();
+  }, []);
+
+  const updateRow = (id, field, val) =>
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+
+  const addRow = () => setRows(prev => [...prev, {
+    id: nextId.current++, qty: '', productName: '', productSearch: '',
+    showDrop: false, dropTop: 0, dropLeft: 0, dropWidth: 180, sellingPrice: '',
+  }]);
+
+  const removeRow = id => setRows(prev => prev.filter(r => r.id !== id));
+
+  const descResults = (search) => {
+    if (!search.trim()) return [];
+    const t = search.toLowerCase();
+    const tier1 = [], tier2 = [], tier3 = [];
+    for (const g of goods) {
+      const name = (g.name || '').toLowerCase();
+      const words = name.split(/\s+/);
+      if (words[0]?.startsWith(t)) tier1.push(g);
+      else if (words[1]?.startsWith(t)) tier2.push(g);
+      else if (name.includes(t)) tier3.push(g);
+    }
+    return [...tier1, ...tier2, ...tier3].slice(0, 8);
+  };
+
+  const grandTotal = rows.reduce((sum, r) =>
+    sum + (parseFloat(r.qty) || 0) * (parseFloat(r.sellingPrice) || 0), 0);
+
+  const lastRowComplete = () => {
+    const last = rows[rows.length - 1];
+    return last && last.productName.trim() && parseFloat(last.qty) > 0;
+  };
+
+  const validateDetails = () => {
+    if (!fullName.trim()) return 'Full Name is required.';
+    if (!gender) return 'Gender is required.';
+    if (!phone.trim()) return 'Phone number is required.';
+    if (!whatsapp.trim() && !email.trim()) return 'At least WhatsApp or Email is required.';
+    if (email.trim() && !email.includes('@')) return 'Email must contain "@".';
+    if (!address.trim()) return 'Address is required.';
+    return '';
+  };
+
+  const handleNextToOrder = () => {
+    const err = validateDetails();
+    if (err) { setDetailsError(err); return; }
+    setDetailsError('');
+    setActiveTab('order');
+  };
+
+  const handleSave = async () => {
+    const err = validateDetails();
+    if (err) { setActiveTab('details'); setDetailsError(err); return; }
+    if (!invoiceRef.trim()) { alert('Please enter an Invoice / Ref number.'); return; }
+    if (!date) { alert('Please select a date.'); return; }
+    const validRows = rows.filter(r => r.productName.trim() && parseFloat(r.qty) > 0);
+    if (validRows.length === 0) { alert('Please add at least one product with a quantity.'); return; }
+
+    setSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const orderItems = validRows.map(r => ({
+        name: r.productName.trim(),
+        qty: parseFloat(r.qty) || 0,
+        sellingPrice: parseFloat(r.sellingPrice) || 0,
+        subtotal: (parseFloat(r.qty) || 0) * (parseFloat(r.sellingPrice) || 0),
+      }));
+
+      const newOrder = await dataService.addAdvanceOrder({
+        name: fullName.trim(),
+        customerName: fullName.trim(),
+        gender,
+        phone: phone.trim(),
+        whatsapp: whatsapp.trim(),
+        email: email.trim(),
+        address: address.trim(),
+        invoiceRef: invoiceRef.trim(),
+        orderDate: date,
+        items: orderItems,
+        totalDue: grandTotal,
+        balance: grandTotal,
+        totalPaid: 0,
+        deposits: [],
+        saleIds: [],
+        purchaseIds: [],
+        updatedAt: now,
+      });
+
+      onSave(newOrder);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fieldStyle = {
+    width: '100%', padding: '10px 12px',
+    border: '2px solid var(--border, #e5e7eb)', borderRadius: '8px',
+    fontSize: '14px', background: 'var(--surface, white)',
+    color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+  };
+  const labelStyle = {
+    display: 'block', fontWeight: 600, fontSize: '13px',
+    marginBottom: '6px', color: 'var(--text-primary, #374151)',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px',
+    }}>
+      <div style={{
+        background: 'var(--surface, white)', color: 'var(--text-primary, #111)',
+        borderRadius: '14px', width: '100%', maxWidth: '480px',
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.3)', overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '18px 20px', borderBottom: '1px solid var(--border, #e5e7eb)', flexShrink: 0,
+        }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>🛒 New Customer Advance Order</h2>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary, #6b7280)', padding: '4px', borderRadius: '4px',
+            display: 'flex', alignItems: 'center',
+          }}><X size={20}/></button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{
+          display: 'flex', borderBottom: '1px solid var(--border, #e5e7eb)', flexShrink: 0,
+        }}>
+          {[['details', '👤 Customer Details'], ['order', '📋 Advance Order']].map(([key, lbl]) => (
+            <button key={key}
+              onClick={() => {
+                if (key === 'order') handleNextToOrder();
+                else setActiveTab(key);
+              }}
+              style={{
+                flex: 1, padding: '12px', background: 'none', border: 'none',
+                borderBottom: activeTab === key ? '3px solid #667eea' : '3px solid transparent',
+                fontWeight: activeTab === key ? 700 : 500, fontSize: '13px',
+                color: activeTab === key ? '#667eea' : 'var(--text-secondary, #6b7280)',
+                cursor: 'pointer',
+              }}>{lbl}</button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY: 'auto', padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {/* ── Customer Details Tab ── */}
+          {activeTab === 'details' && (
+            <>
+              {detailsError && (
+                <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#b91c1c' }}>
+                  {detailsError}
+                </div>
+              )}
+              <div>
+                <label style={labelStyle}>Full Name *</label>
+                <input style={fieldStyle} value={fullName} placeholder="Enter full name"
+                  onChange={e => setFullName(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Gender *</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {['Male', 'Female'].map(g => (
+                    <label key={g} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '14px' }}>
+                      <input type="radio" name="cao-gender" checked={gender === g} onChange={() => setGender(g)} />
+                      {g}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Phone *</label>
+                <input style={fieldStyle} type="tel" value={phone} placeholder="Phone number"
+                  onChange={e => setPhone(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>WhatsApp <span style={{ fontWeight: 400, color: '#9ca3af' }}>(at least WhatsApp or Email required)</span></label>
+                <input style={fieldStyle} type="tel" value={whatsapp} placeholder="WhatsApp number"
+                  onChange={e => setWhatsapp(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input style={fieldStyle} type="email" value={email} placeholder="Email address"
+                  onChange={e => setEmail(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Address *</label>
+                <textarea style={{ ...fieldStyle, resize: 'none' }} rows={2} value={address} placeholder="Enter address"
+                  onChange={e => setAddress(e.target.value)} />
+              </div>
+            </>
+          )}
+
+          {/* ── Advance Order Tab ── */}
+          {activeTab === 'order' && (
+            <>
+              {/* Name of Customer (read-only display) */}
+              <div>
+                <label style={labelStyle}>Name of Customer</label>
+                <div style={{ ...fieldStyle, background: 'var(--background, #f9fafb)', color: '#6b7280', border: '2px solid var(--border, #e5e7eb)' }}>
+                  {fullName || <em style={{ color: '#9ca3af' }}>Fill in Customer Details first</em>}
+                </div>
+              </div>
+
+              {/* Invoice / Ref */}
+              <div>
+                <label style={labelStyle}>Invoice / Ref *</label>
+                <input style={fieldStyle} value={invoiceRef} placeholder="Receipt or order reference number…"
+                  onChange={e => setInvoiceRef(e.target.value)} />
+              </div>
+
+              {/* Date */}
+              <div>
+                <label style={labelStyle}>Date *</label>
+                <input type="date" style={fieldStyle} value={date} max={todayStr()}
+                  onChange={e => setDate(e.target.value)} />
+              </div>
+
+              {/* Product rows table */}
+              <div>
+                <label style={labelStyle}>Products Ordered *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {rows.map((row, idx) => {
+                    const results = descResults(row.productSearch);
+                    const subtotal = (parseFloat(row.qty) || 0) * (parseFloat(row.sellingPrice) || 0);
+                    return (
+                      <div key={row.id} style={{
+                        border: '1.5px solid var(--border, #e5e7eb)', borderRadius: '10px',
+                        padding: '12px', background: 'var(--background, #f9fafb)',
+                        display: 'flex', flexDirection: 'column', gap: '10px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#667eea' }}>Item {idx + 1}</span>
+                          {rows.length > 1 && (
+                            <button onClick={() => removeRow(row.id)} style={{
+                              background: '#fee2e2', border: 'none', borderRadius: '6px',
+                              padding: '4px 8px', cursor: 'pointer', color: '#dc2626',
+                              display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px',
+                            }}>
+                              <Trash2 size={12}/> Remove
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Product Name — inventory search */}
+                        <div style={{ position: 'relative' }}>
+                          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>
+                            Product Name *
+                          </label>
+                          <input
+                            style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)', borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)', color: 'var(--text-primary, #111)', boxSizing: 'border-box' }}
+                            value={row.productSearch !== undefined ? row.productSearch : row.productName}
+                            placeholder="Search inventory…"
+                            onChange={e => {
+                              updateRow(row.id, 'productSearch', e.target.value);
+                              updateRow(row.id, 'showDrop', true);
+                            }}
+                            onFocus={e => {
+                              const input = e.target;
+                              updateRow(row.id, 'showDrop', true);
+                              const reposition = () => {
+                                const rect = input.getBoundingClientRect();
+                                updateRow(row.id, 'dropTop', rect.bottom + 2);
+                                updateRow(row.id, 'dropLeft', rect.left);
+                                updateRow(row.id, 'dropWidth', rect.width);
+                              };
+                              setTimeout(reposition, 100);
+                              input._scrollHandler = reposition;
+                              window.addEventListener('scroll', reposition, true);
+                            }}
+                            onBlur={e => {
+                              const input = e.target;
+                              if (input._scrollHandler) {
+                                window.removeEventListener('scroll', input._scrollHandler, true);
+                                input._scrollHandler = null;
+                              }
+                              setTimeout(() => {
+                                setRows(prev => prev.map(r => r.id === row.id
+                                  ? { ...r, showDrop: false, productSearch: r.productName || r.productSearch }
+                                  : r));
+                              }, 180);
+                            }}
+                          />
+                          {row.showDrop && results.length > 0 && (
+                            <div style={{
+                              position: 'fixed', top: row.dropTop, left: row.dropLeft,
+                              width: row.dropWidth, zIndex: 6000,
+                              background: 'var(--surface, white)', border: '1px solid var(--border, #e5e7eb)',
+                              borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                              maxHeight: '160px', overflowY: 'auto',
+                            }}>
+                              {results.map(g => (
+                                <div key={g.id}
+                                  onMouseDown={() => {
+                                    updateRow(row.id, 'productName', g.name || '');
+                                    updateRow(row.id, 'productSearch', g.name || '');
+                                    updateRow(row.id, 'sellingPrice', String(g.price || g.sellingPrice || ''));
+                                    updateRow(row.id, 'showDrop', false);
+                                  }}
+                                  style={{
+                                    padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
+                                    color: 'var(--text-primary, #111)',
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = 'var(--background, #f9fafb)'}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  {g.name}
+                                  {g.size ? <span style={{ color: '#6b7280', fontSize: '0.85em', marginLeft: 4 }}>{g.size}</span> : null}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Qty + Selling Price */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>Quantity *</label>
+                            <input type="number" min="0" step="1"
+                              style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)', borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)', color: 'var(--text-primary, #111)', boxSizing: 'border-box' }}
+                              value={row.qty} placeholder="0"
+                              onChange={e => updateRow(row.id, 'qty', e.target.value)} />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>Selling Price</label>
+                            <input type="number" min="0" step="0.01"
+                              style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)', borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)', color: 'var(--text-primary, #111)', boxSizing: 'border-box' }}
+                              value={row.sellingPrice} placeholder="0.00"
+                              onChange={e => updateRow(row.id, 'sellingPrice', e.target.value)} />
+                          </div>
+                        </div>
+
+                        {/* Subtotal preview */}
+                        {subtotal > 0 && (
+                          <div style={{
+                            padding: '6px 10px', background: '#f0f4ff',
+                            border: '1px solid #c7d2fe', borderRadius: '7px',
+                            fontSize: '12px', color: '#4338ca', fontWeight: 600,
+                          }}>
+                            Subtotal: {fmt(subtotal)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Add another row */}
+                <button
+                  onClick={addRow}
+                  disabled={!lastRowComplete()}
+                  style={{
+                    marginTop: '10px', width: '100%', padding: '10px',
+                    border: '1.5px dashed var(--border, #d1d5db)', borderRadius: '8px',
+                    background: lastRowComplete() ? 'var(--surface, white)' : 'var(--background, #f9fafb)',
+                    color: lastRowComplete() ? '#667eea' : '#9ca3af',
+                    cursor: lastRowComplete() ? 'pointer' : 'not-allowed',
+                    fontSize: '13px', fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  }}
+                >
+                  <Plus size={14}/> Add Another Product
+                </button>
+              </div>
+
+              {/* Grand total */}
+              {grandTotal > 0 && (
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 14px', background: '#f0f4ff',
+                  border: '1.5px solid #c7d2fe', borderRadius: '10px',
+                }}>
+                  <span style={{ fontWeight: 700, fontSize: '14px', color: '#4338ca' }}>Order Total</span>
+                  <span style={{ fontWeight: 800, fontSize: '15px', color: '#3730a3' }}>{fmt(grandTotal)}</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          display: 'flex', gap: '10px', padding: '16px 20px',
+          borderTop: '1px solid var(--border, #e5e7eb)', flexShrink: 0,
+        }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '12px', borderRadius: '8px',
+            border: '1.5px solid var(--border, #e5e7eb)',
+            background: 'var(--surface, white)', color: 'var(--text-primary, #111)',
+            cursor: 'pointer', fontWeight: 600, fontSize: '14px',
+          }}>Cancel</button>
+          {activeTab === 'details' ? (
+            <button onClick={handleNextToOrder} style={{
+              flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+              background: '#667eea', color: 'white',
+              cursor: 'pointer', fontWeight: 700, fontSize: '14px',
+            }}>Next: Advance Order →</button>
+          ) : (
+            <button onClick={handleSave} disabled={saving} style={{
+              flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+              background: saving ? '#9ca3af' : '#f59e0b', color: 'white',
+              cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '14px',
+            }}>
+              {saving ? 'Saving…' : 'Save Advance Order'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Store Closed Banner ────────────────────────────────────────────────────────
 function StoreClosedBanner() {
   return (
@@ -595,6 +1058,10 @@ function CashRecord({ isUnlocked = false }) {
   const [creditorsList, setCreditorsList]      = useState([]);
   const [suppliersList, setSuppliersList]      = useState([]);
   const [refNumber, setRefNumber]              = useState('');
+  // Others-mode sub-dropdown (Advance Orders List vs Create New)
+  const [showOthersSubDrop, setShowOthersSubDrop] = useState(false);
+  const [advanceOrdersList, setAdvanceOrdersList]  = useState([]);
+  const [showCreateAdvanceModal, setShowCreateAdvanceModal] = useState(false);
   // Cash In specific
   const [cashInReasonKey, setCashInReasonKey]  = useState('');
   const [showCashInReasonDrop, setShowCashInReasonDrop] = useState(false);
@@ -704,17 +1171,21 @@ function CashRecord({ isUnlocked = false }) {
     setBeingForKey(''); setShowBeingForDrop(false);
     setOtherReasonText(''); setShowOtherReasonInput(false);
     setShowExpensesModal(false); setExpensesResult(null);
+    setShowOthersSubDrop(false); setShowCreateAdvanceModal(false);
   };
   const openAddModal = async () => {
     resetAddModal();
     setShowAddModal(true);
-    // Pre-load creditors and suppliers for "Others" dropdowns
-    const [creds, supps] = await Promise.all([
+    // Pre-load creditors, suppliers, and advance orders for dropdowns
+    const [creds, supps, advOrders] = await Promise.all([
       dataService.getCreditors(),
       dataService.getSuppliers(),
+      dataService.getAdvanceOrders(),
     ]);
     setCreditorsList(creds || []);
     setSuppliersList(supps || []);
+    setAdvanceOrdersList(advOrders || []);
+  };
   };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
@@ -1181,25 +1652,85 @@ function CashRecord({ isUnlocked = false }) {
                       <input
                         className="cj-modal-input"
                         value={personSearch}
-                        onChange={e => { setPersonSearch(e.target.value); setShowSearchDrop(true); }}
-                        onFocus={() => setShowSearchDrop(true)}
-                        onBlur={() => setTimeout(() => setShowSearchDrop(false), 200)}
-                        placeholder="Search creditors or type name…"
+                        onChange={e => { setPersonSearch(e.target.value); setShowSearchDrop(true); setShowOthersSubDrop(false); }}
+                        onFocus={() => { setShowOthersSubDrop(true); setShowSearchDrop(false); }}
+                        onBlur={() => setTimeout(() => { setShowSearchDrop(false); setShowOthersSubDrop(false); }, 220)}
+                        placeholder="Search creditors or create a new creditor…"
                         autoFocus
                       />
-                      {showSearchDrop && filteredOthersList.length > 0 && (
-                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                          {filteredOthersList.map(c => {
-                            const n = c.name || c.customerName;
-                            return (
-                              <button key={c.id} className="cj-desc-dropdown-item"
-                                onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
-                                {n}
-                              </button>
-                            );
-                          })}
+                      {/* Sub-dropdown: shown when field is focused and not typing */}
+                      {showOthersSubDrop && !personSearch && (
+                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
+                          {/* Option 1: Advance Orders List */}
+                          <div
+                            className="cj-desc-dropdown-item"
+                            style={{ fontWeight: 600, color: '#667eea' }}
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setShowOthersSubDrop(false);
+                              setShowSearchDrop(true);
+                            }}
+                          >
+                            📋 Advance Orders List
+                          </div>
+                          {/* Option 2: Create New */}
+                          <div
+                            className="cj-desc-dropdown-item"
+                            style={{ fontWeight: 600, color: '#f59e0b' }}
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setShowOthersSubDrop(false);
+                              setShowCreateAdvanceModal(true);
+                            }}
+                          >
+                            ➕ Create New Customer Advanced Order
+                          </div>
                         </div>
                       )}
+                      {/* Advance orders search dropdown (after typing or selecting Advance Orders List) */}
+                      {showSearchDrop && (() => {
+                        const q = personSearch.toLowerCase();
+                        const matches = q
+                          ? advanceOrdersList.filter(o => (o.name || o.customerName || '').toLowerCase().includes(q))
+                          : advanceOrdersList;
+                        return matches.length > 0 ? (
+                          <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
+                            {matches.map(o => {
+                              const n = o.name || o.customerName || '';
+                              return (
+                                <button key={o.id} className="cj-desc-dropdown-item"
+                                  onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
+                                  {n}
+                                </button>
+                              );
+                            })}
+                            {/* Also show creditors below advance orders if typing */}
+                            {q && filteredOthersList.filter(c => !(advanceOrdersList.some(o => (o.name||o.customerName||'').toLowerCase() === (c.name||c.customerName||'').toLowerCase()))).map(c => {
+                              const n = c.name || c.customerName;
+                              return (
+                                <button key={c.id} className="cj-desc-dropdown-item"
+                                  onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          q && filteredOthersList.length > 0 ? (
+                            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
+                              {filteredOthersList.map(c => {
+                                const n = c.name || c.customerName;
+                                return (
+                                  <button key={c.id} className="cj-desc-dropdown-item"
+                                    onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
+                                    {n}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null
+                        );
+                      })()}
                       <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
                         onClick={() => { setIsOthersMode(false); setPersonName(''); setPersonSearch(''); }}>
                         ← Back to list
@@ -1406,6 +1937,21 @@ function CashRecord({ isUnlocked = false }) {
           />
         );
       })()}
+
+      {/* ── Create New Customer Advanced Order Modal ── */}
+      {showCreateAdvanceModal && (
+        <CreateNewCustomerAdvanceOrderModal
+          onSave={(newOrder) => {
+            // Put the new customer's name into the Cash From field
+            const name = newOrder.name || newOrder.customerName || '';
+            setPersonSearch(name);
+            setShowCreateAdvanceModal(false);
+            // Also reload advance orders list
+            dataService.getAdvanceOrders().then(orders => setAdvanceOrdersList(orders || []));
+          }}
+          onClose={() => setShowCreateAdvanceModal(false)}
+        />
+      )}
     </div>
   );
 }
