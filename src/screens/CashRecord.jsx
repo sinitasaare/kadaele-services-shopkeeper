@@ -137,7 +137,7 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
   });
   const [rows, setRows] = useState([{
     id: 1, qty: '', description: '', descSearch: '', showDescDrop: false,
-    costPrice: '', packUnit: '', packSize: '',
+    costPrice: '',
   }]);
   const [goods, setGoods]           = useState([]);
   const [invoiceRef, setInvoiceRef] = useState('');
@@ -166,7 +166,7 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
 
   const addRow = () => setRows(prev => [...prev, {
     id: nextId.current++, qty: '', description: '', descSearch: '',
-    showDescDrop: false, costPrice: '', packUnit: '', packSize: '',
+    showDescDrop: false, costPrice: '',
   }]);
   const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
   const updateRow = (id, field, val) =>
@@ -247,10 +247,6 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
         description: r.description.trim(),
         costPrice: parseFloat(r.costPrice) || 0,
         subtotal: (parseFloat(r.qty)||0) * (parseFloat(r.costPrice)||0),
-        packUnit: r.packUnit || '',
-        packSize: r.packSize || '',
-        packDisplay: r.packUnit ? `${r.packUnit}\u00d7${r.packSize||'?'}` : '',
-        stockToAdd: (parseFloat(r.qty)||0) * (parseFloat(r.packUnit)||0),
       }));
 
       await dataService.addPurchase({
@@ -262,6 +258,23 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
         notes: notes.trim(), invoiceRef: invoiceRef.trim(),
         receiptPhoto: receiptPhoto || null,
       });
+
+      // Write each item to Operational Assets
+      const purchaseDateISO = new Date(purchaseDate + 'T12:00:00').toISOString();
+      for (const item of items) {
+        await dataService.addOperationalAsset({
+          name: item.description,
+          qty: item.qty,
+          costPrice: item.costPrice,
+          subtotal: item.subtotal,
+          supplierName,
+          supplierId: supplierId || null,
+          invoiceRef: invoiceRef.trim(),
+          paymentType,
+          date: purchaseDateISO,
+          source: 'purchase',
+        });
+      }
 
       // Build summary for description
       const itemNames = items.map(i => i.description).join(', ');
@@ -328,7 +341,6 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
                   <tr>
                     <th className="pr-ith pr-ith-qty">QTY</th>
                     <th className="pr-ith pr-ith-desc">DESCRIPTION</th>
-                    <th className="pr-ith pr-ith-pack">PACKSIZE</th>
                     <th className="pr-ith pr-ith-cost">COST</th>
                     <th className="pr-ith" style={{width:'24px'}}></th>
                   </tr>
@@ -361,7 +373,6 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
                                   onMouseDown={() => {
                                     updateRow(row.id, 'description', g.name || '');
                                     updateRow(row.id, 'descSearch', g.name || '');
-                                    updateRow(row.id, 'packSize', g.size || '');
                                     updateRow(row.id, 'showDescDrop', false);
                                   }}>
                                   {g.name}{g.size ? <span style={{color:'#6b7280',fontSize:'0.85em',marginLeft:4}}>{g.size}</span> : null}
@@ -377,23 +388,9 @@ function OperationalExpensesModal({ supplierName, supplierId, onSave, onClose })
                             </div>
                           </td>
                         )}
-                        <td className="pr-itd pr-itd-pack">
-                          <div className="pr-pack-pair">
-                            <input type="text" className="pr-it-input pr-it-pack-unit"
-                              placeholder="unit" value={row.packUnit}
-                              disabled={!row.description}
-                              onChange={e => { updateRow(row.id, 'packUnit', e.target.value); setFieldError(null); }} />
-                            <span className="pr-pack-x">&times;</span>
-                            <input type="text" className="pr-it-input pr-it-pack-size"
-                              placeholder="size" value={row.packSize}
-                              disabled={!row.description}
-                              onChange={e => updateRow(row.id, 'packSize', e.target.value)} />
-                          </div>
-                        </td>
                         <td className="pr-itd pr-itd-cost">
                           <input type="number" className="pr-it-input pr-it-cost"
                             placeholder="0.00" min="0" step="0.01" value={row.costPrice}
-                            disabled={!row.description}
                             onChange={e => { updateRow(row.id, 'costPrice', e.target.value); setFieldError(null); }} />
                         </td>
                         <td className="pr-itd pr-itd-del">
