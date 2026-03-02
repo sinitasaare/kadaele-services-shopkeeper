@@ -1059,12 +1059,14 @@ function CashRecord({ isUnlocked = false }) {
   const [creditorsList, setCreditorsList]      = useState([]);
   const [suppliersList, setSuppliersList]      = useState([]);
   const [usersList, setUsersList]              = useState([]);
+  const [landlordInfo, setLandlordInfo]        = useState(null); // { name, monthlyRent }
   const [refNumber, setRefNumber]              = useState('');
   // Others-mode sub-dropdown (Advance Orders List vs Create New)
   const [showOthersSubDrop, setShowOthersSubDrop] = useState(false);
   const [advanceOrdersList, setAdvanceOrdersList]  = useState([]);
   const [showCreateAdvanceModal, setShowCreateAdvanceModal] = useState(false);
   const [selectedAdvanceOrder, setSelectedAdvanceOrder] = useState(null); // stores matched order {name, invoiceRef}
+  const [advanceOrderCardData, setAdvanceOrderCardData] = useState(null); // full advance order record to show in card
   // Cash In specific
   const [cashInReasonKey, setCashInReasonKey]  = useState('');
   const [showCashInReasonDrop, setShowCashInReasonDrop] = useState(false);
@@ -1192,17 +1194,19 @@ function CashRecord({ isUnlocked = false }) {
   const openAddModal = async () => {
     resetAddModal();
     setShowAddModal(true);
-    // Pre-load creditors, suppliers, advance orders, and users for dropdowns
-    const [creds, supps, advOrders, users] = await Promise.all([
+    // Pre-load creditors, suppliers, advance orders, users, and landlord for dropdowns
+    const [creds, supps, advOrders, users, landlord] = await Promise.all([
       dataService.getCreditors(),
       dataService.getSuppliers(),
       dataService.getAdvanceOrders(),
       dataService.getUsers(),
+      dataService.getLandlord(),
     ]);
     setCreditorsList(creds || []);
     setSuppliersList(supps || []);
     setAdvanceOrdersList(advOrders || []);
-    setUsersList(users || []);
+    setUsersList((users || []).filter(u => u.id !== '__landlord__'));
+    setLandlordInfo(landlord || null);
   };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
@@ -1212,6 +1216,7 @@ function CashRecord({ isUnlocked = false }) {
     setBeingForKey(''); setExpensesResult(null);
     setOtherReasonText(''); setShowOtherReasonInput(false);
     setSelectedAdvanceOrder(null);
+    setAdvanceOrderCardData(null);
     if (name === 'Others') {
       setIsOthersMode(true);
       setPersonName('');
@@ -1228,6 +1233,8 @@ function CashRecord({ isUnlocked = false }) {
         if (match) {
           setSelectedAdvanceOrder({ name: match.name || match.customerName, invoiceRef: match.invoiceRef || match.id });
           setCashInReasonKey('__advance_order__');
+          // Show the customer's advance order card
+          setAdvanceOrderCardData(match);
         }
       }
     }
@@ -1789,6 +1796,17 @@ function CashRecord({ isUnlocked = false }) {
                           })
                         : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No users found…</div>
                       }
+                      {/* Landlord */}
+                      {landlordInfo && (
+                        <button
+                          className="cj-desc-dropdown-item"
+                          onMouseDown={() => handleNameSelect(landlordInfo.name || landlordInfo.fullName)}
+                          style={{ color:'#92400e' }}
+                        >
+                          🏠 {landlordInfo.name || landlordInfo.fullName}
+                          <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
+                        </button>
+                      )}
                       {/* Advance Orders List */}
                       <div
                         className="cj-desc-dropdown-item"
@@ -1977,6 +1995,22 @@ function CashRecord({ isUnlocked = false }) {
                           })
                         : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No users found…</div>
                       }
+                      {/* Landlord */}
+                      {landlordInfo && (
+                        <button
+                          className="cj-desc-dropdown-item"
+                          style={{ color:'#92400e' }}
+                          onMouseDown={() => {
+                            const n = landlordInfo.name || landlordInfo.fullName;
+                            setPersonName(n); setPersonSearch('');
+                            setIsOthersMode(false); setShowNameDrop(false);
+                            setBeingForKey(''); setExpensesResult(null);
+                          }}
+                        >
+                          🏠 {landlordInfo.name || landlordInfo.fullName}
+                          <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
+                        </button>
+                      )}
                       {/* Suppliers List */}
                       <div
                         className="cj-desc-dropdown-item"
@@ -2138,6 +2172,98 @@ function CashRecord({ isUnlocked = false }) {
           }}
           onClose={() => setShowCreateAdvanceModal(false)}
         />
+      )}
+
+      {/* ── Advance Order Card — shown when CASH FROM name matches a customer ── */}
+      {advanceOrderCardData && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'400px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 12px 48px rgba(0,0,0,0.3)' }}>
+            {/* Header */}
+            <div style={{ background:'linear-gradient(135deg,#667eea,#764ba2)', color:'white', padding:'16px 20px', borderRadius:'14px 14px 0 0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <div style={{ fontSize:'11px', fontWeight:600, opacity:0.8, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'2px' }}>Advance Order</div>
+                <div style={{ fontSize:'17px', fontWeight:800 }}>{advanceOrderCardData.customerName || advanceOrderCardData.name}</div>
+              </div>
+              <button
+                onClick={() => setAdvanceOrderCardData(null)}
+                style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'white', width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }}
+              >✕</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:'10px' }}>
+              {/* Ref + Date */}
+              <div style={{ display:'flex', gap:'10px' }}>
+                {advanceOrderCardData.invoiceRef && (
+                  <div style={{ flex:1, background:'#f3f4f6', borderRadius:'8px', padding:'10px 12px' }}>
+                    <div style={{ fontSize:'10px', color:'#6b7280', fontWeight:700, textTransform:'uppercase', marginBottom:'2px' }}>Ref</div>
+                    <div style={{ fontSize:'13px', fontWeight:700 }}>{advanceOrderCardData.invoiceRef}</div>
+                  </div>
+                )}
+                {advanceOrderCardData.orderDate && (
+                  <div style={{ flex:1, background:'#f3f4f6', borderRadius:'8px', padding:'10px 12px' }}>
+                    <div style={{ fontSize:'10px', color:'#6b7280', fontWeight:700, textTransform:'uppercase', marginBottom:'2px' }}>Order Date</div>
+                    <div style={{ fontSize:'13px', fontWeight:700 }}>{new Date(advanceOrderCardData.orderDate).toLocaleDateString('en-GB')}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Total Due + Balance */}
+              <div style={{ display:'flex', gap:'10px' }}>
+                <div style={{ flex:1, background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'10px 12px' }}>
+                  <div style={{ fontSize:'10px', color:'#92400e', fontWeight:700, textTransform:'uppercase', marginBottom:'2px' }}>Total Due</div>
+                  <div style={{ fontSize:'15px', fontWeight:800, color:'#92400e' }}>{fmt(advanceOrderCardData.totalDue || 0)}</div>
+                </div>
+                <div style={{ flex:1, background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'8px', padding:'10px 12px' }}>
+                  <div style={{ fontSize:'10px', color:'#991b1b', fontWeight:700, textTransform:'uppercase', marginBottom:'2px' }}>Balance Owed</div>
+                  <div style={{ fontSize:'15px', fontWeight:800, color:'#991b1b' }}>{fmt(advanceOrderCardData.balance || advanceOrderCardData.totalDue || 0)}</div>
+                </div>
+              </div>
+
+              {/* Items table */}
+              {advanceOrderCardData.items && advanceOrderCardData.items.length > 0 && (
+                <div>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'6px' }}>Items Ordered</div>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                    <thead>
+                      <tr style={{ background:'#f3f4f6' }}>
+                        <th style={{ padding:'6px 8px', textAlign:'left', fontSize:'11px', color:'#6b7280', fontWeight:700, textTransform:'uppercase' }}>Product</th>
+                        <th style={{ padding:'6px 8px', textAlign:'center', fontSize:'11px', color:'#6b7280', fontWeight:700, textTransform:'uppercase', width:'50px' }}>Qty</th>
+                        <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#6b7280', fontWeight:700, textTransform:'uppercase', width:'70px' }}>Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {advanceOrderCardData.items.map((item, i) => (
+                        <tr key={i} style={{ borderBottom:'1px solid #f3f4f6' }}>
+                          <td style={{ padding:'6px 8px' }}>{item.name || 'N/A'}</td>
+                          <td style={{ padding:'6px 8px', textAlign:'center' }}>{item.qty || item.quantity || 0}</td>
+                          <td style={{ padding:'6px 8px', textAlign:'right' }}>{fmt(item.sellingPrice || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Phone */}
+              {(advanceOrderCardData.phone || advanceOrderCardData.customerPhone) && (
+                <div style={{ fontSize:'13px', color:'#6b7280' }}>
+                  📞 {advanceOrderCardData.phone || advanceOrderCardData.customerPhone}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding:'12px 20px', borderTop:'1px solid var(--border, #e5e7eb)' }}>
+              <button
+                onClick={() => setAdvanceOrderCardData(null)}
+                style={{ width:'100%', padding:'11px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', fontWeight:700, fontSize:'14px', cursor:'pointer' }}
+              >
+                ✓ Got it — Continue Entry
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
