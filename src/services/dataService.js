@@ -2571,6 +2571,33 @@ class DataService {
     await localforage.setItem(DATA_KEYS.ADVANCE_ORDERS, orders);
   }
 
+  async updateAdvanceOrder(id, updates) {
+    try {
+      const orders = await localforage.getItem(DATA_KEYS.ADVANCE_ORDERS) || [];
+      const idx = orders.findIndex(o => o.id === id);
+      if (idx === -1) throw new Error('Advance order not found');
+      const now = new Date().toISOString();
+      orders[idx] = { ...orders[idx], ...updates, updatedAt: now };
+      await localforage.setItem(DATA_KEYS.ADVANCE_ORDERS, orders);
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'advance_orders', id), {
+            ...orders[idx], updatedAt: serverTimestamp(),
+          }, { merge: true });
+        } catch (err) {
+          console.error('Error syncing advance order update to Firebase:', err);
+          await this.addToSyncQueue({ type: 'advance_order', data: orders[idx] });
+        }
+      } else {
+        await this.addToSyncQueue({ type: 'advance_order', data: orders[idx] });
+      }
+      return orders[idx];
+    } catch (error) {
+      console.error('Error updating advance order:', error);
+      throw error;
+    }
+  }
+
   async addAdvanceOrder(order) {
     try {
       const orders = await localforage.getItem(DATA_KEYS.ADVANCE_ORDERS) || [];
