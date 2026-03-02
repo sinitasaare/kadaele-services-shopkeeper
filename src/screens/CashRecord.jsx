@@ -545,11 +545,17 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
 }
 
 // ── Create New Customer Advanced Order Modal ──────────────────────────────────
-function CreateNewCustomerAdvanceOrderModal({ onSave, onClose }) {
+function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList = [] }) {
   const { fmt } = useCurrency();
 
   // Tabs
   const [activeTab, setActiveTab] = useState('details');
+
+  // Customer search mode: 'search' (default) or 'new'
+  const [customerMode, setCustomerMode] = useState('search');
+  const [customerSearchText, setCustomerSearchText] = useState('');
+  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
+  const [selectedExistingCustomer, setSelectedExistingCustomer] = useState(null);
 
   // Customer Details tab
   const [fullName, setFullName]   = useState('');
@@ -749,10 +755,128 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose }) {
                   {detailsError}
                 </div>
               )}
-              <div>
+              <div style={{ position:'relative' }}>
                 <label style={labelStyle}>Full Name *</label>
-                <input style={fieldStyle} value={fullName} placeholder="Enter full name"
-                  onChange={e => setFullName(e.target.value)} />
+                <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
+                  <div style={{ flex:1, position:'relative' }}>
+                    <input
+                      style={{
+                        ...fieldStyle,
+                        background: customerMode === 'search' && selectedExistingCustomer
+                          ? 'var(--background, #f0fdf4)'
+                          : fieldStyle.background,
+                      }}
+                      value={customerMode === 'search' ? customerSearchText : fullName}
+                      placeholder="Search Customer"
+                      readOnly={customerMode === 'search' && !!selectedExistingCustomer}
+                      onChange={e => {
+                        if (customerMode === 'search') {
+                          setCustomerSearchText(e.target.value);
+                          setShowCustomerDrop(true);
+                          setSelectedExistingCustomer(null);
+                          // Clear prefilled fields when search changes
+                          setFullName(''); setGender(''); setPhone('');
+                          setWhatsapp(''); setEmail(''); setAddress('');
+                        } else {
+                          setFullName(e.target.value);
+                        }
+                      }}
+                      onFocus={() => {
+                        if (customerMode === 'search' && !selectedExistingCustomer) {
+                          setShowCustomerDrop(true);
+                        }
+                      }}
+                      onBlur={() => setTimeout(() => setShowCustomerDrop(false), 220)}
+                    />
+                    {/* Customer search dropdown */}
+                    {showCustomerDrop && customerMode === 'search' && (() => {
+                      const q = customerSearchText.toLowerCase();
+                      const matches = advanceOrdersList.filter(o => {
+                        const n = (o.name || o.customerName || '').toLowerCase();
+                        return !q || n.includes(q);
+                      });
+                      return matches.length > 0 ? (
+                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:500 }}>
+                          {matches.map(o => {
+                            const n = o.name || o.customerName || '';
+                            return (
+                              <button key={o.id} className="cj-desc-dropdown-item"
+                                onMouseDown={() => {
+                                  setCustomerSearchText(n);
+                                  setSelectedExistingCustomer(o);
+                                  setShowCustomerDrop(false);
+                                  // Prefill customer details from the existing order
+                                  setFullName(n);
+                                  setGender(o.gender || '');
+                                  setPhone(o.phone || '');
+                                  setWhatsapp(o.whatsapp || '');
+                                  setEmail(o.email || '');
+                                  setAddress(o.address || '');
+                                }}>
+                                {n}
+                                {o.invoiceRef ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({o.invoiceRef})</span> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        q ? (
+                          <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:500 }}>
+                            <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>
+                              No matching customers found
+                            </div>
+                          </div>
+                        ) : null
+                      );
+                    })()}
+                    {/* Show clear button if existing customer selected */}
+                    {customerMode === 'search' && selectedExistingCustomer && (
+                      <button
+                        onClick={() => {
+                          setSelectedExistingCustomer(null);
+                          setCustomerSearchText('');
+                          setFullName(''); setGender(''); setPhone('');
+                          setWhatsapp(''); setEmail(''); setAddress('');
+                        }}
+                        style={{
+                          position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)',
+                          background:'none', border:'none', cursor:'pointer', color:'#9ca3af',
+                          fontSize:'16px', padding:'2px 4px', lineHeight:1,
+                        }}
+                        title="Clear selection"
+                      >✕</button>
+                    )}
+                  </div>
+                  {/* New Customer button */}
+                  <button
+                    onClick={() => {
+                      if (customerMode === 'search') {
+                        // Switch to new customer mode — unlock fields
+                        setCustomerMode('new');
+                        setSelectedExistingCustomer(null);
+                        setCustomerSearchText('');
+                        setShowCustomerDrop(false);
+                        setFullName(''); setGender(''); setPhone('');
+                        setWhatsapp(''); setEmail(''); setAddress('');
+                      } else {
+                        // Switch back to search mode
+                        setCustomerMode('search');
+                        setFullName(''); setGender(''); setPhone('');
+                        setWhatsapp(''); setEmail(''); setAddress('');
+                        setCustomerSearchText('');
+                      }
+                    }}
+                    style={{
+                      padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600,
+                      border: customerMode === 'new' ? '2px solid #667eea' : '2px solid var(--border, #e5e7eb)',
+                      background: customerMode === 'new' ? '#eef2ff' : 'var(--surface, white)',
+                      color: customerMode === 'new' ? '#667eea' : 'var(--text-secondary, #6b7280)',
+                      cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+                    }}
+                  >
+                    {customerMode === 'new' ? '🔍 Search' : '+ New Customer'}
+                  </button>
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Gender *</label>
@@ -1323,7 +1447,7 @@ function CashRecord({ isUnlocked = false }) {
     if (newType === TYPE_IN) {
       // Advance order customer
       if (cashInReasonKey === '__advance_order__' && selectedAdvanceOrder) {
-        return `Advance Order by ${selectedAdvanceOrder.name} (${selectedAdvanceOrder.invoiceRef || '—'}).`;
+        return `Advance Order ref: ${selectedAdvanceOrder.invoiceRef || '—'} by ${selectedAdvanceOrder.name}.`;
       }
       const reasonObj = CASH_IN_REASONS.find(r => r.key === cashInReasonKey);
       const phrase = reasonObj?.phrase || '';
@@ -1677,113 +1801,16 @@ function CashRecord({ isUnlocked = false }) {
                 {/* Cash From */}
                 <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
                   <label>Cash From</label>
-                  {isOthersMode ? (
-                    <>
-                      <input
-                        className="cj-modal-input"
-                        value={personSearch}
-                        onChange={e => { setPersonSearch(e.target.value); setShowSearchDrop(true); setShowOthersSubDrop(false); }}
-                        onFocus={() => { setShowOthersSubDrop(true); setShowSearchDrop(false); }}
-                        onBlur={() => setTimeout(() => { setShowSearchDrop(false); setShowOthersSubDrop(false); }, 220)}
-                        placeholder="Search creditors or create a new creditor…"
-                        autoFocus
-                      />
-                      {/* Sub-dropdown: shown when field is focused and not typing */}
-                      {showOthersSubDrop && !personSearch && (
-                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
-                          {/* Option 1: Advance Orders List */}
-                          <div
-                            className="cj-desc-dropdown-item"
-                            style={{ fontWeight: 600, color: '#667eea' }}
-                            onMouseDown={e => {
-                              e.preventDefault();
-                              setShowOthersSubDrop(false);
-                              setShowSearchDrop(true);
-                            }}
-                          >
-                            📋 Advance Orders List
-                          </div>
-                          {/* Option 2: Create New */}
-                          <div
-                            className="cj-desc-dropdown-item"
-                            style={{ fontWeight: 600, color: '#f59e0b' }}
-                            onMouseDown={e => {
-                              e.preventDefault();
-                              setShowOthersSubDrop(false);
-                              setShowCreateAdvanceModal(true);
-                            }}
-                          >
-                            ➕ Create New Customer Advanced Order
-                          </div>
-                        </div>
-                      )}
-                      {/* Advance orders search dropdown (after typing or selecting Advance Orders List) */}
-                      {showSearchDrop && (() => {
-                        const q = personSearch.toLowerCase();
-                        const matches = q
-                          ? advanceOrdersList.filter(o => (o.name || o.customerName || '').toLowerCase().includes(q))
-                          : advanceOrdersList;
-                        return matches.length > 0 ? (
-                          <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
-                            {matches.map(o => {
-                              const n = o.name || o.customerName || '';
-                              return (
-                                <button key={o.id} className="cj-desc-dropdown-item"
-                                  onMouseDown={() => {
-                                    setPersonSearch(n);
-                                    setShowSearchDrop(false);
-                                    // Auto-set Being For to advance order
-                                    setSelectedAdvanceOrder({ name: n, invoiceRef: o.invoiceRef || o.id });
-                                    setCashInReasonKey('__advance_order__');
-                                  }}>
-                                  {n}{o.invoiceRef ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({o.invoiceRef})</span> : null}
-                                </button>
-                              );
-                            })}
-                            {/* Also show creditors below advance orders if typing */}
-                            {q && filteredOthersList.filter(c => !(advanceOrdersList.some(o => (o.name||o.customerName||'').toLowerCase() === (c.name||c.customerName||'').toLowerCase()))).map(c => {
-                              const n = c.name || c.customerName;
-                              return (
-                                <button key={c.id} className="cj-desc-dropdown-item"
-                                  onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
-                                  {n}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          q && filteredOthersList.length > 0 ? (
-                            <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
-                              {filteredOthersList.map(c => {
-                                const n = c.name || c.customerName;
-                                return (
-                                  <button key={c.id} className="cj-desc-dropdown-item"
-                                    onMouseDown={() => { setPersonSearch(n); setShowSearchDrop(false); }}>
-                                    {n}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : null
-                        );
-                      })()}
-                      <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
-                        onClick={() => { setIsOthersMode(false); setPersonName(''); setPersonSearch(''); }}>
-                        ← Back to list
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      className={`cj-desc-trigger${personName ? ' has-value' : ''}`}
-                      onClick={() => setShowNameDrop(o => !o)}
-                    >
-                      <span className="cj-desc-trigger-text">{personName || 'Select name…'}</span>
-                      <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
-                    </button>
-                  )}
-                  {showNameDrop && !isOthersMode && (
+                  <button
+                    className={`cj-desc-trigger${personName ? ' has-value' : ''}`}
+                    onClick={() => setShowNameDrop(o => !o)}
+                  >
+                    <span className="cj-desc-trigger-text">{personName || 'Select name…'}</span>
+                    <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
+                  </button>
+                  {showNameDrop && (
                     <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {/* Firebase users */}
+                      {/* Staff (Firebase users) */}
                       {usersList.length > 0
                         ? usersList.map(u => {
                             const n = u.fullName || u.username || '';
@@ -1794,7 +1821,7 @@ function CashRecord({ isUnlocked = false }) {
                               </button>
                             );
                           })
-                        : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No users found…</div>
+                        : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No staff found…</div>
                       }
                       {/* Landlord */}
                       {landlordInfo && (
@@ -1807,35 +1834,17 @@ function CashRecord({ isUnlocked = false }) {
                           <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
                         </button>
                       )}
-                      {/* Advance Orders List */}
+                      {/* Customer — opens New Customer Advance Order modal */}
                       <div
                         className="cj-desc-dropdown-item"
                         style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
                         onMouseDown={e => {
                           e.preventDefault();
-                          setIsOthersMode(true);
-                          setPersonName('');
-                          setPersonSearch('');
                           setShowNameDrop(false);
-                          setTimeout(() => setShowSearchDrop(true), 50);
-                        }}
-                      >
-                        📋 Advance Orders List
-                      </div>
-                      {/* Create New Advance Order */}
-                      <div
-                        className="cj-desc-dropdown-item"
-                        style={{ fontWeight:600, color:'#f59e0b' }}
-                        onMouseDown={e => {
-                          e.preventDefault();
-                          setShowNameDrop(false);
-                          setIsOthersMode(true);
-                          setPersonName('');
-                          setPersonSearch('');
                           setShowCreateAdvanceModal(true);
                         }}
                       >
-                        ➕ Create New Customer Advanced Order
+                        👤 Customer
                       </div>
                     </div>
                   )}
@@ -1850,7 +1859,7 @@ function CashRecord({ isUnlocked = false }) {
                   >
                     <span className="cj-desc-trigger-text">
                       {cashInReasonKey === '__advance_order__' && selectedAdvanceOrder
-                        ? `Advance Order (${selectedAdvanceOrder.invoiceRef || '—'})`
+                        ? `Advance Order ref: ${selectedAdvanceOrder.invoiceRef || '—'}`
                         : cashInReasonKey
                           ? CASH_IN_REASONS.find(r => r.key === cashInReasonKey)?.label
                           : 'Select reason…'}
@@ -2162,12 +2171,22 @@ function CashRecord({ isUnlocked = false }) {
       {/* ── Create New Customer Advanced Order Modal ── */}
       {showCreateAdvanceModal && (
         <CreateNewCustomerAdvanceOrderModal
+          advanceOrdersList={advanceOrdersList}
           onSave={(newOrder) => {
-            // Put the new customer's name into the Cash From field
             const name = newOrder.name || newOrder.customerName || '';
-            setPersonSearch(name);
+            const ref = newOrder.invoiceRef || '';
+            const total = newOrder.totalDue || 0;
+            // Set Cash From to the customer name
+            setPersonName(name);
+            setPersonSearch('');
+            setIsOthersMode(false);
+            // Set Being For to advance order reference
+            setSelectedAdvanceOrder({ name, invoiceRef: ref });
+            setCashInReasonKey('__advance_order__');
+            // Set Amount to total value of goods ordered
+            setNewAmount(String(total));
             setShowCreateAdvanceModal(false);
-            // Also reload advance orders list
+            // Reload advance orders list
             dataService.getAdvanceOrders().then(orders => setAdvanceOrdersList(orders || []));
           }}
           onClose={() => setShowCreateAdvanceModal(false)}
