@@ -2648,6 +2648,18 @@ class DataService {
     return await localforage.getItem('kadaele_users') || [];
   }
 
+  // ── Landlord — reads from the same 'kadaele_users' forage key ────────────
+  // Returns the landlord record (id === '__landlord__') if it exists.
+  async getLandlord() {
+    try {
+      const users = await localforage.getItem('kadaele_users') || [];
+      return users.find(u => u.id === '__landlord__') || null;
+    } catch (err) {
+      console.error('Error fetching landlord from forage:', err);
+      return null;
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════════
 
 }
