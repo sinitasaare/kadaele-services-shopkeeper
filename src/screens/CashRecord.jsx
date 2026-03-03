@@ -23,16 +23,17 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
   const [note, setNote] = useState(entry.note || '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { showError } = useValidation();
 
   const handleSave = async () => {
     const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) { alert('Please enter a valid amount.'); return; }
-    if (!note.trim()) { alert('Please enter a description.'); return; }
+    if (isNaN(parsedAmount) || parsedAmount <= 0) { showError('editAmount', 'Enter the Amount'); return; }
+    if (!note.trim()) { showError('editNote', 'Enter the Description'); return; }
     setSaving(true);
     try {
       await dataService.updateCashEntry(entry.id, { type, amount: parsedAmount, note: note.trim() });
       onSave();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError('editNote', e.message); }
     finally { setSaving(false); }
   };
 
@@ -42,7 +43,7 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
     try {
       await dataService.deleteCashEntry(entry.id);
       onDeleted();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError('editNote', e.message); }
     finally { setDeleting(false); }
   };
 
@@ -128,8 +129,9 @@ function getSupplierRecord(name, suppliersList) {
 // Mirrors the Admin app's AssetFormModal exactly, but supports multiple items
 // per submission and pre-populates supplierName from the selected PAID TO name.
 // Each item saved is written individually to the operational_assets collection.
-function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList, onSave, onClose }) {
+function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList, onSave, onClose, onNewSupplier }) {
   const { fmt } = useCurrency();
+  const { fieldErrors, showError, clearFieldError } = useValidation();
 
   const todayStr = () => {
     const d = new Date();
@@ -187,22 +189,21 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
 
   const handleSave = async () => {
     const supplierName = supplierSearch.trim();
-    if (!supplierName) { alert('Please enter or select a supplier name.'); return; }
-    if (!invoiceRef.trim()) { alert('Please enter a Ref / invoice number.'); return; }
-    if (!date) { alert('Please select a date.'); return; }
+    if (!supplierName) return showError('oa_supplier', 'Enter the Supplier Name');
+    if (!invoiceRef.trim()) return showError('oa_ref', 'Enter the Invoice / Ref');
+    if (!date) return showError('oa_date', 'Enter the Date');
 
     const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty) > 0);
-    if (validItems.length === 0) { alert('Please add at least one item with a name and quantity.'); return; }
+    if (validItems.length === 0) return showError('oa_items', 'Add at least one item');
 
     for (const it of validItems) {
-      if (!it.name.trim()) { alert('All items must have a name.'); return; }
-      if (!(parseFloat(it.qty) > 0)) { alert('All items must have a quantity greater than 0.'); return; }
-      if (parseFloat(it.costPrice) < 0) { alert('Cost price cannot be negative.'); return; }
+      if (!it.name.trim()) return showError('oa_items', 'All items must have a name');
+      if (!(parseFloat(it.qty) > 0)) return showError('oa_items', 'Quantity must be greater than 0');
+      if (parseFloat(it.costPrice) < 0) return showError('oa_items', 'Cost price cannot be negative');
     }
 
     if (paymentType === 'cash' && cashBalance !== null && grandTotal > cashBalance) {
-      alert(`Total (${fmt(grandTotal)}) exceeds your current Cash Balance (${fmt(cashBalance)}). Reduce amount or switch to Credit.`);
-      return;
+      return showError('oa_items', `Total exceeds Cash Balance. Reduce amount or switch to Credit.`);
     }
 
     setSaving(true);
@@ -242,7 +243,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
       });
     } catch (e) {
       console.error(e);
-      alert('Failed to save. Please try again.');
+      showError('oa_items', 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -277,53 +278,68 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
         {/* Body */}
         <div style={{ overflowY: 'auto', padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {/* Supplier Name with dropdown */}
+          {/* Supplier Name with dropdown + New Supplier button */}
           <div style={{ position: 'relative' }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary, #374151)' }}>
               Supplier Name *
             </label>
-            <input
-              style={{
-                width: '100%', padding: '10px 12px', border: '2px solid var(--border, #e5e7eb)',
-                borderRadius: '8px', fontSize: '14px', background: 'var(--surface, white)',
-                color: 'var(--text-primary, #111)', boxSizing: 'border-box',
-              }}
-              value={supplierSearch}
-              placeholder="Search or type supplier name…"
-              onChange={e => {
-                setSupplierSearch(e.target.value);
-                setShowSupplierDrop(true);
-                setResolvedSupplierId(null);
-              }}
-              onFocus={() => setShowSupplierDrop(true)}
-              onBlur={() => setTimeout(() => setShowSupplierDrop(false), 180)}
-            />
-            {showSupplierDrop && filteredSuppliers.length > 0 && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 500,
-                background: 'var(--surface, white)', border: '1px solid var(--border, #e5e7eb)',
-                borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                maxHeight: '160px', overflowY: 'auto',
-              }}>
-                {filteredSuppliers.map(s => {
-                  const n = s.name || s.customerName || '';
-                  return (
-                    <button key={s.id}
-                      onMouseDown={() => {
-                        setSupplierSearch(n);
-                        setResolvedSupplierId(s.id);
-                        setShowSupplierDrop(false);
-                      }}
-                      style={{
-                        display: 'block', width: '100%', textAlign: 'left',
-                        padding: '10px 14px', background: 'none', border: 'none',
-                        cursor: 'pointer', fontSize: '14px', color: 'var(--text-primary, #111)',
-                      }}
-                    >{n}</button>
-                  );
-                })}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input
+                  data-field="oa_supplier"
+                  style={{
+                    width: '100%', padding: '10px 12px', border: '2px solid var(--border, #e5e7eb)',
+                    borderRadius: '8px', fontSize: '14px', background: 'var(--surface, white)',
+                    color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+                    ...errorBorder('oa_supplier', fieldErrors),
+                  }}
+                  value={supplierSearch}
+                  placeholder="Search existing suppliers"
+                  onChange={e => {
+                    setSupplierSearch(e.target.value);
+                    setShowSupplierDrop(true);
+                    setResolvedSupplierId(null);
+                    clearFieldError('oa_supplier');
+                  }}
+                  onFocus={() => setShowSupplierDrop(true)}
+                  onBlur={() => setTimeout(() => setShowSupplierDrop(false), 180)}
+                />
+                {showSupplierDrop && filteredSuppliers.length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 500,
+                    background: 'var(--surface, white)', border: '1px solid var(--border, #e5e7eb)',
+                    borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                    maxHeight: '160px', overflowY: 'auto',
+                  }}>
+                    {filteredSuppliers.map(s => {
+                      const n = s.name || s.customerName || '';
+                      return (
+                        <button key={s.id}
+                          onMouseDown={() => {
+                            setSupplierSearch(n);
+                            setResolvedSupplierId(s.id);
+                            setShowSupplierDrop(false);
+                          }}
+                          style={{
+                            display: 'block', width: '100%', textAlign: 'left',
+                            padding: '10px 14px', background: 'none', border: 'none',
+                            cursor: 'pointer', fontSize: '14px', color: 'var(--text-primary, #111)',
+                          }}
+                        >{n}</button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+              {onNewSupplier && (
+                <button onClick={onNewSupplier} style={{
+                  padding: '10px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                  border: '2px solid #667eea', background: '#eef2ff', color: '#667eea',
+                  cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                }}>+ New Supplier</button>
+              )}
+            </div>
+            <ValidationNote field="oa_supplier" errors={fieldErrors} />
           </div>
 
           {/* Payment Type */}
@@ -547,6 +563,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
 // ── Create New Customer Advanced Order Modal ──────────────────────────────────
 function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList = [] }) {
   const { fmt } = useCurrency();
+  const { fieldErrors, showError, clearFieldError } = useValidation();
 
   // Tabs
   const [activeTab, setActiveTab] = useState('details');
@@ -644,10 +661,10 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
   const handleSave = async () => {
     const err = validateDetails();
     if (err) { setActiveTab('details'); setDetailsError(err); return; }
-    if (!invoiceRef.trim()) { alert('Please enter an Invoice / Ref number.'); return; }
-    if (!date) { alert('Please select a date.'); return; }
+    if (!invoiceRef.trim()) return showError('ao_invoiceRef', 'Enter the Invoice / Ref number');
+    if (!date) return showError('ao_date', 'Enter the Date');
     const validRows = rows.filter(r => r.productName.trim() && parseFloat(r.qty) > 0);
-    if (validRows.length === 0) { alert('Please add at least one product with a quantity.'); return; }
+    if (validRows.length === 0) return showError('ao_items', 'Add at least one product with a quantity');
 
     setSaving(true);
     try {
@@ -682,7 +699,7 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
       onSave(newOrder);
     } catch (e) {
       console.error(e);
-      alert('Failed to save. Please try again.');
+      showError('ao_items', 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -1148,9 +1165,196 @@ function StoreClosedBanner() {
   );
 }
 
+// ── New Supplier Modal ────────────────────────────────────────────────────────
+function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
+  const { fmt } = useCurrency();
+  const { fieldErrors, showError, clearFieldError } = useValidation();
+  const [activeTab, setActiveTab] = useState('details');
+  const [supplierMode, setSupplierMode] = useState('search');
+  const [supplierSearchText, setSupplierSearchText] = useState('');
+  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
+  const [selectedExistingSupplier, setSelectedExistingSupplier] = useState(null);
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [detailsError, setDetailsError] = useState('');
+  const [paymentType, setPaymentType] = useState('cash');
+  const [invoiceRef, setInvoiceRef] = useState('');
+  const [date, setDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const nextId = useRef(2);
+  const [items, setItems] = useState([{ id: 1, name: '', qty: '', costPrice: '' }]);
+  const [saving, setSaving] = useState(false);
+
+  const updateItem = (id, field, val) => setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: val } : it));
+  const addItem = () => setItems(prev => [...prev, { id: nextId.current++, name: '', qty: '', costPrice: '' }]);
+  const removeItem = id => setItems(prev => prev.filter(it => it.id !== id));
+  const grandTotal = items.reduce((sum, it) => sum + (parseFloat(it.qty) || 0) * (parseFloat(it.costPrice) || 0), 0);
+  const lastItemComplete = () => { const last = items[items.length - 1]; return last && last.name.trim() && parseFloat(last.qty) > 0; };
+
+  const validateDetails = () => {
+    if (!fullName.trim()) { showError('ns_fullName', 'Enter the Supplier Name'); return 'Supplier Name is required.'; }
+    if (!phone.trim()) { showError('ns_phone', 'Enter the Phone'); return 'Phone is required.'; }
+    if (!whatsapp.trim() && !email.trim()) return 'At least WhatsApp or Email is required.';
+    if (email.trim() && !email.includes('@')) return 'Email must contain "@".';
+    if (!address.trim()) { showError('ns_address', 'Enter the Address'); return 'Address is required.'; }
+    return '';
+  };
+  const handleNextToPurchase = () => { const err = validateDetails(); if (err) { setDetailsError(err); return; } setDetailsError(''); setActiveTab('purchase'); };
+
+  const handleSave = async () => {
+    const err = validateDetails();
+    if (err) { setActiveTab('details'); setDetailsError(err); return; }
+    if (!invoiceRef.trim()) return showError('ns_invoiceRef', 'Enter the Invoice / Ref');
+    if (!date) return showError('ns_date', 'Enter the Date');
+    const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty) > 0);
+    if (validItems.length === 0) return showError('ns_items', 'Add at least one item');
+    setSaving(true);
+    try {
+      const dateISO = new Date(date + 'T12:00:00').toISOString();
+      const supplierName = fullName.trim();
+      let supplierId = selectedExistingSupplier?.id || null;
+      if (!supplierId) {
+        const supplierData = {
+          id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+          customerName: supplierName, name: supplierName,
+          phone: phone.trim(), customerPhone: phone.trim(), gender: '',
+          whatsapp: whatsapp.trim(), email: email.trim(), address: address.trim(),
+          totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null,
+        };
+        const current = await dataService.getSuppliers() || [];
+        current.push(supplierData);
+        await dataService.setSuppliers(current);
+        supplierId = supplierData.id;
+      }
+      const savedItems = [];
+      for (const it of validItems) {
+        const qty = parseFloat(it.qty) || 0, costPrice = parseFloat(it.costPrice) || 0, subtotal = qty * costPrice;
+        await dataService.addOperationalAsset({ name: it.name.trim(), qty, costPrice, subtotal, supplierName, supplierId, invoiceRef: invoiceRef.trim(), paymentType, date: dateISO, source: 'purchase' });
+        savedItems.push({ name: it.name.trim(), qty, costPrice, subtotal });
+      }
+      onSave({ supplierName, supplierId, paymentType, total: grandTotal, invoiceRef: invoiceRef.trim(), itemsSummary: savedItems.map(i => i.name).join(', '), items: savedItems });
+    } catch (e) { console.error(e); showError('ns_items', 'Failed to save. Please try again.'); }
+    finally { setSaving(false); }
+  };
+
+  const fs = { width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' };
+  const ls = { display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:5500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'480px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 12px 48px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>📦 {selectedExistingSupplier ? `${(selectedExistingSupplier.name || selectedExistingSupplier.customerName)}'s Purchase` : 'New Supplier'}</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary, #6b7280)', padding:'4px', borderRadius:'4px', display:'flex', alignItems:'center' }}><X size={20}/></button>
+        </div>
+        {/* Tabs */}
+        <div style={{ display:'flex', borderBottom:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
+          {[['details','📦 Supplier Details'],['purchase','📋 Purchase History']].map(([key, lbl]) => (
+            <button key={key} onClick={() => { if (key === 'purchase') handleNextToPurchase(); else setActiveTab(key); }}
+              style={{ flex:1, padding:'12px', background:'none', border:'none', borderBottom: activeTab === key ? '3px solid #667eea' : '3px solid transparent', fontWeight: activeTab === key ? 700 : 500, fontSize:'13px', color: activeTab === key ? '#667eea' : 'var(--text-secondary, #6b7280)', cursor:'pointer' }}>{lbl}</button>
+          ))}
+        </div>
+        {/* Body */}
+        <div style={{ overflowY:'auto', padding:'20px', flex:1, display:'flex', flexDirection:'column', gap:'14px' }}>
+          {activeTab === 'details' && (<>
+            {detailsError && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'8px', padding:'10px 12px', fontSize:'13px', color:'#b91c1c' }}>{detailsError}</div>}
+            <div style={{ position:'relative' }}>
+              <label style={ls}>Supplier Name *</label>
+              <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
+                <div style={{ flex:1, position:'relative' }}>
+                  <input data-field="ns_fullName" style={{ ...fs, ...errorBorder('ns_fullName', fieldErrors), background: supplierMode === 'search' && selectedExistingSupplier ? 'var(--background, #f0fdf4)' : fs.background }}
+                    value={supplierMode === 'search' ? supplierSearchText : fullName} placeholder="Search Suppliers"
+                    readOnly={supplierMode === 'search' && !!selectedExistingSupplier}
+                    onChange={e => { if (supplierMode === 'search') { setSupplierSearchText(e.target.value); setShowSupplierDrop(true); setSelectedExistingSupplier(null); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); } else { setFullName(e.target.value); } clearFieldError('ns_fullName'); }}
+                    onFocus={() => { if (supplierMode === 'search' && !selectedExistingSupplier) setShowSupplierDrop(true); }}
+                    onBlur={() => setTimeout(() => setShowSupplierDrop(false), 220)} />
+                  {showSupplierDrop && supplierMode === 'search' && (() => {
+                    const q = supplierSearchText.toLowerCase();
+                    const matches = suppliersList.filter(s => !q || (s.name || s.customerName || '').toLowerCase().includes(q));
+                    return matches.length > 0 ? (
+                      <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:500 }}>
+                        {matches.map(s => { const n = s.name || s.customerName || ''; return (
+                          <button key={s.id} className="cj-desc-dropdown-item" onMouseDown={() => { setSupplierSearchText(n); setSelectedExistingSupplier(s); setShowSupplierDrop(false); setFullName(n); setPhone(s.phone || ''); setWhatsapp(s.whatsapp || ''); setEmail(s.email || ''); setAddress(s.address || ''); }}>{n}</button>
+                        ); })}
+                      </div>
+                    ) : null;
+                  })()}
+                  {supplierMode === 'search' && selectedExistingSupplier && (
+                    <button onClick={() => { setSelectedExistingSupplier(null); setSupplierSearchText(''); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); }}
+                      style={{ position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9ca3af', fontSize:'16px', padding:'2px 4px', lineHeight:1 }} title="Clear">✕</button>
+                  )}
+                </div>
+                <button onClick={() => { if (supplierMode === 'search') { setSupplierMode('new'); setSelectedExistingSupplier(null); setSupplierSearchText(''); setShowSupplierDrop(false); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); } else { setSupplierMode('search'); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); setSupplierSearchText(''); } }}
+                  style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border: supplierMode === 'new' ? '2px solid #16a34a' : '2px solid #667eea', background: supplierMode === 'new' ? '#f0fdf4' : '#eef2ff', color: supplierMode === 'new' ? '#16a34a' : '#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+                  {supplierMode === 'new' ? '🔍 Search' : '+ New'}
+                </button>
+              </div>
+              <ValidationNote field="ns_fullName" errors={fieldErrors} />
+            </div>
+            <div><label style={ls}>Phone *</label><input data-field="ns_phone" style={{ ...fs, ...errorBorder('ns_phone', fieldErrors) }} value={phone} placeholder="Phone number" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => { setPhone(e.target.value); clearFieldError('ns_phone'); }} /><ValidationNote field="ns_phone" errors={fieldErrors} /></div>
+            <div><label style={ls}>WhatsApp</label><input style={fs} value={whatsapp} placeholder="WhatsApp number" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => setWhatsapp(e.target.value)} /></div>
+            <div><label style={ls}>Email</label><input style={fs} value={email} placeholder="email@example.com" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => setEmail(e.target.value)} /></div>
+            <div><label style={ls}>Address *</label><input data-field="ns_address" style={{ ...fs, ...errorBorder('ns_address', fieldErrors) }} value={address} placeholder="Supplier address" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => { setAddress(e.target.value); clearFieldError('ns_address'); }} /><ValidationNote field="ns_address" errors={fieldErrors} /></div>
+          </>)}
+          {activeTab === 'purchase' && (<>
+            <div><label style={ls}>Payment Type</label>
+              <div style={{ display:'flex', gap:'8px' }}>
+                {[['cash','💵 Cash'],['credit','📋 Credit']].map(([pt, lbl]) => (
+                  <button key={pt} onClick={() => setPaymentType(pt)} style={{ flex:1, padding:'9px', borderRadius:'8px', border:'2px solid', borderColor: paymentType === pt ? (pt === 'cash' ? '#16a34a' : '#4f46e5') : 'var(--border, #d1d5db)', background: paymentType === pt ? (pt === 'cash' ? '#f0fdf4' : '#eef2ff') : 'var(--surface, white)', fontWeight: paymentType === pt ? 700 : 400, cursor:'pointer', fontSize:'13px', color:'var(--text-primary, #111)' }}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div><label style={ls}>Invoice / Ref *</label><input data-field="ns_invoiceRef" style={{ ...fs, ...errorBorder('ns_invoiceRef', fieldErrors) }} value={invoiceRef} placeholder="Receipt or invoice number…" onChange={e => { setInvoiceRef(e.target.value); clearFieldError('ns_invoiceRef'); }} /><ValidationNote field="ns_invoiceRef" errors={fieldErrors} /></div>
+            <div><label style={ls}>Date *</label><input type="date" data-field="ns_date" style={{ ...fs, ...errorBorder('ns_date', fieldErrors) }} value={date} max={todayStr()} onChange={e => { setDate(e.target.value); clearFieldError('ns_date'); }} /><ValidationNote field="ns_date" errors={fieldErrors} /></div>
+            <div>
+              <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'8px', color:'var(--text-primary, #374151)' }}>Items *</label>
+              <div data-field="ns_items" style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                {items.map((it, idx) => { const sub = (parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0); return (
+                  <div key={it.id} style={{ border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'10px', padding:'12px', background:'var(--background, #f9fafb)', display:'flex', flexDirection:'column', gap:'10px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <span style={{ fontSize:'12px', fontWeight:700, color:'#667eea' }}>Item {idx+1}</span>
+                      {items.length > 1 && <button onClick={() => removeItem(it.id)} style={{ background:'#fee2e2', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#dc2626', display:'flex', alignItems:'center', gap:'4px', fontSize:'12px' }}><Trash2 size={12}/> Remove</button>}
+                    </div>
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Asset Name *</label>
+                      <input style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={it.name} placeholder="e.g. Generator, Office Chair…" onChange={e => updateItem(it.id, 'name', e.target.value)} /></div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                      <div><label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Quantity *</label>
+                        <input type="number" min="0" step="1" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={it.qty} placeholder="0" onChange={e => updateItem(it.id, 'qty', e.target.value)} /></div>
+                      <div><label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Unit Cost</label>
+                        <input type="number" min="0" step="0.01" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={it.costPrice} placeholder="0.00" onChange={e => updateItem(it.id, 'costPrice', e.target.value)} /></div>
+                    </div>
+                    {sub > 0 && <div style={{ padding:'6px 10px', background:'#f0f4ff', border:'1px solid #c7d2fe', borderRadius:'7px', fontSize:'12px', color:'#4338ca', fontWeight:600 }}>Subtotal: {fmt(sub)}</div>}
+                  </div>
+                ); })}
+              </div>
+              <ValidationNote field="ns_items" errors={fieldErrors} />
+              <button onClick={addItem} disabled={!lastItemComplete()} style={{ marginTop:'10px', width:'100%', padding:'10px', border:'1.5px dashed var(--border, #d1d5db)', borderRadius:'8px', background: lastItemComplete() ? 'var(--surface, white)' : 'var(--background, #f9fafb)', color: lastItemComplete() ? '#667eea' : '#9ca3af', cursor: lastItemComplete() ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}><Plus size={14}/> Add Another Item</button>
+            </div>
+            {grandTotal > 0 && <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f0f4ff', border:'1.5px solid #c7d2fe', borderRadius:'10px' }}><span style={{ fontWeight:700, fontSize:'14px', color:'#4338ca' }}>Grand Total</span><span style={{ fontWeight:800, fontSize:'15px', color:'#3730a3' }}>{fmt(grandTotal)}</span></div>}
+          </>)}
+        </div>
+        {/* Footer */}
+        <div style={{ display:'flex', gap:'10px', padding:'16px 20px', borderTop:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'1.5px solid var(--border, #e5e7eb)', background:'var(--surface, white)', color:'var(--text-primary, #111)', cursor:'pointer', fontWeight:600, fontSize:'14px' }}>Cancel</button>
+          {activeTab === 'details'
+            ? <button onClick={handleNextToPurchase} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700, fontSize:'14px' }}>Next: Purchase History →</button>
+            : <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background: saving ? '#9ca3af' : '#f59e0b', color:'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight:700, fontSize:'14px' }}>{saving ? 'Saving…' : 'Save Purchase'}</button>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 function CashRecord({ isUnlocked = false }) {
   const { fmt } = useCurrency();
+  const { showError } = useValidation();
   const [entries, setEntries]             = useState([]);
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [editEntry, setEditEntry]         = useState(null);
@@ -1201,6 +1405,7 @@ function CashRecord({ isUnlocked = false }) {
   const [showOtherReasonInput, setShowOtherReasonInput] = useState(false);
   // Operational Expenses modal (supplier purchase from Cash Out)
   const [showExpensesModal, setShowExpensesModal] = useState(false);
+  const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
   const [expensesResult, setExpensesResult]       = useState(null); // {paymentType, total, invoiceRef, itemsSummary}
 
   // ── Any dropdown currently open? ──────────────────────────────────────────
@@ -1311,7 +1516,7 @@ function CashRecord({ isUnlocked = false }) {
     setCashInReasonKey(''); setShowCashInReasonDrop(false);
     setBeingForKey(''); setShowBeingForDrop(false);
     setOtherReasonText(''); setShowOtherReasonInput(false);
-    setShowExpensesModal(false); setExpensesResult(null);
+    setShowExpensesModal(false); setShowNewSupplierModal(false); setExpensesResult(null);
     setShowOthersSubDrop(false); setShowCreateAdvanceModal(false);
     setSelectedAdvanceOrder(null);
   };
@@ -1493,7 +1698,7 @@ function CashRecord({ isUnlocked = false }) {
 
   const handleSaveEntry = async () => {
     const name = getResolvedName();
-    if (!name) { alert(`Please enter who the cash is ${newType === TYPE_IN ? 'from' : 'paid to'}.`); return; }
+    if (!name) return showError('ce_person', `Enter the ${newType === TYPE_IN ? 'Cash From' : 'Paid To'}`);
 
     // ── Supplier purchase (assets + cash entry already saved by handleExpensesSaved) ──
     if (newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && expensesResult) {
@@ -1503,13 +1708,13 @@ function CashRecord({ isUnlocked = false }) {
     }
 
     const amount = parseFloat(newAmount);
-    if (isNaN(amount) || amount <= 0) { alert('Please enter a valid amount.'); return; }
-    if (newType === TYPE_IN && !cashInReasonKey) { alert('Please select a reason.'); return; }
-    if (newType === TYPE_OUT && !beingForKey) { alert('Please select a reason.'); return; }
-    if (newType === TYPE_OUT && beingForKey === 'other' && !otherReasonText.trim()) { alert('Please enter the reason.'); return; }
+    if (isNaN(amount) || amount <= 0) return showError('ce_amount', 'Enter the Amount');
+    if (newType === TYPE_IN && !cashInReasonKey) return showError('ce_reason', 'Select the Being For reason');
+    if (newType === TYPE_OUT && !beingForKey) return showError('ce_reason', 'Select the Being For reason');
+    if (newType === TYPE_OUT && beingForKey === 'other' && !otherReasonText.trim()) return showError('ce_otherReason', 'Enter the Reason');
 
     const note = buildNote();
-    if (!note) { alert('Could not build description. Please fill all fields.'); return; }
+    if (!note) return showError('ce_reason', 'Could not build description. Please fill all fields');
 
     setIsProcessing(true);
     try {
@@ -1551,7 +1756,7 @@ function CashRecord({ isUnlocked = false }) {
       await loadEntries();
     } catch (err) {
       console.error('Error saving cash entry:', err);
-      alert('Failed to save entry. Please try again.');
+      showError('ce_amount', 'Failed to save entry. Please try again.');
     } finally { setIsProcessing(false); }
   };
 
@@ -2164,6 +2369,7 @@ function CashRecord({ isUnlocked = false }) {
             suppliersList={suppliersList}
             onSave={handleExpensesSaved}
             onClose={() => setShowExpensesModal(false)}
+            onNewSupplier={() => { setShowExpensesModal(false); setShowNewSupplierModal(true); }}
           />
         );
       })()}
@@ -2190,6 +2396,26 @@ function CashRecord({ isUnlocked = false }) {
             dataService.getAdvanceOrders().then(orders => setAdvanceOrdersList(orders || []));
           }}
           onClose={() => setShowCreateAdvanceModal(false)}
+        />
+      )}
+
+      {/* ── New Supplier Modal ── */}
+      {showNewSupplierModal && (
+        <NewSupplierModal
+          suppliersList={suppliersList}
+          onSave={(result) => {
+            setShowNewSupplierModal(false);
+            setPersonName(result.supplierName);
+            setIsOthersMode(true);
+            setPersonSearch(result.supplierName);
+            setBeingForKey('__supplier_purchase__');
+            setExpensesResult(result);
+            dataService.getSuppliers().then(supps => setSuppliersList(supps || []));
+          }}
+          onClose={() => {
+            setShowNewSupplierModal(false);
+            setShowExpensesModal(true);
+          }}
         />
       )}
 
