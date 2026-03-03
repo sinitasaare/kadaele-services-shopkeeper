@@ -4,6 +4,7 @@ import * as dataService from "../services/dataService";
 
 const DEBTORS_PAGE_INDEX   = 6;
 const PURCHASE_PAGE_INDEX  = 4;
+const EXPENSES_PAGE_INDEX  = 3;
 
 export default function CashRecord({ onNavigate }) {
   const [cashEntries, setCashEntries] = useState([]);
@@ -130,27 +131,34 @@ export default function CashRecord({ onNavigate }) {
     if (entry.source === "purchase") {
       onNavigate(PURCHASE_PAGE_INDEX);
     }
+    // expense entries → navigate to Expenses Record (read-only there)
+    if (entry.source === "expense") {
+      onNavigate(EXPENSES_PAGE_INDEX);
+    }
   }
 
   function isLinkedReadOnly(entry) {
-    return entry.source === "debt_payment" || entry.source === "purchase";
+    return entry.source === "debt_payment" || entry.source === "purchase" || entry.source === "expense";
   }
 
   function linkedLabel(entry) {
     if (entry.source === "debt_payment") return "View Debtor →";
     if (entry.source === "purchase")     return "View Purchase →";
+    if (entry.source === "expense")      return "View Expense →";
     return null;
   }
 
   function linkedRowStyle(entry) {
     if (entry.source === "debt_payment") return { cursor: "pointer", background: "#e8f4fd" };
     if (entry.source === "purchase")     return { cursor: "pointer", background: "#fff7ed" };
+    if (entry.source === "expense")      return { cursor: "pointer", background: "#f0fdf4" };
     return {};
   }
 
   function linkedRowTitle(entry) {
     if (entry.source === "debt_payment") return "Tap to view in Debtors screen";
     if (entry.source === "purchase")     return "Tap to view in Purchase Record";
+    if (entry.source === "expense")      return "Tap to view in Expenses Record";
     return undefined;
   }
 
