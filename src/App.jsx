@@ -110,7 +110,7 @@ const PAGES = [
 
       <h4>Cash vs Non-Cash</h4>
       <p>The summary cards show <strong>Cash Spent</strong> (paid from the cash drawer) and <strong>Non-Cash</strong> (bank transfer, mobile money, check) separately so you can reconcile easily.</p>
-    \`
+    `
   },
   { 
     name: 'PURCHASE RECORD',  
