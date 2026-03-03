@@ -768,6 +768,28 @@ class DataService {
     if (this.isOnline && auth.currentUser) {
       try { await deleteDoc(doc(db, 'purchases', id)); } catch (err) { console.error('Firebase delete purchase error:', err); }
     }
+    // If it was a cash purchase, delete the linked cash_entry
+    if ((purchase.paymentType || purchase.payment_type || 'cash') === 'cash') {
+      await this._deletePurchaseCashEntry(id);
+    }
+  }
+
+  // ── Helper: find cash_entry linked to a purchase ─────────────────────────
+  async _findPurchaseCashEntry(purchaseId) {
+    const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    return entries.find(e => e.source === 'purchase' && e.purchaseId === purchaseId) || null;
+  }
+
+  // ── Helper: delete linked cash_entry for a purchase ──────────────────────
+  async _deletePurchaseCashEntry(purchaseId) {
+    const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    const entry = entries.find(e => e.source === 'purchase' && e.purchaseId === purchaseId);
+    if (!entry) return;
+    const filtered = entries.filter(e => e.id !== entry.id);
+    await localforage.setItem(DATA_KEYS.CASH_ENTRIES, filtered);
+    if (this.isOnline && auth.currentUser) {
+      try { await deleteDoc(doc(db, 'cash_entries', entry.id)); } catch (err) { console.error('Firebase delete purchase cash entry error:', err); }
+    }
   }
 
   // ── Helper: safely reverse a debtor charge for a credit sale ──────────────
@@ -1997,6 +2019,12 @@ class DataService {
     const createdAt = new Date(purchase.createdAt || purchase.date || 0);
     const hoursDiff = (new Date() - createdAt) / (1000 * 60 * 60);
     if (hoursDiff > 2) throw new Error('Cannot edit purchase after 2 hours');
+
+    const oldPaymentType = purchase.paymentType || purchase.payment_type || 'cash';
+    const newPaymentType = updates.paymentType || updates.payment_type || oldPaymentType;
+    const oldTotal = parseFloat(purchase.total || 0);
+    const newTotal = parseFloat(updates.total !== undefined ? updates.total : oldTotal);
+
     purchases[index] = { ...purchase, ...updates, updatedAt: new Date().toISOString() };
     await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
     if (this.isOnline && auth.currentUser) {
@@ -2006,6 +2034,45 @@ class DataService {
     } else {
       await this.addToSyncQueue({ type: 'purchase', data: purchases[index] });
     }
+
+    // ── Handle linked cash_entry transitions ──────────────────────────────
+    const wasCash = oldPaymentType === 'cash';
+    const isCash  = newPaymentType === 'cash';
+
+    if (wasCash && isCash && newTotal !== oldTotal) {
+      // A) Remained cash, amount changed → update linked entry
+      const cashEntry = await this._findPurchaseCashEntry(id);
+      if (cashEntry) {
+        const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+        const ei = entries.findIndex(e => e.id === cashEntry.id);
+        if (ei !== -1) {
+          entries[ei] = { ...entries[ei], amount: newTotal, updatedAt: new Date().toISOString() };
+          await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+          if (this.isOnline && auth.currentUser) {
+            try { await setDoc(doc(db, 'cash_entries', cashEntry.id), { ...entries[ei], updatedAt: serverTimestamp() }, { merge: true }); }
+            catch (err) { await this.addToSyncQueue({ type: 'cash_entry', data: entries[ei] }); }
+          } else { await this.addToSyncQueue({ type: 'cash_entry', data: entries[ei] }); }
+        }
+      }
+    } else if (wasCash && !isCash) {
+      // B) cash → non-cash: delete linked cash_entry
+      await this._deletePurchaseCashEntry(id);
+    } else if (!wasCash && isCash) {
+      // C) non-cash → cash: create linked cash_entry
+      const updated = purchases[index];
+      await this.addCashEntry({
+        type: 'out',
+        amount: newTotal,
+        note: `Paid to ${updated.supplierName || 'Supplier'} to purchase cargo`,
+        date: updated.date,
+        source: 'purchase',
+        purchaseId: id,
+        invoiceRef: updated.invoiceRef || '',
+        isUnrecorded: true,
+        business_date: (updated.date || '').slice(0, 10),
+      });
+    }
+
     return purchases[index];
   }
 
