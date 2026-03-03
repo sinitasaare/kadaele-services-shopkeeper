@@ -610,6 +610,14 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
   const [goods, setGoods] = useState([]);
   const [saving, setSaving] = useState(false);
   const [detailsError, setDetailsError] = useState('');
+  const detailsErrorRef = useRef(null);
+  const fieldRefs = {
+    fullName: useRef(null),
+    gender:   useRef(null),
+    phone:    useRef(null),
+    whatsapp: useRef(null),
+    address:  useRef(null),
+  };
 
   useEffect(() => {
     dataService.getGoods().then(d => setGoods(d || []));
@@ -650,25 +658,40 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
   };
 
   const validateDetails = () => {
-    if (!fullName.trim()) return 'Full Name is required.';
-    if (!gender) return 'Gender is required.';
-    if (!phone.trim()) return 'Phone number is required.';
-    if (!whatsapp.trim() && !email.trim()) return 'At least WhatsApp or Email is required.';
-    if (email.trim() && !email.includes('@')) return 'Email must contain "@".';
-    if (!address.trim()) return 'Address is required.';
-    return '';
+    if (!fullName.trim()) return { msg: 'Full Name is required.',               field: 'fullName' };
+    if (!gender)          return { msg: 'Gender is required.',                   field: 'gender' };
+    if (!phone.trim())    return { msg: 'Phone number is required.',             field: 'phone' };
+    if (!whatsapp.trim() && !email.trim()) return { msg: 'At least WhatsApp or Email is required.', field: 'whatsapp' };
+    if (email.trim() && !email.includes('@')) return { msg: 'Email must contain "@".', field: 'whatsapp' };
+    if (!address.trim())  return { msg: 'Address is required.',                 field: 'address' };
+    return null;
+  };
+
+  const scrollToField = (fieldKey) => {
+    setTimeout(() => {
+      const ref = fieldRefs[fieldKey];
+      if (ref?.current) {
+        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        detailsErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 50);
   };
 
   const handleNextToOrder = () => {
     const err = validateDetails();
-    if (err) { setDetailsError(err); return; }
+    if (err) {
+      setDetailsError(err.msg);
+      scrollToField(err.field);
+      return;
+    }
     setDetailsError('');
     setActiveTab('order');
   };
 
   const handleSave = async () => {
     const err = validateDetails();
-    if (err) { setActiveTab('details'); setDetailsError(err); return; }
+    if (err) { setActiveTab('details'); setDetailsError(err.msg); scrollToField(err.field); return; }
     if (!invoiceRef.trim()) return showError('ao_invoiceRef', 'Enter the Invoice / Ref number');
     if (!date) return showError('ao_date', 'Enter the Date');
     const validRows = rows.filter(r => r.productName.trim() && parseFloat(r.qty) > 0);
@@ -782,11 +805,11 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
           {activeTab === 'details' && (
             <>
               {detailsError && (
-                <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#b91c1c' }}>
+                <div ref={detailsErrorRef} style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#b91c1c' }}>
                   {detailsError}
                 </div>
               )}
-              <div style={{ position:'relative' }}>
+              <div style={{ position:'relative' }} ref={fieldRefs.fullName}>
                 <label style={labelStyle}>Full Name *</label>
                 <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
                   <div style={{ flex:1, position:'relative' }}>
@@ -909,7 +932,7 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
                   </button>
                 </div>
               </div>
-              <div>
+              <div ref={fieldRefs.gender}>
                 <label style={labelStyle}>Gender *</label>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   {['Male', 'Female'].map(g => (
@@ -920,12 +943,12 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
                   ))}
                 </div>
               </div>
-              <div>
+              <div ref={fieldRefs.phone}>
                 <label style={labelStyle}>Phone *</label>
                 <input style={fieldStyle} type="tel" value={phone} placeholder="Phone number"
                   onChange={e => setPhone(e.target.value)} />
               </div>
-              <div>
+              <div ref={fieldRefs.whatsapp}>
                 <label style={labelStyle}>WhatsApp <span style={{ fontWeight: 400, color: '#9ca3af' }}>(at least WhatsApp or Email required)</span></label>
                 <input style={fieldStyle} type="tel" value={whatsapp} placeholder="WhatsApp number"
                   onChange={e => setWhatsapp(e.target.value)} />
@@ -935,7 +958,7 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
                 <input style={fieldStyle} type="email" value={email} placeholder="Email address"
                   onChange={e => setEmail(e.target.value)} />
               </div>
-              <div>
+              <div ref={fieldRefs.address}>
                 <label style={labelStyle}>Address *</label>
                 <textarea style={{ ...fieldStyle, resize: 'none' }} rows={2} value={address} placeholder="Enter address"
                   onChange={e => setAddress(e.target.value)} />
@@ -1195,6 +1218,8 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [detailsError, setDetailsError] = useState('');
+  const detailsErrorRef = useRef(null);
+  const nsFieldRefs = { fullName: useRef(null), phone: useRef(null), whatsapp: useRef(null), address: useRef(null) };
   const [paymentType, setPaymentType] = useState('cash');
   const [invoiceRef, setInvoiceRef] = useState('');
   const [date, setDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
@@ -1210,18 +1235,30 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   const lastItemComplete = () => { const last = items[items.length - 1]; return last && last.name.trim() && parseFloat(last.qty) > 0; };
 
   const validateDetails = () => {
-    if (!fullName.trim()) { showError('ns_fullName', 'Enter the Supplier Name'); return 'Supplier Name is required.'; }
-    if (!phone.trim()) { showError('ns_phone', 'Enter the Phone'); return 'Phone is required.'; }
-    if (!whatsapp.trim() && !email.trim()) return 'At least WhatsApp or Email is required.';
-    if (email.trim() && !email.includes('@')) return 'Email must contain "@".';
-    if (!address.trim()) { showError('ns_address', 'Enter the Address'); return 'Address is required.'; }
-    return '';
+    if (!fullName.trim()) { showError('ns_fullName', 'Enter the Supplier Name'); return { msg: 'Supplier Name is required.', field: 'fullName' }; }
+    if (!phone.trim())    { showError('ns_phone', 'Enter the Phone');            return { msg: 'Phone is required.',           field: 'phone' }; }
+    if (!whatsapp.trim() && !email.trim()) return { msg: 'At least WhatsApp or Email is required.', field: 'whatsapp' };
+    if (email.trim() && !email.includes('@')) return { msg: 'Email must contain "@".', field: 'whatsapp' };
+    if (!address.trim())  { showError('ns_address', 'Enter the Address');        return { msg: 'Address is required.',         field: 'address' }; }
+    return null;
   };
-  const handleNextToPurchase = () => { const err = validateDetails(); if (err) { setDetailsError(err); return; } setDetailsError(''); setActiveTab('purchase'); };
+  const nsScrollToField = (fieldKey) => {
+    setTimeout(() => {
+      const ref = nsFieldRefs[fieldKey];
+      if (ref?.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      else detailsErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  };
+  const handleNextToPurchase = () => {
+    const err = validateDetails();
+    if (err) { setDetailsError(err.msg); nsScrollToField(err.field); return; }
+    setDetailsError('');
+    setActiveTab('purchase');
+  };
 
   const handleSave = async () => {
     const err = validateDetails();
-    if (err) { setActiveTab('details'); setDetailsError(err); return; }
+    if (err) { setActiveTab('details'); setDetailsError(err.msg); nsScrollToField(err.field); return; }
     if (!invoiceRef.trim()) return showError('ns_invoiceRef', 'Enter the Invoice / Ref');
     if (!date) return showError('ns_date', 'Enter the Date');
     const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty) > 0);
@@ -1277,8 +1314,8 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
         {/* Body */}
         <div style={{ overflowY:'auto', padding:'20px', flex:1, display:'flex', flexDirection:'column', gap:'14px' }}>
           {activeTab === 'details' && (<>
-            {detailsError && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'8px', padding:'10px 12px', fontSize:'13px', color:'#b91c1c' }}>{detailsError}</div>}
-            <div style={{ position:'relative' }}>
+            {detailsError && <div ref={detailsErrorRef} style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'8px', padding:'10px 12px', fontSize:'13px', color:'#b91c1c' }}>{detailsError}</div>}
+            <div ref={nsFieldRefs.fullName} style={{ position:'relative' }}>
               <label style={ls}>Supplier Name *</label>
               <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
                 <div style={{ flex:1, position:'relative' }}>
@@ -1311,10 +1348,10 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
               </div>
               <ValidationNote field="ns_fullName" errors={fieldErrors} />
             </div>
-            <div><label style={ls}>Phone *</label><input data-field="ns_phone" style={{ ...fs, ...errorBorder('ns_phone', fieldErrors) }} value={phone} placeholder="Phone number" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => { setPhone(e.target.value); clearFieldError('ns_phone'); }} /><ValidationNote field="ns_phone" errors={fieldErrors} /></div>
-            <div><label style={ls}>WhatsApp</label><input style={fs} value={whatsapp} placeholder="WhatsApp number" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => setWhatsapp(e.target.value)} /></div>
+            <div ref={nsFieldRefs.phone}><label style={ls}>Phone *</label><input data-field="ns_phone" style={{ ...fs, ...errorBorder('ns_phone', fieldErrors) }} value={phone} placeholder="Phone number" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => { setPhone(e.target.value); clearFieldError('ns_phone'); }} /><ValidationNote field="ns_phone" errors={fieldErrors} /></div>
+            <div ref={nsFieldRefs.whatsapp}><label style={ls}>WhatsApp</label><input style={fs} value={whatsapp} placeholder="WhatsApp number" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => setWhatsapp(e.target.value)} /></div>
             <div><label style={ls}>Email</label><input style={fs} value={email} placeholder="email@example.com" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => setEmail(e.target.value)} /></div>
-            <div><label style={ls}>Address *</label><input data-field="ns_address" style={{ ...fs, ...errorBorder('ns_address', fieldErrors) }} value={address} placeholder="Supplier address" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => { setAddress(e.target.value); clearFieldError('ns_address'); }} /><ValidationNote field="ns_address" errors={fieldErrors} /></div>
+            <div ref={nsFieldRefs.address}><label style={ls}>Address *</label><input data-field="ns_address" style={{ ...fs, ...errorBorder('ns_address', fieldErrors) }} value={address} placeholder="Supplier address" readOnly={supplierMode === 'search' && !!selectedExistingSupplier} onChange={e => { setAddress(e.target.value); clearFieldError('ns_address'); }} /><ValidationNote field="ns_address" errors={fieldErrors} /></div>
           </>)}
           {activeTab === 'purchase' && (<>
             <div><label style={ls}>Payment Type</label>
