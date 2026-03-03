@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Camera as CapCamera } from '@capacitor/camera';
@@ -20,6 +21,7 @@ function isWithin30Mins(entry) {
 // ─────────────────────────────────────────────────────────────
 function AddPurchaseModal({ onSave, onClose }) {
   const { fmt } = useCurrency();
+  const { fieldErrors, showError, clearFieldError } = useValidation();
 
   const [supplierId, setSupplierId]         = useState(null);
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -128,12 +130,10 @@ function AddPurchaseModal({ onSave, onClose }) {
   };
 
   const handleSave = async () => {
-    if (!supplierId) { alert('Please select a supplier.'); return; }
-    if (!invoiceRef.trim()) { alert('Please enter a Ref / invoice number.'); return; }
-    if (!purchaseDate) { alert('Please select a purchase date.'); return; }
-    if (paymentType === 'credit' && !supplierId) {
-      alert('Please select a supplier for the credit purchase.'); return;
-    }
+    if (!supplierId) return showError('pr_supplier', 'Please select a supplier');
+    if (!invoiceRef.trim()) return showError('pr_invoiceRef', 'Please enter a Ref / invoice number');
+    if (!purchaseDate) return showError('pr_date', 'Please select a purchase date');
+    if (paymentType === 'credit' && !supplierId) return showError('pr_supplier', 'Please select a supplier for the credit purchase');
     for (const r of rows) {
       if (!r.description?.trim()) {
         setFieldError({ rowId: r.id, field: 'description', message: 'Select an item first' });
@@ -216,7 +216,9 @@ function AddPurchaseModal({ onSave, onClose }) {
             <div style={{position:'relative'}}>
               <input type="text" className="pr-input" placeholder="Search a supplier…"
                 value={supplierSearch}
-                onChange={e => { setSupplierSearch(e.target.value); setSupplierId(null); setShowSupplierDrop(true); }}
+                data-field="pr_supplier"
+                style={errorBorder('pr_supplier', fieldErrors)}
+                onChange={e => { setSupplierSearch(e.target.value); setSupplierId(null); setShowSupplierDrop(true); clearFieldError('pr_supplier'); }}
                 onFocus={() => setShowSupplierDrop(true)}
                 onBlur={() => setTimeout(() => setShowSupplierDrop(false), 180)}
               />
@@ -242,6 +244,7 @@ function AddPurchaseModal({ onSave, onClose }) {
             {suppliers.length === 0 && (
               <p style={{fontSize:'12px',color:'#c00',marginTop:'4px'}}>No suppliers registered. Add one in the Suppliers section first.</p>
             )}
+            <ValidationNote field="pr_supplier" errors={fieldErrors} />
           </div>
 
           {/* Payment Type — narrower, float apart */}
@@ -278,8 +281,10 @@ function AddPurchaseModal({ onSave, onClose }) {
           <div className="pr-date-inline">
             <label className="pr-date-inline-label">Purchase Date *</label>
             <input type="date" className="pr-date-inline-input"
-              value={purchaseDate} max={getTodayStr()}
-              onChange={e => setPurchaseDate(e.target.value)} />
+              value={purchaseDate} max={getTodayStr()} data-field="pr_date"
+              style={errorBorder('pr_date', fieldErrors)}
+              onChange={e => { setPurchaseDate(e.target.value); clearFieldError('pr_date'); }} />
+            <ValidationNote field="pr_date" errors={fieldErrors} />
           </div>
 
           {/* Items Purchased */}
@@ -459,8 +464,10 @@ function AddPurchaseModal({ onSave, onClose }) {
             <label className="pr-ref-label">Ref *</label>
             <input type="text" className="pr-ref-input"
               placeholder="Invoice / receipt number…"
-              required
-              value={invoiceRef} onChange={e => setInvoiceRef(e.target.value)} />
+              required data-field="pr_invoiceRef"
+              style={errorBorder('pr_invoiceRef', fieldErrors)}
+              value={invoiceRef} onChange={e => { setInvoiceRef(e.target.value); clearFieldError('pr_invoiceRef'); }} />
+            <ValidationNote field="pr_invoiceRef" errors={fieldErrors} />
           </div>
 
           {/* Notes */}
