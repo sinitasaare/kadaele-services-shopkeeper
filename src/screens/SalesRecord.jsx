@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit2 } from 'lucide-react';
+import { Edit2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
@@ -13,23 +13,274 @@ function isWithin30Mins(entry) {
   return (new Date() - created) / (1000 * 60) <= 30;
 }
 
+// ── Helper: find linked cash entry for a sale ────────────────────────────────
+async function findSaleCashEntry(saleId) {
+  try {
+    const entries = await dataService.getCashEntries?.() || [];
+    return entries.find(e => e.source === 'sale' && e.saleId === saleId) || null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Helper: handle cash posting when a sale is updated ─────────────────────
+async function handleCashPostingOnUpdate(oldSale, newPaymentType, newTotal, newCashReceived) {
+  const oldPayType = oldSale.paymentType || oldSale.payment_type || '';
+  const hadCash = oldPayType === 'cash' || oldPayType === 'mixed';
+  const hasCash = newPaymentType === 'cash' || newPaymentType === 'mixed';
+
+  const linkedEntry = hadCash ? await findSaleCashEntry(oldSale.id) : null;
+
+  if (hadCash && hasCash) {
+    // A) Cash remains — update amount
+    const newAmount = newPaymentType === 'mixed'
+      ? parseFloat(newCashReceived || 0)
+      : parseFloat(newTotal || 0);
+    if (linkedEntry && linkedEntry.id) {
+      await dataService.updateCashEntry(linkedEntry.id, { amount: newAmount });
+    }
+  } else if (hadCash && !hasCash) {
+    // B) Cash → credit: delete linked entry
+    if (linkedEntry && linkedEntry.id) {
+      try { await dataService.deleteCashEntry(linkedEntry.id); } catch { /* best effort */ }
+    }
+  } else if (!hadCash && hasCash) {
+    // C) Credit → cash: create new entry
+    const newAmount = newPaymentType === 'mixed'
+      ? parseFloat(newCashReceived || 0)
+      : parseFloat(newTotal || 0);
+    await dataService.addCashEntry({
+      type: 'in',
+      source: 'sale',
+      amount: newAmount,
+      saleId: oldSale.id,
+      note: newPaymentType === 'mixed' ? 'Partial sale payment' : 'Sale payment',
+      date: oldSale.date || oldSale.createdAt,
+    });
+  }
+  // D) Credit → credit: nothing to do
+}
+
+// ── Helper: delete linked cash entry when sale is deleted ───────────────────
+async function deleteSaleCashEntry(saleId) {
+  const linked = await findSaleCashEntry(saleId);
+  if (linked && linked.id) {
+    try { await dataService.deleteCashEntry(linked.id); } catch { /* best effort */ }
+  }
+}
+
+// ── Sale Detail Modal ─────────────────────────────────────────────────────────
+function SaleDetailModal({ sale, onClose, onEdit, canEdit, fmt }) {
+  const payType = sale.paymentType || sale.payment_type || '';
+  const customer = sale.customerName || sale.customer_name || '';
+  const subtotal = parseFloat(sale.subtotal || sale.total_amount || sale.total || 0);
+  const discount = parseFloat(sale.discount || 0);
+  const total = parseFloat(sale.total_amount || sale.total || 0);
+  const cashReceived = parseFloat(sale.cashReceived || 0);
+  const changeGiven = parseFloat(sale.changeGiven || 0);
+
+  const resolveSaleDate = (s) => {
+    const raw = s.date || s.timestamp || s.createdAt;
+    if (!raw) return null;
+    if (raw && typeof raw === 'object' && raw.seconds) return new Date(raw.seconds * 1000);
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const d = resolveSaleDate(sale);
+  const dateStr = d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
+  const timeStr = d ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
+
+  const payBadgeStyle = {
+    cash:   { background: '#d1fae5', color: '#065f46' },
+    credit: { background: '#fee2e2', color: '#991b1b' },
+    mixed:  { background: '#fef3c7', color: '#92400e' },
+  }[payType] || { background: '#f3f4f6', color: '#374151' };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
+      <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'14px', padding:'22px', width:'100%', maxWidth:'440px', maxHeight:'92vh', overflowY:'auto', position:'relative' }}>
+
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+          <h3 style={{ margin:0, fontSize:'16px', fontWeight:700, color:'#1a1a2e' }}>🧾 Sale Details</h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#6b7280', padding:'4px', borderRadius:'6px', display:'flex', alignItems:'center' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Status badge */}
+        {sale.status && sale.status !== 'active' && (
+          <div style={{ marginBottom:'12px' }}>
+            <span style={{ fontSize:'12px', fontWeight:700, padding:'3px 10px', borderRadius:'5px',
+              background: sale.status === 'voided' ? '#fee2e2' : '#fef3c7',
+              color: sale.status === 'voided' ? '#dc2626' : '#d97706' }}>
+              {sale.status.toUpperCase()}
+            </span>
+          </div>
+        )}
+
+        {/* Date / Time */}
+        <div style={{ display:'flex', gap:'12px', marginBottom:'12px' }}>
+          <div style={{ flex:1, background:'#f9fafb', borderRadius:'8px', padding:'10px 12px' }}>
+            <div style={{ fontSize:'11px', color:'#9ca3af', fontWeight:600, textTransform:'uppercase', marginBottom:'2px' }}>Date</div>
+            <div style={{ fontSize:'14px', fontWeight:600 }}>{dateStr}</div>
+          </div>
+          <div style={{ flex:1, background:'#f9fafb', borderRadius:'8px', padding:'10px 12px' }}>
+            <div style={{ fontSize:'11px', color:'#9ca3af', fontWeight:600, textTransform:'uppercase', marginBottom:'2px' }}>Time</div>
+            <div style={{ fontSize:'14px', fontWeight:600 }}>{sale.isUnrecorded ? 'UNRECORDED' : timeStr}</div>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div style={{ marginBottom:'12px' }}>
+          <div style={{ fontSize:'12px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', marginBottom:'6px' }}>Items</div>
+          <div style={{ border:'1px solid #e5e7eb', borderRadius:'8px', overflow:'hidden' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+              <thead>
+                <tr style={{ background:'#f3f4f6' }}>
+                  <th style={{ padding:'7px 10px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Product</th>
+                  <th style={{ padding:'7px 10px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'50px' }}>Qty</th>
+                  <th style={{ padding:'7px 10px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'80px' }}>Price</th>
+                  <th style={{ padding:'7px 10px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'80px' }}>Line</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(sale.items || []).map((item, idx) => {
+                  const qty = parseFloat(item.quantity ?? item.qty ?? 0);
+                  const price = parseFloat(item.price ?? 0);
+                  return (
+                    <tr key={idx} style={{ borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                      <td style={{ padding:'7px 10px' }}>{item.name || '—'}</td>
+                      <td style={{ padding:'7px 10px', textAlign:'center' }}>{qty}</td>
+                      <td style={{ padding:'7px 10px', textAlign:'right' }}>{fmt(price)}</td>
+                      <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:600 }}>{fmt(qty * price)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Totals breakdown */}
+        <div style={{ background:'#f9fafb', borderRadius:'8px', padding:'12px', marginBottom:'12px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', marginBottom:'6px', color:'#6b7280' }}>
+            <span>Subtotal</span>
+            <span>{fmt(discount > 0 ? subtotal + discount : subtotal)}</span>
+          </div>
+          {discount > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', marginBottom:'6px', color:'#059669' }}>
+              <span>Discount</span>
+              <span>- {fmt(discount)}</span>
+            </div>
+          )}
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:700, paddingTop:'6px', borderTop:'1px solid #e5e7eb' }}>
+            <span>Total</span>
+            <span style={{ color:'#667eea' }}>{fmt(total)}</span>
+          </div>
+        </div>
+
+        {/* Payment info */}
+        <div style={{ marginBottom:'12px' }}>
+          <div style={{ fontSize:'12px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', marginBottom:'6px' }}>Payment</div>
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+            <span style={{ ...payBadgeStyle, padding:'4px 12px', borderRadius:'6px', fontSize:'13px', fontWeight:700 }}>
+              {payType ? payType.toUpperCase() : 'N/A'}
+            </span>
+          </div>
+          {(payType === 'cash' || payType === 'mixed') && cashReceived > 0 && (
+            <div style={{ marginTop:'8px', display:'flex', flexDirection:'column', gap:'4px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#374151' }}>
+                <span>Cash Received</span>
+                <span style={{ fontWeight:600 }}>{fmt(cashReceived)}</span>
+              </div>
+              {changeGiven > 0 && (
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#374151' }}>
+                  <span>Change Given</span>
+                  <span style={{ fontWeight:600 }}>{fmt(changeGiven)}</span>
+                </div>
+              )}
+              {payType === 'mixed' && (
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#374151' }}>
+                  <span>Credit Portion</span>
+                  <span style={{ fontWeight:600, color:'#dc2626' }}>{fmt(Math.max(0, total - cashReceived))}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Debtor info */}
+        {(payType === 'credit' || payType === 'mixed') && (customer || sale.debtorId) && (
+          <div style={{ background:'#fef3c7', borderRadius:'8px', padding:'10px 12px', marginBottom:'12px' }}>
+            <div style={{ fontSize:'11px', fontWeight:700, color:'#92400e', textTransform:'uppercase', marginBottom:'3px' }}>Debtor</div>
+            <div style={{ fontSize:'14px', fontWeight:600, color:'#78350f' }}>{customer || '—'}</div>
+            {sale.debtorId && (
+              <div style={{ fontSize:'11px', color:'#a16207', marginTop:'2px' }}>ID: {sale.debtorId}</div>
+            )}
+          </div>
+        )}
+
+        {/* Staff */}
+        {(sale.staffId || sale.staffName) && (
+          <div style={{ marginBottom:'12px' }}>
+            <div style={{ fontSize:'12px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', marginBottom:'4px' }}>Staff</div>
+            <div style={{ fontSize:'13px' }}>{sale.staffName || sale.staffId}</div>
+          </div>
+        )}
+
+        {/* Receipt photo */}
+        {sale.receiptPhoto || sale.photoUrl ? (
+          <div style={{ marginBottom:'12px' }}>
+            <div style={{ fontSize:'12px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', marginBottom:'6px' }}>Receipt Photo</div>
+            <img
+              src={sale.receiptPhoto || sale.photoUrl}
+              alt="Receipt"
+              style={{ width:'100%', borderRadius:'8px', border:'1px solid #e5e7eb', objectFit:'contain', maxHeight:'200px' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+          </div>
+        ) : null}
+
+        {/* Actions */}
+        <div style={{ display:'flex', gap:'8px', marginTop:'4px' }}>
+          <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600, fontSize:'14px' }}>
+            Close
+          </button>
+          {canEdit && (
+            <button onClick={onEdit} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700, fontSize:'14px' }}>
+              ✏️ Edit Sale
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Sale Edit Modal ────────────────────────────────────────────────────────
 function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
-  const [paymentType, setPaymentType] = useState(sale.payment_type || sale.paymentType || 'cash');
+  const [paymentType, setPaymentType] = useState(sale.paymentMethod || sale.payment_type || sale.paymentType || 'cash');
   const [customerName, setCustomerName] = useState(sale.customer_name || sale.customerName || '');
+  const [debtorId, setDebtorId] = useState(sale.debtorId || '');
   const [items, setItems] = useState((sale.items || []).map(i => ({ ...i })));
+  const [discount, setDiscount] = useState(parseFloat(sale.discount || 0));
+  const [cashReceived, setCashReceived] = useState(parseFloat(sale.cashReceived || 0));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const updateItem = (idx, field, val) => {
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it));
-  };
-
-  const total = items.reduce((sum, it) => {
+  const subtotal = items.reduce((sum, it) => {
     const qty = parseFloat(it.quantity ?? it.qty ?? 0);
     const price = parseFloat(it.price ?? 0);
     return sum + qty * price;
   }, 0);
+  const total = Math.max(0, subtotal - discount);
+  const changeGiven = paymentType === 'cash' ? Math.max(0, cashReceived - total) : 0;
+
+  const updateItem = (idx, field, val) => {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it));
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -40,15 +291,28 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
         qty: parseFloat(it.quantity ?? it.qty ?? 0),
         subtotal: parseFloat(it.quantity ?? it.qty ?? 0) * parseFloat(it.price ?? 0),
       }));
-      await dataService.updateSale(sale.id, {
+
+      const updates = {
         items: updatedItems,
+        subtotal,
+        discount,
         total_amount: total,
         total,
-        payment_type: paymentType,
+        paymentMethod: paymentType,
         paymentType,
+        payment_type: paymentType,
         customer_name: customerName,
         customerName,
-      });
+        debtorId: (paymentType === 'credit' || paymentType === 'mixed') ? (debtorId || null) : null,
+        cashReceived: (paymentType === 'cash' || paymentType === 'mixed') ? cashReceived : 0,
+        changeGiven: paymentType === 'cash' ? changeGiven : 0,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Handle cash posting before saving
+      await handleCashPostingOnUpdate(sale, paymentType, total, cashReceived);
+
+      await dataService.updateSale(sale.id, updates);
       onSave();
     } catch (e) { alert(e.message); }
     finally { setSaving(false); }
@@ -58,6 +322,8 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
     if (!window.confirm('Delete this sale record? This cannot be undone.')) return;
     setDeleting(true);
     try {
+      // Delete linked cash entry before deleting sale
+      await deleteSaleCashEntry(sale.id);
       await dataService.deleteSale(sale.id);
       onDeleted();
     } catch (e) { alert(e.message); }
@@ -65,32 +331,61 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
       <div style={{ background:'var(--surface)', color:'var(--text-primary)', borderRadius:'12px', padding:'20px', width:'100%', maxWidth:'420px', maxHeight:'90vh', overflowY:'auto' }}>
         <h3 style={{ margin:'0 0 16px', color:'#1a1a2e', fontSize:'16px' }}>✏️ Edit Sale</h3>
 
+        {/* Payment Type */}
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Payment Type</label>
           <div style={{ display:'flex', gap:'8px' }}>
-            {['cash','credit'].map(pt => (
+            {['cash', 'credit', 'mixed'].map(pt => (
               <button key={pt} onClick={() => setPaymentType(pt)} style={{
                 flex:1, padding:'8px', borderRadius:'7px', border:'2px solid',
                 borderColor: paymentType === pt ? '#667eea' : '#d1d5db',
                 background: paymentType === pt ? '#eef2ff' : 'var(--surface)',
-                fontWeight: paymentType === pt ? 700 : 400, cursor:'pointer', fontSize:'13px', textTransform:'uppercase',
+                fontWeight: paymentType === pt ? 700 : 400, cursor:'pointer', fontSize:'12px', textTransform:'uppercase',
               }}>{pt}</button>
             ))}
           </div>
         </div>
 
-        {paymentType === 'credit' && (
+        {/* Customer / Debtor for credit or mixed */}
+        {(paymentType === 'credit' || paymentType === 'mixed') && (
+          <>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Customer Name</label>
+              <input value={customerName} onChange={e => setCustomerName(e.target.value)}
+                style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ marginBottom:'12px' }}>
+              <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Debtor ID (if registered)</label>
+              <input value={debtorId} onChange={e => setDebtorId(e.target.value)} placeholder="Leave blank if not a registered debtor"
+                style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+            </div>
+          </>
+        )}
+
+        {/* Cash received for cash or mixed */}
+        {(paymentType === 'cash' || paymentType === 'mixed') && (
           <div style={{ marginBottom:'12px' }}>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Customer Name</label>
-            <input value={customerName} onChange={e => setCustomerName(e.target.value)}
+            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>
+              {paymentType === 'mixed' ? 'Cash Portion Received' : 'Cash Received'}
+            </label>
+            <input type="number" value={cashReceived} onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
               style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
+            {paymentType === 'cash' && cashReceived > 0 && changeGiven > 0 && (
+              <div style={{ fontSize:'12px', color:'#059669', marginTop:'4px' }}>Change: {fmt(changeGiven)}</div>
+            )}
+            {paymentType === 'mixed' && cashReceived > 0 && (
+              <div style={{ fontSize:'12px', color:'#d97706', marginTop:'4px' }}>
+                Credit portion: {fmt(Math.max(0, total - cashReceived))}
+              </div>
+            )}
           </div>
         )}
 
+        {/* Products */}
         <div style={{ marginBottom:'12px' }}>
           <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px' }}>Products</label>
           <div style={{ overflowX:'auto' }}>
@@ -99,7 +394,7 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
                 <tr style={{ background:'#f3f4f6' }}>
                   <th style={{ padding:'6px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase' }}>Product Name</th>
                   <th style={{ padding:'6px 8px', textAlign:'center', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'60px' }}>Qty</th>
-                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Selling Price</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', fontWeight:600, fontSize:'11px', color:'#6b7280', textTransform:'uppercase', width:'70px' }}>Price</th>
                 </tr>
               </thead>
               <tbody>
@@ -124,10 +419,31 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
           </div>
         </div>
 
-        <div style={{ textAlign:'right', fontWeight:700, fontSize:'15px', marginBottom:'16px', color:'#667eea' }}>
-          Total: {fmt(total)}
+        {/* Discount */}
+        <div style={{ marginBottom:'12px' }}>
+          <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'4px' }}>Discount (optional)</label>
+          <input type="number" value={discount || ''} onChange={e => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" min="0"
+            style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #d1d5db', borderRadius:'6px', fontSize:'14px', boxSizing:'border-box' }} />
         </div>
 
+        {/* Total summary */}
+        <div style={{ background:'#f9fafb', borderRadius:'8px', padding:'10px 12px', marginBottom:'16px' }}>
+          {discount > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#6b7280', marginBottom:'4px' }}>
+              <span>Subtotal</span><span>{fmt(subtotal)}</span>
+            </div>
+          )}
+          {discount > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#059669', marginBottom:'4px' }}>
+              <span>Discount</span><span>- {fmt(discount)}</span>
+            </div>
+          )}
+          <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700, fontSize:'15px', color:'#667eea' }}>
+            <span>Total</span><span>{fmt(total)}</span>
+          </div>
+        </div>
+
+        {/* Buttons */}
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600 }}>Cancel</button>
@@ -149,6 +465,7 @@ function SalesRecord() {
   const [sales, setSales] = useState([]);
   const [filteredSales, setFilteredSales] = useState([]);
   const [editSale, setEditSale] = useState(null);
+  const [detailSale, setDetailSale] = useState(null);
 
   // Void / Refund modal state
   const [voidSale, setVoidSale] = useState(null);
@@ -171,9 +488,6 @@ function SalesRecord() {
   const [appliedEndDate, setAppliedEndDate] = useState('');
 
   const [showFilters, setShowFilters] = useState(false);
-
-  // No refs needed — sticky bar is now outside the scroll container,
-  // so thead sticks at top:0 naturally within .sj-scroll-body.
 
   // ── Data ──────────────────────────────────────────────────────────────────
   useEffect(() => { loadSales(); }, []);
@@ -205,7 +519,9 @@ function SalesRecord() {
     let filtered = [...sales];
     if (appliedPaymentFilter !== 'all')
       filtered = filtered.filter(s =>
-        s.payment_type === appliedPaymentFilter || s.paymentType === appliedPaymentFilter
+        s.payment_type === appliedPaymentFilter ||
+        s.paymentType === appliedPaymentFilter ||
+        s.paymentMethod === appliedPaymentFilter
       );
     const today    = toMidnight(new Date());
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
@@ -265,7 +581,7 @@ function SalesRecord() {
   };
 
   const getTableTitle = () => {
-    const payMap = { all: 'All Sales', cash: 'Cash Sales', credit: 'Credit Sales' };
+    const payMap = { all: 'All Sales', cash: 'Cash Sales', credit: 'Credit Sales', mixed: 'Mixed Sales' };
     const label  = payMap[appliedPaymentFilter] || 'All Sales';
     if (appliedDateFilter === 'today') return `${label} Today`;
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
@@ -282,7 +598,6 @@ function SalesRecord() {
     if (!d) return { date: 'N/A', time: 'N/A' };
     return {
       date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      // Show FORGOTTEN instead of time for pre-system entries entered via Settings
       time: sale.isUnrecorded ? 'UNRECORDED' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     };
   };
@@ -290,7 +605,7 @@ function SalesRecord() {
   const getItemQty      = (item) => item.quantity ?? item.qty ?? 0;
   const getItemName     = (item) => item.name || '—';
   const getSaleTotal    = (sale) => parseFloat(sale.total_amount ?? sale.total ?? 0);
-  const getSalePayType  = (sale) => sale.payment_type || sale.paymentType || '';
+  const getSalePayType  = (sale) => sale.paymentMethod || sale.payment_type || sale.paymentType || '';
   const getSaleCustomer = (sale) => sale.customer_name || sale.customerName || '';
 
   const totalRecords = filteredSales.length;
@@ -298,6 +613,12 @@ function SalesRecord() {
   const btnLabel     = !showFilters ? 'Filter Sales' : showApply ? 'Apply Filter' : 'Close Filter';
 
   const HEADERS = ['Date', 'Time', 'Product', 'Qty', 'Sale Total', 'Payment', 'Customer'];
+
+  // ── Reload helper ──────────────────────────────────────────────────────────
+  const reloadSales = async () => {
+    const data = await dataService.getSales();
+    setSales((data || []).sort((a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0)));
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -309,7 +630,7 @@ function SalesRecord() {
           <div className="filter-group">
             <label>Payment Type</label>
             <div className="filter-buttons">
-              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only'], ['mixed', 'Mixed']].map(([val, lbl]) => (
                 <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
                   onClick={() => setPaymentFilter(val)}>{lbl}</button>
               ))}
@@ -364,7 +685,7 @@ function SalesRecord() {
             <div className="filter-group">
               <label>Payment Type</label>
               <div className="filter-buttons">
-                {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only']].map(([val, lbl]) => (
+                {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only'], ['mixed', 'Mixed']].map(([val, lbl]) => (
                   <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
                     onClick={() => setPaymentFilter(val)}>{lbl}</button>
                 ))}
@@ -479,7 +800,8 @@ function SalesRecord() {
 
                   return items.map((item, idx) => (
                     <tr key={`${sale.id}-${idx}`} className={idx > 0 ? 'sale-continuation-row' : 'sale-first-row'}
-                      style={{ opacity: !isActive ? 0.55 : 1 }}>
+                      style={{ opacity: !isActive ? 0.55 : 1, cursor:'pointer' }}
+                      onClick={() => setDetailSale(sale)}>
                       {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{date}</td>}
                       {idx === 0 && <td rowSpan={rowSpan} className="merged-cell">{time}</td>}
                       <td className="items-cell">{item ? getItemName(item) : 'N/A'}</td>
@@ -520,6 +842,17 @@ function SalesRecord() {
         </div>
       </div>
 
+      {/* ── Sale Detail Modal ── */}
+      {detailSale && (
+        <SaleDetailModal
+          sale={detailSale}
+          fmt={fmt}
+          canEdit={(!detailSale.status || detailSale.status === 'active') && isWithin30Mins(detailSale)}
+          onClose={() => setDetailSale(null)}
+          onEdit={() => { setEditSale(detailSale); setDetailSale(null); }}
+        />
+      )}
+
       {/* ── Void Sale Modal ── */}
       {voidSale && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -550,8 +883,7 @@ function SalesRecord() {
                   try {
                     await dataService.voidSale(voidSale.id, voidReason.trim());
                     setVoidSale(null);
-                    const data = await dataService.getSales();
-                    setSales((data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0)));
+                    await reloadSales();
                   } catch(e) { alert('Failed to void sale: ' + e.message); }
                   finally { setActionProcessing(false); }
                 }}
@@ -603,8 +935,7 @@ function SalesRecord() {
                   try {
                     await dataService.refundSale(refundSale.id, parseFloat(refundAmount), refundReason.trim());
                     setRefundSale(null);
-                    const data = await dataService.getSales();
-                    setSales((data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0)));
+                    await reloadSales();
                   } catch(e) { alert('Failed to refund sale: ' + e.message); }
                   finally { setActionProcessing(false); }
                 }}
@@ -616,20 +947,18 @@ function SalesRecord() {
         </div>
       )}
 
-      {/* ── Edit Sale Modal (2-hour window) ── */}
+      {/* ── Edit Sale Modal (30-minute window) ── */}
       {editSale && (
         <SaleEditModal
           sale={editSale}
           fmt={fmt}
           onSave={async () => {
             setEditSale(null);
-            const data = await dataService.getSales();
-            setSales((data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0)));
+            await reloadSales();
           }}
           onDeleted={async () => {
             setEditSale(null);
-            const data = await dataService.getSales();
-            setSales((data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0)));
+            await reloadSales();
           }}
           onClose={() => setEditSale(null)}
         />
