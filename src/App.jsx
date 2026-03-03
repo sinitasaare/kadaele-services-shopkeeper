@@ -510,7 +510,7 @@ function App() {
 
       <main className="app-main">
         <CurrentPageComponent
-          isUnlocked={!!storeIsOpen}
+
           storeIsOpen={!!storeIsOpen}
           onStoreStatusChange={handleStoreStatusChange}
           onNavigate={handlePageNavigation}
