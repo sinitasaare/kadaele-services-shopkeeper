@@ -513,6 +513,7 @@ function App() {
           isUnlocked={!!storeIsOpen}
           storeIsOpen={!!storeIsOpen}
           onStoreStatusChange={handleStoreStatusChange}
+          onNavigate={handlePageNavigation}
         />
       </main>
 
