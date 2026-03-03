@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
@@ -130,6 +131,9 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
 
 function Debtors() {
   const { fmt } = useCurrency();
+  const { fieldErrors: addErrors, showError: showAddError, clearFieldError: clearAddError, clearAll: clearAddErrors } = useValidation();
+  const { fieldErrors: editErrors, showError: showEditError, clearFieldError: clearEditError, clearAll: clearEditErrors } = useValidation();
+  const { fieldErrors: payErrors, showError: showPayError, clearFieldError: clearPayError } = useValidation();
   const [debtors, setDebtors]           = useState([]);
   const [searchTerm, setSearchTerm]     = useState('');
   const [selectedDebtor, setSelectedDebtor] = useState(null);
@@ -255,10 +259,12 @@ function Debtors() {
 
   const handleAddDebtor = async (e) => {
     e.preventDefault();
-    if (!newDebtor.fullName || !newDebtor.gender || !newDebtor.phone) { alert('Full Name, Gender and Phone are required'); return; }
-    if (!newDebtor.whatsapp && !newDebtor.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (newDebtor.email && !newDebtor.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!newDebtor.address) { alert('Please provide an address'); return; }
+    if (!newDebtor.fullName) return showAddError('add_fullName', 'Full Name is required');
+    if (!newDebtor.gender) return showAddError('add_gender', 'Please select a gender');
+    if (!newDebtor.phone) return showAddError('add_phone', 'Phone is required');
+    if (!newDebtor.whatsapp && !newDebtor.email) return showAddError('add_whatsapp', 'Provide at least WhatsApp or Email');
+    if (newDebtor.email && !newDebtor.email.includes('@')) return showAddError('add_email', 'Email must contain @');
+    if (!newDebtor.address) return showAddError('add_address', 'Address is required');
     try {
       const debtorData = {
         id: dataService.generateId(), customerName: newDebtor.fullName, name: newDebtor.fullName,
@@ -280,10 +286,12 @@ function Debtors() {
   const cancelEditMode  = () => { setIsEditMode(false); setEditedDebtor({...selectedDebtor}); };
 
   const saveDebtorEdits = async () => {
-    if (!editedDebtor.name || !editedDebtor.gender || !editedDebtor.phone) { alert('Full Name, Gender and Phone are required'); return; }
-    if (!editedDebtor.whatsapp && !editedDebtor.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (editedDebtor.email && !editedDebtor.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!editedDebtor.address) { alert('Please provide an address'); return; }
+    if (!editedDebtor.name) return showEditError('edit_name', 'Full Name is required');
+    if (!editedDebtor.gender) return showEditError('edit_gender', 'Please select a gender');
+    if (!editedDebtor.phone) return showEditError('edit_phone', 'Phone is required');
+    if (!editedDebtor.whatsapp && !editedDebtor.email) return showEditError('edit_whatsapp', 'Provide at least WhatsApp or Email');
+    if (editedDebtor.email && !editedDebtor.email.includes('@')) return showEditError('edit_email', 'Email must contain @');
+    if (!editedDebtor.address) return showEditError('edit_address', 'Address is required');
     try {
       const current = await dataService.getDebtors();
       const idx = current.findIndex(d => d.id === editedDebtor.id);
@@ -698,8 +706,8 @@ Kadaele Services`;
   };
 
   const handleRecordPayment = async () => {
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
-    if (!receiptNumber.trim()) { alert('Please enter a Receipt Number'); return; }
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) return showPayError('pay_amount', 'Enter a valid payment amount');
+    if (!receiptNumber.trim()) return showPayError('pay_receipt', 'Receipt Number is required');
     try {
       await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount), [], paymentPhoto || null, receiptNumber.trim());
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
@@ -863,26 +871,33 @@ Kadaele Services`;
               <div className="d-tab-body">
                 {isEditMode ? (
                   <div className="d-edit-form">
-                    {[['Full Name *','text',editedDebtor?.name||'','name'],['Phone *','tel',editedDebtor?.phone||'','phone'],
-                      ['WhatsApp','tel',editedDebtor?.whatsapp||'','whatsapp'],['Email','email',editedDebtor?.email||'','email']].map(([lbl,type,val,field]) => (
+                    {[['Full Name *','text',editedDebtor?.name||'','name','edit_name'],['Phone *','tel',editedDebtor?.phone||'','phone','edit_phone'],
+                      ['WhatsApp','tel',editedDebtor?.whatsapp||'','whatsapp','edit_whatsapp'],['Email','email',editedDebtor?.email||'','email','edit_email']].map(([lbl,type,val,field,errKey]) => (
                       <div className="d-form-group" key={field}>
                         <label>{lbl}</label>
-                        <input type={type} value={val} onChange={e => setEditedDebtor({...editedDebtor,[field]:e.target.value})} />
+                        <input type={type} value={val} data-field={errKey}
+                          style={errorBorder(errKey, editErrors)}
+                          onChange={e => { setEditedDebtor({...editedDebtor,[field]:e.target.value}); clearEditError(errKey); }} />
+                        <ValidationNote field={errKey} errors={editErrors} />
                       </div>
                     ))}
                     <div className="d-form-group">
                       <label>Gender *</label>
-                      <div className="d-gender">
+                      <div className="d-gender" data-field="edit_gender" style={editErrors['edit_gender'] ? {border:'1.5px solid #f59e0b',borderRadius:'6px',padding:'4px',boxShadow:'0 0 0 2px rgba(245,158,11,0.2)'} : {}}>
                         {['Male','Female'].map(g => (
                           <label key={g} className="d-gender-option">
-                            <input type="radio" name="edit-gender" checked={editedDebtor?.gender===g} onChange={() => setEditedDebtor({...editedDebtor,gender:g})} />{g}
+                            <input type="radio" name="edit-gender" checked={editedDebtor?.gender===g} onChange={() => { setEditedDebtor({...editedDebtor,gender:g}); clearEditError('edit_gender'); }} />{g}
                           </label>
                         ))}
                       </div>
+                      <ValidationNote field="edit_gender" errors={editErrors} />
                     </div>
                     <div className="d-form-group">
                       <label>Address *</label>
-                      <textarea rows="2" value={editedDebtor?.address||''} onChange={e => setEditedDebtor({...editedDebtor,address:e.target.value})} />
+                      <textarea rows="2" value={editedDebtor?.address||''} data-field="edit_address"
+                        style={errorBorder('edit_address', editErrors)}
+                        onChange={e => { setEditedDebtor({...editedDebtor,address:e.target.value}); clearEditError('edit_address'); }} />
+                      <ValidationNote field="edit_address" errors={editErrors} />
                     </div>
                     <div className="d-form-actions">
                       <button className="d-btn-cancel" onClick={cancelEditMode}>Cancel</button>
@@ -1087,28 +1102,33 @@ Kadaele Services`;
               <button className="d-close-btn" onClick={closeAddDebtorModal}><X size={22} /></button>
             </div>
             <form className="d-add-form" onSubmit={handleAddDebtor}>
-              {[['Full Name *','text','fullName','Enter full name'],['Phone *','tel','phone','Phone number'],
-                ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
+              {[['Full Name *','text','fullName','add_fullName','Enter full name'],['Phone *','tel','phone','add_phone','Phone number'],
+                ['WhatsApp','tel','whatsapp','add_whatsapp','WhatsApp number (optional)'],['Email','email','email','add_email','Email (optional)']].map(([lbl,type,field,errKey,ph]) => (
                 <div className="d-form-group" key={field}>
                   <label>{lbl}</label>
-                  <input type={type} value={newDebtor[field]} placeholder={ph}
-                    onChange={e => setNewDebtor({...newDebtor,[field]:e.target.value})} />
+                  <input type={type} value={newDebtor[field]} placeholder={ph} data-field={errKey}
+                    style={errorBorder(errKey, addErrors)}
+                    onChange={e => { setNewDebtor({...newDebtor,[field]:e.target.value}); clearAddError(errKey); }} />
+                  <ValidationNote field={errKey} errors={addErrors} />
                 </div>
               ))}
               <div className="d-form-group">
                 <label>Gender *</label>
-                <div className="d-gender">
+                <div className="d-gender" data-field="add_gender" style={addErrors['add_gender'] ? {border:'1.5px solid #f59e0b',borderRadius:'6px',padding:'4px',boxShadow:'0 0 0 2px rgba(245,158,11,0.2)'} : {}}>
                   {['Male','Female'].map(g => (
                     <label key={g} className="d-gender-option">
-                      <input type="radio" name="new-gender" checked={newDebtor.gender===g} onChange={() => setNewDebtor({...newDebtor,gender:g})} />{g}
+                      <input type="radio" name="new-gender" checked={newDebtor.gender===g} onChange={() => { setNewDebtor({...newDebtor,gender:g}); clearAddError('add_gender'); }} />{g}
                     </label>
                   ))}
                 </div>
+                <ValidationNote field="add_gender" errors={addErrors} />
               </div>
               <div className="d-form-group">
                 <label>Address *</label>
-                <textarea rows="2" value={newDebtor.address} placeholder="Enter address"
-                  onChange={e => setNewDebtor({...newDebtor,address:e.target.value})} />
+                <textarea rows="2" value={newDebtor.address} placeholder="Enter address" data-field="add_address"
+                  style={errorBorder('add_address', addErrors)}
+                  onChange={e => { setNewDebtor({...newDebtor,address:e.target.value}); clearAddError('add_address'); }} />
+                <ValidationNote field="add_address" errors={addErrors} />
               </div>
               <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
               <div className="d-form-actions">
@@ -1131,13 +1151,17 @@ Kadaele Services`;
             <div className="d-payment-form">
               <div className="d-form-group">
                 <label>Deposit Amount</label>
-                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
-                  onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
+                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00" data-field="pay_amount"
+                  style={errorBorder('pay_amount', payErrors)}
+                  onChange={e => { setPaymentAmount(e.target.value); clearPayError('pay_amount'); }} className="d-payment-input" />
+                <ValidationNote field="pay_amount" errors={payErrors} />
               </div>
               <div className="d-form-group">
                 <label>Receipt Number *</label>
-                <input type="text" value={receiptNumber} placeholder="Enter receipt number"
-                  onChange={e => setReceiptNumber(e.target.value)} className="d-payment-input" />
+                <input type="text" value={receiptNumber} placeholder="Enter receipt number" data-field="pay_receipt"
+                  style={errorBorder('pay_receipt', payErrors)}
+                  onChange={e => { setReceiptNumber(e.target.value); clearPayError('pay_receipt'); }} className="d-payment-input" />
+                <ValidationNote field="pay_receipt" errors={payErrors} />
               </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
