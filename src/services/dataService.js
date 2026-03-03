@@ -42,6 +42,7 @@ const DATA_KEYS = {
   INVENTORY: 'inventory',
   CASH_ENTRIES: 'cash_entries',
   PURCHASES: 'purchases',
+  EXPENSES: 'expenses',
   SYNC_QUEUE: 'sync_queue',
   DAILY_CASH: 'daily_cash',
   LAST_SYNC: 'last_sync',
@@ -2657,6 +2658,143 @@ class DataService {
     } catch (err) {
       console.error('Error fetching landlord from forage:', err);
       return null;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+
+  // ── Expenses ──────────────────────────────────────────────────────────────
+
+  async getExpenses() {
+    try {
+      const data = await localforage.getItem(DATA_KEYS.EXPENSES);
+      return data || [];
+    } catch (err) {
+      console.error('getExpenses error:', err);
+      return [];
+    }
+  }
+
+  async addExpense(expenseData) {
+    try {
+      const expenses = await localforage.getItem(DATA_KEYS.EXPENSES) || [];
+      const now = new Date().toISOString();
+      const expense = {
+        id: this.generateId(),
+        ...expenseData,
+        createdAt: now,
+        updatedAt: now,
+      };
+      expenses.push(expense);
+      await localforage.setItem(DATA_KEYS.EXPENSES, expenses);
+
+      // Sync to Firebase
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'expenses', expense.id), { ...expense, createdAt: serverTimestamp() }, { merge: true });
+        } catch (err) {
+          console.error('Firebase addExpense error:', err);
+        }
+      }
+
+      // If cash payment, auto-create a cash_entries OUT record
+      if ((expense.paymentMethod || 'cash') === 'cash') {
+        await this.addCashEntry({
+          type: 'out',
+          amount: expense.amount,
+          source: 'expense',
+          expenseId: expense.id,
+          note: expense.note || expense.category,
+          date: expense.date || now,
+          business_date: (expense.date || now).slice(0, 10),
+        });
+      }
+
+      return expense;
+    } catch (err) {
+      console.error('addExpense error:', err);
+      throw err;
+    }
+  }
+
+  async updateExpense(expenseId, patch) {
+    try {
+      const expenses = await localforage.getItem(DATA_KEYS.EXPENSES) || [];
+      const idx = expenses.findIndex(e => e.id === expenseId);
+      if (idx === -1) throw new Error('Expense not found');
+      const old = expenses[idx];
+      const updated = { ...old, ...patch, updatedAt: new Date().toISOString() };
+      expenses[idx] = updated;
+      await localforage.setItem(DATA_KEYS.EXPENSES, expenses);
+
+      // Sync to Firebase
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'expenses', expenseId), { ...updated, updatedAt: serverTimestamp() }, { merge: true });
+        } catch (err) {
+          console.error('Firebase updateExpense error:', err);
+        }
+      }
+
+      // Handle cash_entries linkage
+      const oldWasCash = (old.paymentMethod || 'cash') === 'cash';
+      const newIsCash  = (updated.paymentMethod || 'cash') === 'cash';
+      const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+      const linked = entries.find(e => e.source === 'expense' && e.expenseId === expenseId);
+
+      if (oldWasCash && newIsCash && linked) {
+        // Update the linked entry amount/note
+        const ei = entries.findIndex(e => e.id === linked.id);
+        entries[ei] = { ...linked, amount: updated.amount, note: updated.note || updated.category, updatedAt: new Date().toISOString() };
+        await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+        if (this.isOnline && auth.currentUser) {
+          try { await setDoc(doc(db, 'cash_entries', linked.id), entries[ei], { merge: true }); } catch (_) {}
+        }
+      } else if (!oldWasCash && newIsCash) {
+        // Create new cash entry
+        await this.addCashEntry({ type: 'out', amount: updated.amount, source: 'expense', expenseId, note: updated.note || updated.category, date: updated.date, business_date: (updated.date || '').slice(0, 10) });
+      } else if (oldWasCash && !newIsCash && linked) {
+        // Remove linked cash entry
+        const remaining = entries.filter(e => !(e.source === 'expense' && e.expenseId === expenseId));
+        await localforage.setItem(DATA_KEYS.CASH_ENTRIES, remaining);
+        if (this.isOnline && auth.currentUser) {
+          try { await deleteDoc(doc(db, 'cash_entries', linked.id)); } catch (_) {}
+        }
+      }
+
+      return updated;
+    } catch (err) {
+      console.error('updateExpense error:', err);
+      throw err;
+    }
+  }
+
+  async deleteExpense(expenseId) {
+    try {
+      const expenses = await localforage.getItem(DATA_KEYS.EXPENSES) || [];
+      const expense = expenses.find(e => e.id === expenseId);
+      const remaining = expenses.filter(e => e.id !== expenseId);
+      await localforage.setItem(DATA_KEYS.EXPENSES, remaining);
+
+      if (this.isOnline && auth.currentUser) {
+        try { await deleteDoc(doc(db, 'expenses', expenseId)); } catch (err) { console.error('Firebase deleteExpense error:', err); }
+      }
+
+      // Remove linked cash entry if it was a cash payment
+      if (expense && (expense.paymentMethod || 'cash') === 'cash') {
+        const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+        const linked = entries.find(e => e.source === 'expense' && e.expenseId === expenseId);
+        if (linked) {
+          const cleaned = entries.filter(e => !(e.source === 'expense' && e.expenseId === expenseId));
+          await localforage.setItem(DATA_KEYS.CASH_ENTRIES, cleaned);
+          if (this.isOnline && auth.currentUser) {
+            try { await deleteDoc(doc(db, 'cash_entries', linked.id)); } catch (_) {}
+          }
+        }
+      }
+    } catch (err) {
+      console.error('deleteExpense error:', err);
+      throw err;
     }
   }
 
