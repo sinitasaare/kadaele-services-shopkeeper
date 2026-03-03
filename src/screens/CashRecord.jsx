@@ -196,6 +196,12 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
 
     const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty) > 0);
     if (validItems.length === 0) return showError('oa_items', 'Add at least one item');
+    // Block save if any item has a name but qty is missing/zero
+    const badItems = items.filter(it => it.name.trim() && !(parseFloat(it.qty) > 0));
+    if (badItems.length > 0) {
+      badItems.forEach(it => showError('oa_qty_' + it.id, 'Enter a quantity'));
+      return;
+    }
 
     for (const it of validItems) {
       if (!it.name.trim()) return showError('oa_items', 'All items must have a name');
@@ -455,14 +461,15 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
                         </label>
                         <input type="number" min="0" step="1"
                           style={{
-                            width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)',
-                            borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)',
-                            color: 'var(--text-primary, #111)', boxSizing: 'border-box',
+                            width: '100%', padding: '8px 10px', borderRadius: '7px', fontSize: '13px',
+                            background: 'var(--surface, white)', color: 'var(--text-primary, #111)',
+                            boxSizing: 'border-box', ...errorBorder('oa_qty_' + it.id, fieldErrors),
                           }}
                           value={it.qty}
                           placeholder="0"
-                          onChange={e => updateItem(it.id, 'qty', e.target.value)}
+                          onChange={e => { updateItem(it.id, 'qty', e.target.value); clearFieldError('oa_qty_' + it.id); }}
                         />
+                        <ValidationNote field={'oa_qty_' + it.id} errors={fieldErrors} />
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>
@@ -666,6 +673,12 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
     if (!date) return showError('ao_date', 'Enter the Date');
     const validRows = rows.filter(r => r.productName.trim() && parseFloat(r.qty) > 0);
     if (validRows.length === 0) return showError('ao_items', 'Add at least one product with a quantity');
+    // Block save if any row has a product name but qty is missing/zero
+    const badRows = rows.filter(r => r.productName.trim() && !(parseFloat(r.qty) > 0));
+    if (badRows.length > 0) {
+      badRows.forEach(r => showError('ao_qty_' + r.id, 'Enter a quantity'));
+      return;
+    }
 
     setSaving(true);
     try {
@@ -1057,9 +1070,10 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
                           <div>
                             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>Quantity *</label>
                             <input type="number" min="0" step="1"
-                              style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--border, #e5e7eb)', borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)', color: 'var(--text-primary, #111)', boxSizing: 'border-box' }}
+                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', fontSize: '13px', background: 'var(--surface, white)', color: 'var(--text-primary, #111)', boxSizing: 'border-box', ...errorBorder('ao_qty_' + row.id, fieldErrors) }}
                               value={row.qty} placeholder="0"
-                              onChange={e => updateRow(row.id, 'qty', e.target.value)} />
+                              onChange={e => { updateRow(row.id, 'qty', e.target.value); clearFieldError('ao_qty_' + row.id); }} />
+                            <ValidationNote field={'ao_qty_' + row.id} errors={fieldErrors} />
                           </div>
                           <div>
                             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', marginBottom: '4px' }}>Selling Price</label>
