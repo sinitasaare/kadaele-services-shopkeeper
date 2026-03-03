@@ -71,28 +71,62 @@ const PAGES = [
     `
   },
   { 
+    name: 'DEBTORS',          
+    component: Debtors,
+    helpContent: `
+      <h3>Debtors</h3>
+      <p>Debtors are customers who owe your business money because they bought on credit.</p>
+
+      <h4>How It Works</h4>
+      <p>When a customer buys on credit in Checkout, they become a debtor here automatically. Each debtor's card shows their total owed, total paid, and remaining balance.</p>
+
+      <h4>Examples</h4>
+      <p>&#x1f464; <em>John bought $200 of goods on credit last week. Today he pays back $100:</em> Open John's profile &rarr; Debt History tab &rarr; tap Deposit &rarr; enter $100 &rarr; optionally take a photo of the receipt &rarr; Save. His balance drops from $200 to $100. A Cash IN entry is created automatically.</p>
+      <p>&#x1f464; <em>You want to check who owes you the most:</em> Tap the sort button (&uarr;&darr;) &rarr; choose "Balance: High to Low". The debtor with the highest unpaid amount appears first.</p>
+
+      <h4>Debtor Profile Tabs</h4>
+      <p><strong>Details</strong> &mdash; name, phone, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Debt History</strong> &mdash; every credit sale and every deposit (repayment), with dates and running balance.</p>
+
+      <h4>Overdue Warning</h4>
+      <p>If a debtor's repayment date has passed and they still owe money, they are flagged as overdue. You cannot sell to them on credit again until they clear their balance.</p>
+    `
+  },
+
+  { 
     name: 'CASH RECORD',      
     component: CashRecord,
     helpContent: `
       <h3>Cash Record</h3>
-      <p>This page tracks every dollar that comes in or goes out of your business cash box.</p>
+      <p>This page is your <strong>cash ledger</strong>. It shows <em>all</em> cash movements, including entries that are auto-posted from Sales, Purchases, Expenses and Debtor repayments.</p>
 
-      <h4>How It Works</h4>
-      <p>Tap <strong>+ Add Entry</strong> and choose Cash IN or Cash OUT. Select who the money is from/to, pick the reason, enter the amount, and save.</p>
+      <h4>What You Can Do Here</h4>
+      <ul>
+        <li><strong>View</strong> Cash IN and Cash OUT entries.</li>
+        <li><strong>Add Manual Cash Adjustments</strong> only (for real-life cash events that are not recorded elsewhere).</li>
+      </ul>
 
-      <h4>Cash IN Examples</h4>
-      <p>&#x1f4b5; <em>Riti gives you $500 for float (change money):</em> Cash IN &rarr; select "Riti" &rarr; Being For "Float (change money)" &rarr; Amount $500 &rarr; Save. Description shows: "From Riti for float (change money)."</p>
-      <p>&#x1f4b5; <em>Kamwatie gives you $2,000 to purchase stock:</em> Cash IN &rarr; select "Kamwatie" &rarr; Being For "Purchases (money to buy stock)" &rarr; Amount $2,000 &rarr; Save.</p>
+      <h4>What You Cannot Do Here</h4>
+      <ul>
+        <li>You cannot create Purchases, Expenses, Advance Orders, Operational Assets, or Deposits from this page.</li>
+        <li>Entries linked to other records are <strong>read-only</strong>. Edit them from their original screen.</li>
+      </ul>
 
-      <h4>Cash OUT Examples</h4>
-      <p>&#x1f4b8; <em>You pay the Landlord $1,000 rent:</em> Cash OUT &rarr; select "Landlord" &rarr; Being For "Land Rental" &rarr; Amount $1,000 &rarr; Save. Description shows: "Paid Landlord to pay land rental."</p>
-      <p>&#x1f4b8; <em>You buy stock from a supplier (e.g. Kamwatie):</em> Cash OUT &rarr; select "Kamwatie" &rarr; Being For opens the purchase form &rarr; fill in items purchased &rarr; Save. The purchase is recorded and stock levels update automatically.</p>
+      <h4>Source Labels</h4>
+      <p>Each row shows a Source badge:</p>
+      <ul>
+        <li><strong>Sale</strong> (auto-posted)</li>
+        <li><strong>Purchase</strong> (auto-posted when paid by cash)</li>
+        <li><strong>Expense</strong> (auto-posted when paid by cash)</li>
+        <li><strong>Debt Payment</strong> (auto-posted when repayment is cash)</li>
+        <li><strong>Manual</strong> (created here and editable)</li>
+      </ul>
 
-      <h4>Automatic Entries</h4>
-      <p>You don't need to manually add these &mdash; they happen on their own: cash sales from Checkout (Cash IN), cash purchases from Purchase Record (Cash OUT), and debtor repayments (Cash IN).</p>
+      <h4>Manual Entry Examples</h4>
+      <p>&#x1f4b5; <em>Bank withdrawal for shop cash:</em> Manual IN &rarr; Party Type: Bank &rarr; Reason: Bank Withdrawal &rarr; Enter amount &rarr; Save.</p>
+      <p>&#x1f4b8; <em>Owner takes cash out:</em> Manual OUT &rarr; Party Type: Owner &rarr; Reason: Owner Withdrawal &rarr; Enter amount &rarr; Save.</p>
 
-      <h4>Filtering</h4>
-      <p>Use Filter to view Cash In only, Cash Out only, or by date range. The summary boxes show Total Records and Net Balance.</p>
+      <h4>Filters</h4>
+      <p>Use filters to view All / IN / OUT and filter by Source (Sale, Purchase, Expense, Debt Payment, Manual).</p>
     `
   },
   {
@@ -153,27 +187,7 @@ const PAGES = [
       <p>Use the search bar to find a customer by name. Use the sort button (&uarr;&darr;) to order by balance, due date, or most recently modified.</p>
     `
   },
-  { 
-    name: 'DEBTORS',          
-    component: Debtors,
-    helpContent: `
-      <h3>Debtors</h3>
-      <p>Debtors are customers who owe your business money because they bought on credit.</p>
-
-      <h4>How It Works</h4>
-      <p>When a customer buys on credit in Checkout, they become a debtor here automatically. Each debtor's card shows their total owed, total paid, and remaining balance.</p>
-
-      <h4>Examples</h4>
-      <p>&#x1f464; <em>John bought $200 of goods on credit last week. Today he pays back $100:</em> Open John's profile &rarr; Debt History tab &rarr; tap Deposit &rarr; enter $100 &rarr; optionally take a photo of the receipt &rarr; Save. His balance drops from $200 to $100. A Cash IN entry is created automatically.</p>
-      <p>&#x1f464; <em>You want to check who owes you the most:</em> Tap the sort button (&uarr;&darr;) &rarr; choose "Balance: High to Low". The debtor with the highest unpaid amount appears first.</p>
-
-      <h4>Debtor Profile Tabs</h4>
-      <p><strong>Details</strong> &mdash; name, phone, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Debt History</strong> &mdash; every credit sale and every deposit (repayment), with dates and running balance.</p>
-
-      <h4>Overdue Warning</h4>
-      <p>If a debtor's repayment date has passed and they still owe money, they are flagged as overdue. You cannot sell to them on credit again until they clear their balance.</p>
-    `
-  },
+  
   { 
     name: 'CREDITORS',          
     component: Creditors,
