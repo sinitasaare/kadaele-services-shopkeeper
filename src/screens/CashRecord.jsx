@@ -3,7 +3,7 @@ import { Edit2, X, Plus, Trash2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import { useValidation, ValidationNote, errorBorder } from '../utils/validation';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import PdfTableButton from '../components/PdfTableButton';
 import './CashRecord.css';
 import './PurchaseRecord.css';
