@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { Calculator, Lock } from 'lucide-react';
 import { Camera as CapCamera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
@@ -26,6 +27,7 @@ function playBeep() {
 
 function Checkout({ isUnlocked = false }) {
   const { fmt } = useCurrency();
+  const { fieldErrors: creditErrors, showError: showCreditError, clearFieldError: clearCreditError } = useValidation();
   const [goods, setGoods] = useState([]);
   const [catalogue, setCatalogue] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -392,12 +394,12 @@ function Checkout({ isUnlocked = false }) {
   };
   const confirmCreditSale = async (e) => {
     e.preventDefault();
-    if (!selectedDebtorId) { alert('Please select a registered debtor from the dropdown.'); return; }
+    if (!selectedDebtorId) return showCreditError('credit_debtor', 'Please select a registered debtor');
     const { existingDueDate } = getDebtorStatus();
     const balance = selectedDebtorObj ? (selectedDebtorObj.balance || selectedDebtorObj.totalDue || 0) : 0;
     const isLocked = !!existingDueDate && balance > 0;
     const finalRepaymentDate = isLocked ? existingDueDate : repaymentDate;
-    if (!finalRepaymentDate) { alert('Please select a repayment date.'); return; }
+    if (!finalRepaymentDate) return showCreditError('credit_date', 'Please select a repayment date');
     // Photo is optional — skip validation
     setIsProcessing(true);
     try {
@@ -832,11 +834,13 @@ function Checkout({ isUnlocked = false }) {
                       }}
                       style={{
                         width:'100%', padding:'8px 36px 8px 10px', boxSizing:'border-box',
-                        border:`1.5px solid ${selectedDebtorId ? '#667eea' : '#ccc'}`,
+                        border:`1.5px solid ${selectedDebtorId ? '#667eea' : (creditErrors['credit_debtor'] ? '#f59e0b' : '#ccc')}`,
                         borderRadius:'6px', fontSize:'14px', color:'#1f2937',
                         backgroundColor: selectedDebtorId ? '#f0f7ff' : 'var(--surface)',
                         cursor: selectedDebtorId ? 'default' : 'text',
+                        ...(creditErrors['credit_debtor'] && !selectedDebtorId ? {boxShadow:'0 0 0 2px rgba(245,158,11,0.2)'} : {}),
                       }}
+                      data-field="credit_debtor"
                     />
                     {selectedDebtorId ? (
                       <button type="button" onClick={clearDebtorSelection}
@@ -893,6 +897,7 @@ function Checkout({ isUnlocked = false }) {
                       No registered debtors found. Add one in the Debtors section first.
                     </p>
                   )}
+                  <ValidationNote field="credit_debtor" errors={creditErrors} />
                 </div>
 
                 {/* ── Repayment Date ── */}
@@ -906,16 +911,20 @@ function Checkout({ isUnlocked = false }) {
                     value={isLocked ? existingDueDate : repaymentDate}
                     min={todayStr}
                     max={getRepaymentMaxStr()}
-                    onChange={(e) => !isLocked && setRepaymentDate(e.target.value)}
+                    onChange={(e) => { if (!isLocked) { setRepaymentDate(e.target.value); clearCreditError('credit_date'); } }}
                     disabled={!selectedDebtorId || isLocked}
                     required
+                    data-field="credit_date"
                     style={{
                       width:'100%', padding:'8px 10px', boxSizing:'border-box',
-                      border:'1.5px solid #ccc', borderRadius:'6px',
+                      border: creditErrors['credit_date'] ? '1.5px solid #f59e0b' : '1.5px solid #ccc',
+                      borderRadius:'6px',
                       backgroundColor: (!selectedDebtorId || isLocked) ? '#f3f4f6' : 'var(--surface)',
                       cursor: (!selectedDebtorId || isLocked) ? 'not-allowed' : 'pointer',
+                      ...(creditErrors['credit_date'] ? {boxShadow:'0 0 0 2px rgba(245,158,11,0.2)'} : {}),
                     }}
                   />
+                  <ValidationNote field="credit_date" errors={creditErrors} />
                   {!selectedDebtorId && (
                     <p style={{ fontSize:'11px', color:'#9ca3af', marginTop:'3px' }}>Select a debtor first.</p>
                   )}
