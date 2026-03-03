@@ -1026,6 +1026,7 @@ Kadaele Services`;
                   style={errorBorder('pay_receipt', payErrors)}
                   onChange={e => { setReceiptNumber(e.target.value); clearPayError('pay_receipt'); }} className="d-payment-input" />
                 <ValidationNote field="pay_receipt" errors={payErrors} />
+              </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
