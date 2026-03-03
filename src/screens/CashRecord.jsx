@@ -2,7 +2,10 @@
 import React, { useEffect, useState, useMemo } from "react";
 import * as dataService from "../services/dataService";
 
-export default function CashRecord() {
+const DEBTORS_PAGE_INDEX   = 6;
+const PURCHASE_PAGE_INDEX  = 4;
+
+export default function CashRecord({ onNavigate }) {
   const [cashEntries, setCashEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -117,6 +120,40 @@ export default function CashRecord() {
     await load();
   }
 
+  function handleEntryRowClick(entry) {
+    if (!onNavigate) return;
+    // debt_payment entries → navigate to Debtors (read-only there)
+    if (entry.source === "debt_payment") {
+      onNavigate(DEBTORS_PAGE_INDEX);
+    }
+    // purchase entries → navigate to Purchase Record (read-only there)
+    if (entry.source === "purchase") {
+      onNavigate(PURCHASE_PAGE_INDEX);
+    }
+  }
+
+  function isLinkedReadOnly(entry) {
+    return entry.source === "debt_payment" || entry.source === "purchase";
+  }
+
+  function linkedLabel(entry) {
+    if (entry.source === "debt_payment") return "View Debtor →";
+    if (entry.source === "purchase")     return "View Purchase →";
+    return null;
+  }
+
+  function linkedRowStyle(entry) {
+    if (entry.source === "debt_payment") return { cursor: "pointer", background: "#e8f4fd" };
+    if (entry.source === "purchase")     return { cursor: "pointer", background: "#fff7ed" };
+    return {};
+  }
+
+  function linkedRowTitle(entry) {
+    if (entry.source === "debt_payment") return "Tap to view in Debtors screen";
+    if (entry.source === "purchase")     return "Tap to view in Purchase Record";
+    return undefined;
+  }
+
   if (loading) return <div>Loading...</div>;
 
   return (
@@ -154,22 +191,41 @@ export default function CashRecord() {
             <th>Amount</th>
             <th>Source</th>
             <th>Note</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
-          {filteredEntries.map((entry) => (
-            <tr key={entry.id}>
-              <td>{new Date(entry.createdAt).toLocaleString()}</td>
-              <td>{entry.type}</td>
-              <td>{entry.amount}</td>
-              <td>
-                <span style={getBadgeStyle(entry.source)}>
-                  {getSourceLabel(entry.source)}
-                </span>
-              </td>
-              <td>{entry.note || ""}</td>
-            </tr>
-          ))}
+          {filteredEntries.map((entry) => {
+            const readOnly = isLinkedReadOnly(entry);
+            const label    = linkedLabel(entry);
+            return (
+              <tr key={entry.id}
+                style={linkedRowStyle(entry)}
+                title={linkedRowTitle(entry)}
+                onClick={readOnly ? () => handleEntryRowClick(entry) : undefined}
+              >
+                <td>{new Date(entry.createdAt).toLocaleString()}</td>
+                <td>{entry.type}</td>
+                <td>{entry.amount}</td>
+                <td>
+                  <span style={getBadgeStyle(entry.source)}>
+                    {getSourceLabel(entry.source)}
+                  </span>
+                </td>
+                <td>{entry.note || ""}</td>
+                <td>
+                  {label ? (
+                    <span
+                      style={{ color: "#2196f3", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+                      onClick={(e) => { e.stopPropagation(); handleEntryRowClick(entry); }}
+                    >
+                      {label}
+                    </span>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
