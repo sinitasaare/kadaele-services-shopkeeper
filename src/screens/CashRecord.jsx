@@ -274,7 +274,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
           padding: '18px 20px', borderBottom: '1px solid var(--border, #e5e7eb)',
           flexShrink: 0,
         }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>🔧 Add Operational Assets</h2>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>🛒 Buy Operational Assets/Expenses</h2>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-secondary, #6b7280)', padding: '4px', borderRadius: '4px',
@@ -2141,28 +2141,17 @@ function CashRecord({ isUnlocked = false }) {
                         <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
                           <div
                             className="cj-desc-dropdown-item"
-                            style={{ fontWeight:600, color:'#667eea' }}
-                            onMouseDown={e => {
-                              e.preventDefault();
-                              setShowOthersSubDrop(false);
-                              setShowSearchDrop(true);
-                            }}
-                          >
-                            📦 Suppliers List
-                          </div>
-                          <div
-                            className="cj-desc-dropdown-item"
                             style={{ fontWeight:600, color:'#f59e0b' }}
                             onMouseDown={e => {
                               e.preventDefault();
                               setShowOthersSubDrop(false);
-                              // Open operational assets modal directly
-                              const name = personSearch.trim() || personName.trim();
-                              setPersonName(name);
+                              setPersonName('');
+                              setPersonSearch('');
+                              setIsOthersMode(false);
                               setShowExpensesModal(true);
                             }}
                           >
-                            🔧 Add Operational Assets
+                            🏭 Supplier
                           </div>
                         </div>
                       )}
@@ -2240,35 +2229,20 @@ function CashRecord({ isUnlocked = false }) {
                           <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
                         </button>
                       )}
-                      {/* Suppliers List */}
+                      {/* Supplier */}
                       <div
                         className="cj-desc-dropdown-item"
-                        style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
-                        onMouseDown={e => {
-                          e.preventDefault();
-                          setIsOthersMode(true);
-                          setPersonName('');
-                          setPersonSearch('');
-                          setShowNameDrop(false);
-                          setTimeout(() => setShowSearchDrop(true), 50);
-                        }}
-                      >
-                        📦 Suppliers List
-                      </div>
-                      {/* Add Operational Assets */}
-                      <div
-                        className="cj-desc-dropdown-item"
-                        style={{ fontWeight:600, color:'#f59e0b' }}
+                        style={{ fontWeight:600, color:'#f59e0b', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
                         onMouseDown={e => {
                           e.preventDefault();
                           setShowNameDrop(false);
-                          setIsOthersMode(true);
+                          setIsOthersMode(false);
                           setPersonName('');
                           setPersonSearch('');
                           setShowExpensesModal(true);
                         }}
                       >
-                        🔧 Add Operational Assets
+                        🏭 Supplier
                       </div>
                     </div>
                   )}
