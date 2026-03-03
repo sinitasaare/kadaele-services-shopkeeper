@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import dataService from '../services/dataService';
 import { auth } from '../services/firebaseConfig';
 import './CashReconciliation.css';
@@ -256,6 +257,8 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
 
   const reopenBtnRef = React.useRef(null);
 
+  const { fieldErrors, showError, clearFieldError } = useValidation();
+
   // Open Day form
   const [openingFloat, setOpeningFloat] = useState('');
   const [openingSaving, setOpeningSaving] = useState(false);
@@ -302,7 +305,7 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
 
   const handleOpenDay = async () => {
     const float = parseFloat(openingFloat);
-    if (isNaN(float) || float < 0) { alert('Please enter a valid opening float (0 or more).'); return; }
+    if (isNaN(float) || float < 0) return showError('cr_float', 'Please enter a valid opening float (0 or more)');
     setOpeningSaving(true);
     try {
       await dataService.openDay({ opening_float: float });
@@ -318,7 +321,7 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
 
   const handleCloseDay = async () => {
     const counted = parseFloat(countedCash);
-    if (isNaN(counted) || counted < 0) { alert('Please enter the counted cash amount.'); return; }
+    if (isNaN(counted) || counted < 0) return showError('cr_counted', 'Please enter the counted cash amount');
 
     const summary = await dataService.calculateExpectedCash(today);
     const diff = counted - summary.expected;
@@ -388,8 +391,11 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
                 min="0"
                 step="0.01"
                 value={openingFloat}
-                onChange={e => setOpeningFloat(e.target.value)}
+                data-field="cr_float"
+                style={errorBorder('cr_float', fieldErrors)}
+                onChange={e => { setOpeningFloat(e.target.value); clearFieldError('cr_float'); }}
               />
+              <ValidationNote field="cr_float" errors={fieldErrors} />
             </div>
             <button
               className="cr-btn cr-btn-open"
@@ -409,7 +415,7 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
 
       const handleReopenToday = async () => {
         const float = parseFloat(reopenFloat);
-        if (isNaN(float) || float < 0) { alert('Please enter a valid Opening Float (0 or more).'); return; }
+        if (isNaN(float) || float < 0) return showError('cr_reopen', 'Please enter a valid Opening Float (0 or more)');
         if (!window.confirm('Re-open the shop? A new session will start.')) return;
         try {
           await dataService.reopenDay(today, float);
@@ -488,8 +494,11 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
                 min="0"
                 step="0.01"
                 value={reopenFloat}
-                onChange={e => setReopenFloat(e.target.value)}
+                data-field="cr_reopen"
+                style={errorBorder('cr_reopen', fieldErrors)}
+                onChange={e => { setReopenFloat(e.target.value); clearFieldError('cr_reopen'); }}
               />
+              <ValidationNote field="cr_reopen" errors={fieldErrors} />
             </div>
           </div>
 
@@ -556,8 +565,11 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
               min="0"
               step="0.01"
               value={countedCash}
-              onChange={e => { setCountedCash(e.target.value); setCloseNotes(''); }}
+              data-field="cr_counted"
+              style={errorBorder('cr_counted', fieldErrors)}
+              onChange={e => { setCountedCash(e.target.value); setCloseNotes(''); clearFieldError('cr_counted'); }}
             />
+            <ValidationNote field="cr_counted" errors={fieldErrors} />
           </div>
 
           {previewDiff !== null && (
