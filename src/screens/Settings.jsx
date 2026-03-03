@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import {
   Globe, Moon, Sun, Bell, Clock,
   ClipboardList, Wallet, X, Check, Plus, Trash2,
@@ -247,6 +248,7 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const [repayDate, setRepayDate] = useState('');
   const [saving, setSaving]       = useState(false);
   const [maxDate]                 = useState('2026-02-22');
+  const { fieldErrors, showError, clearFieldError } = useValidation();
 
   useEffect(() => {
     dataService.getGoods().then(g => setGoods(g || []));
@@ -314,10 +316,10 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
   const total = cart.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
 
   const handleSave = async () => {
-    if (!saleDate) { alert('Please select a sale date.'); return; }
-    if (cart.length === 0) { alert('Please add at least one item.'); return; }
-    if (payType === 'credit' && !debtorId) { alert('Please select a debtor.'); return; }
-    if (payType === 'credit' && !repayDate) { alert('Please enter a repayment date.'); return; }
+    if (!saleDate) return showError('fs_date', 'Please select a sale date');
+    if (cart.length === 0) return showError('fs_cart', 'Please add at least one item');
+    if (payType === 'credit' && !debtorId) return showError('fs_debtor', 'Please select a debtor');
+    if (payType === 'credit' && !repayDate) return showError('fs_repay', 'Please enter a repayment date');
     setSaving(true);
     try {
       const debtor = debtors.find(d => d.id === debtorId);
@@ -350,8 +352,10 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
 
           <div className="st-field">
             <label>{t.saleDate} *</label>
-            <input type="date" max={maxDate} value={saleDate}
-              onChange={e => { setSaleDate(e.target.value); setRepayDate(''); }} className="st-input" />
+            <input type="date" max={maxDate} value={saleDate} data-field="fs_date"
+              style={errorBorder('fs_date', fieldErrors)}
+              onChange={e => { setSaleDate(e.target.value); setRepayDate(''); clearFieldError('fs_date'); }} className="st-input" />
+            <ValidationNote field="fs_date" errors={fieldErrors} />
             <span className="st-field-hint">{t.systemStartHint}</span>
           </div>
 
@@ -371,12 +375,15 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
             <>
               <div className="st-field">
                 <label>{t.debtorName} *</label>
-                <select className="st-input" value={debtorId} onChange={e => setDebtorId(e.target.value)}>
+                <select className="st-input" value={debtorId} data-field="fs_debtor"
+                  style={errorBorder('fs_debtor', fieldErrors)}
+                  onChange={e => { setDebtorId(e.target.value); clearFieldError('fs_debtor'); }}>
                   <option value="">{t.selectDebtor}</option>
                   {debtors.map(d => (
                     <option key={d.id} value={d.id}>{d.name || d.customerName}</option>
                   ))}
                 </select>
+                <ValidationNote field="fs_debtor" errors={fieldErrors} />
               </div>
               <div className="st-field">
                 <label>{t.repayDate} *</label>
@@ -387,8 +394,11 @@ function ForgottenSaleModal({ t, onClose, onSaved }) {
                   min={repayMin}
                   max={repayMax}
                   disabled={!saleDate}
-                  onChange={e => setRepayDate(e.target.value)}
+                  data-field="fs_repay"
+                  style={errorBorder('fs_repay', fieldErrors)}
+                  onChange={e => { setRepayDate(e.target.value); clearFieldError('fs_repay'); }}
                 />
+                <ValidationNote field="fs_repay" errors={fieldErrors} />
                 {!saleDate && <span className="st-field-hint">Select a sale date first to enable repayment date.</span>}
                 {saleDate && <span className="st-field-hint">Date range: {saleDate} to {repayMax} (sale date + 14 days)</span>}
               </div>
@@ -471,6 +481,7 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
   const [showCargo, setShowCargo]   = useState(false);
   const [saving, setSaving]         = useState(false);
   const [maxDate]                   = useState('2026-02-22');
+  const { fieldErrors, showError, clearFieldError } = useValidation();
 
   // Reset per-type fields when type changes
   const switchType = (type) => {
@@ -532,13 +543,13 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
   };
 
   const handleSave = async () => {
-    if (!cashDate) { alert('Please select an entry date.'); return; }
+    if (!cashDate) return showError('fc_date', 'Please select an entry date');
     const amt = descKey === 'cargo' ? cargoTotal : parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) { alert('Please enter a valid amount.'); return; }
-    if (!note) { alert('Please complete all description fields.'); return; }
-    if (cashType === 'in' && !fromName.trim()) { alert('Please enter the lender\'s name.'); return; }
-    if (cashType === 'out' && descKey !== 'cargo' && !paidTo.trim()) { alert('Please enter the receiver\'s name.'); return; }
-    if (cashType === 'out' && descKey === 'cargo' && cargoItems.length === 0) { alert('Please add cargo items.'); return; }
+    if (isNaN(amt) || amt <= 0) return showError('fc_amount', 'Please enter a valid amount');
+    if (!note) return showError('fc_desc', 'Please complete all description fields');
+    if (cashType === 'in' && !fromName.trim()) return showError('fc_from', "Please enter the lender's name");
+    if (cashType === 'out' && descKey !== 'cargo' && !paidTo.trim()) return showError('fc_paidto', "Please enter the receiver's name");
+    if (cashType === 'out' && descKey === 'cargo' && cargoItems.length === 0) return showError('fc_cargo', 'Please add cargo items');
 
     setSaving(true);
     try {
@@ -585,8 +596,10 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
           {/* Date */}
           <div className="st-field">
             <label>{t.cashDate} *</label>
-            <input type="date" max={maxDate} value={cashDate}
-              onChange={e => setCashDate(e.target.value)} className="st-input" />
+            <input type="date" max={maxDate} value={cashDate} data-field="fc_date"
+              style={errorBorder('fc_date', fieldErrors)}
+              onChange={e => { setCashDate(e.target.value); clearFieldError('fc_date'); }} className="st-input" />
+            <ValidationNote field="fc_date" errors={fieldErrors} />
             <span className="st-field-hint">{t.systemStartHint}</span>
           </div>
 
@@ -607,8 +620,10 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
           {!(cashType === 'out' && descKey === 'cargo') && (
             <div className="st-field">
               <label>{t.amount} *</label>
-              <input type="number" className="st-input" placeholder="0.00"
-                value={amount} onChange={e => setAmount(e.target.value)} min="0.01" step="0.01" />
+              <input type="number" className="st-input" placeholder="0.00" data-field="fc_amount"
+                style={errorBorder('fc_amount', fieldErrors)}
+                value={amount} onChange={e => { setAmount(e.target.value); clearFieldError('fc_amount'); }} min="0.01" step="0.01" />
+              <ValidationNote field="fc_amount" errors={fieldErrors} />
             </div>
           )}
 
@@ -616,9 +631,11 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
           {cashType === 'in' && (
             <div className="st-field">
               <label>From: *</label>
-              <input type="text" className="st-input"
+              <input type="text" className="st-input" data-field="fc_from"
+                style={errorBorder('fc_from', fieldErrors)}
                 placeholder="Please enter name of lender"
-                value={fromName} onChange={e => setFromName(e.target.value)} />
+                value={fromName} onChange={e => { setFromName(e.target.value); clearFieldError('fc_from'); }} />
+              <ValidationNote field="fc_from" errors={fieldErrors} />
             </div>
           )}
 
@@ -626,9 +643,11 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
           {cashType === 'out' && (
             <div className="st-field">
               <label>Paid to: *</label>
-              <input type="text" className="st-input"
+              <input type="text" className="st-input" data-field="fc_paidto"
+                style={errorBorder('fc_paidto', fieldErrors)}
                 placeholder="Name of receiver/supplier"
-                value={paidTo} onChange={e => setPaidTo(e.target.value)} />
+                value={paidTo} onChange={e => { setPaidTo(e.target.value); clearFieldError('fc_paidto'); }} />
+              <ValidationNote field="fc_paidto" errors={fieldErrors} />
             </div>
           )}
 
@@ -640,6 +659,7 @@ function ForgottenCashModal({ t, onClose, onSaved }) {
               value={descKey}
               onSelect={handleDescSelect}
             />
+            <ValidationNote field="fc_desc" errors={fieldErrors} />
           </div>
 
           {/* Cargo summary if cargo was selected and confirmed */}
