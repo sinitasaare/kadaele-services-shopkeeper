@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
@@ -131,6 +132,9 @@ function PurchaseEditModal({ purchase, onSave, onClose, onDeleted, fmt }) {
 
 function Suppliers() {
   const { fmt } = useCurrency();
+  const { fieldErrors: addErrors, showError: showAddError, clearFieldError: clearAddError } = useValidation();
+  const { fieldErrors: editErrors, showError: showEditError, clearFieldError: clearEditError } = useValidation();
+  const { fieldErrors: payErrors, showError: showPayError, clearFieldError: clearPayError } = useValidation();
   const [suppliers, setSuppliers]           = useState([]);
   const [searchTerm, setSearchTerm]     = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
@@ -251,10 +255,11 @@ function Suppliers() {
 
   const handleAddSupplier = async (e) => {
     e.preventDefault();
-    if (!newSupplier.fullName || !newSupplier.phone) { alert('Full Name and Phone are required'); return; }
-    if (!newSupplier.whatsapp && !newSupplier.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (newSupplier.email && !newSupplier.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!newSupplier.address) { alert('Please provide an address'); return; }
+    if (!newSupplier.fullName) return showAddError('add_fullName', 'Full Name is required');
+    if (!newSupplier.phone) return showAddError('add_phone', 'Phone is required');
+    if (!newSupplier.whatsapp && !newSupplier.email) return showAddError('add_whatsapp', 'Provide at least WhatsApp or Email');
+    if (newSupplier.email && !newSupplier.email.includes('@')) return showAddError('add_email', 'Email must contain @');
+    if (!newSupplier.address) return showAddError('add_address', 'Address is required');
     try {
       const supplierData = {
         id: dataService.generateId(), customerName: newSupplier.fullName, name: newSupplier.fullName,
@@ -276,10 +281,12 @@ function Suppliers() {
   const cancelEditMode  = () => { setIsEditMode(false); setEditedSupplier({...selectedSupplier}); };
 
   const saveSupplierEdits = async () => {
-    if (!editedSupplier.name || !editedSupplier.gender || !editedSupplier.phone) { alert('Full Name, Gender and Phone are required'); return; }
-    if (!editedSupplier.whatsapp && !editedSupplier.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (editedSupplier.email && !editedSupplier.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!editedSupplier.address) { alert('Please provide an address'); return; }
+    if (!editedSupplier.name) return showEditError('edit_name', 'Full Name is required');
+    if (!editedSupplier.gender) return showEditError('edit_gender', 'Please select a gender');
+    if (!editedSupplier.phone) return showEditError('edit_phone', 'Phone is required');
+    if (!editedSupplier.whatsapp && !editedSupplier.email) return showEditError('edit_whatsapp', 'Provide at least WhatsApp or Email');
+    if (editedSupplier.email && !editedSupplier.email.includes('@')) return showEditError('edit_email', 'Email must contain @');
+    if (!editedSupplier.address) return showEditError('edit_address', 'Address is required');
     try {
       const current = await dataService.getSuppliers();
       const idx = current.findIndex(d => d.id === editedSupplier.id);
@@ -593,7 +600,7 @@ Kadaele Services`;
   };
 
   const handleRecordPayment = async () => {
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) return showPayError('pay_amount', 'Enter a valid payment amount');
     try {
       await dataService.recordSupplierPayment(selectedSupplier.id, parseFloat(paymentAmount), paymentPhoto || null);
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
@@ -731,26 +738,33 @@ Kadaele Services`;
               <div className="d-tab-body">
                 {isEditMode ? (
                   <div className="d-edit-form">
-                    {[['Full Name *','text',editedSupplier?.name||'','name'],['Phone *','tel',editedSupplier?.phone||'','phone'],
-                      ['WhatsApp','tel',editedSupplier?.whatsapp||'','whatsapp'],['Email','email',editedSupplier?.email||'','email']].map(([lbl,type,val,field]) => (
+                    {[['Full Name *','text',editedSupplier?.name||'','name','edit_name'],['Phone *','tel',editedSupplier?.phone||'','phone','edit_phone'],
+                      ['WhatsApp','tel',editedSupplier?.whatsapp||'','whatsapp','edit_whatsapp'],['Email','email',editedSupplier?.email||'','email','edit_email']].map(([lbl,type,val,field,errKey]) => (
                       <div className="d-form-group" key={field}>
                         <label>{lbl}</label>
-                        <input type={type} value={val} onChange={e => setEditedSupplier({...editedSupplier,[field]:e.target.value})} />
+                        <input type={type} value={val} data-field={errKey}
+                          style={errorBorder(errKey, editErrors)}
+                          onChange={e => { setEditedSupplier({...editedSupplier,[field]:e.target.value}); clearEditError(errKey); }} />
+                        <ValidationNote field={errKey} errors={editErrors} />
                       </div>
                     ))}
                     <div className="d-form-group">
                       <label>Gender *</label>
-                      <div className="d-gender">
+                      <div className="d-gender" data-field="edit_gender" style={editErrors['edit_gender'] ? {border:'1.5px solid #f59e0b',borderRadius:'6px',padding:'4px',boxShadow:'0 0 0 2px rgba(245,158,11,0.2)'} : {}}>
                         {['Male','Female'].map(g => (
                           <label key={g} className="d-gender-option">
-                            <input type="radio" name="edit-gender" checked={editedSupplier?.gender===g} onChange={() => setEditedSupplier({...editedSupplier,gender:g})} />{g}
+                            <input type="radio" name="edit-gender" checked={editedSupplier?.gender===g} onChange={() => { setEditedSupplier({...editedSupplier,gender:g}); clearEditError('edit_gender'); }} />{g}
                           </label>
                         ))}
                       </div>
+                      <ValidationNote field="edit_gender" errors={editErrors} />
                     </div>
                     <div className="d-form-group">
                       <label>Address *</label>
-                      <textarea rows="2" value={editedSupplier?.address||''} onChange={e => setEditedSupplier({...editedSupplier,address:e.target.value})} />
+                      <textarea rows="2" value={editedSupplier?.address||''} data-field="edit_address"
+                        style={errorBorder('edit_address', editErrors)}
+                        onChange={e => { setEditedSupplier({...editedSupplier,address:e.target.value}); clearEditError('edit_address'); }} />
+                      <ValidationNote field="edit_address" errors={editErrors} />
                     </div>
                     <div className="d-form-actions">
                       <button className="d-btn-cancel" onClick={cancelEditMode}>Cancel</button>
@@ -915,18 +929,22 @@ Kadaele Services`;
               <button className="d-close-btn" onClick={closeAddSupplierModal}><X size={22} /></button>
             </div>
             <form className="d-add-form" onSubmit={handleAddSupplier}>
-              {[['Full Name *','text','fullName','Enter full name'],['Phone *','tel','phone','Phone number'],
-                ['WhatsApp','tel','whatsapp','WhatsApp number (optional)'],['Email','email','email','Email (optional)']].map(([lbl,type,field,ph]) => (
+              {[['Full Name *','text','fullName','add_fullName','Enter full name'],['Phone *','tel','phone','add_phone','Phone number'],
+                ['WhatsApp','tel','whatsapp','add_whatsapp','WhatsApp number (optional)'],['Email','email','email','add_email','Email (optional)']].map(([lbl,type,field,errKey,ph]) => (
                 <div className="d-form-group" key={field}>
                   <label>{lbl}</label>
-                  <input type={type} value={newSupplier[field]} placeholder={ph}
-                    onChange={e => setNewSupplier({...newSupplier,[field]:e.target.value})} />
+                  <input type={type} value={newSupplier[field]} placeholder={ph} data-field={errKey}
+                    style={errorBorder(errKey, addErrors)}
+                    onChange={e => { setNewSupplier({...newSupplier,[field]:e.target.value}); clearAddError(errKey); }} />
+                  <ValidationNote field={errKey} errors={addErrors} />
                 </div>
               ))}
               <div className="d-form-group">
                 <label>Address *</label>
-                <textarea rows="2" value={newSupplier.address} placeholder="Enter address"
-                  onChange={e => setNewSupplier({...newSupplier,address:e.target.value})} />
+                <textarea rows="2" value={newSupplier.address} placeholder="Enter address" data-field="add_address"
+                  style={errorBorder('add_address', addErrors)}
+                  onChange={e => { setNewSupplier({...newSupplier,address:e.target.value}); clearAddError('add_address'); }} />
+                <ValidationNote field="add_address" errors={addErrors} />
               </div>
               <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
               <div className="d-form-actions">
@@ -949,8 +967,10 @@ Kadaele Services`;
             <div className="d-payment-form">
               <div className="d-form-group">
                 <label>Deposit Amount</label>
-                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
-                  onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
+                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00" data-field="pay_amount"
+                  style={errorBorder('pay_amount', payErrors)}
+                  onChange={e => { setPaymentAmount(e.target.value); clearPayError('pay_amount'); }} className="d-payment-input" />
+                <ValidationNote field="pay_amount" errors={payErrors} />
               </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
