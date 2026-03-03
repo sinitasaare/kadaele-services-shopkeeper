@@ -140,6 +140,9 @@ function Debtors() {
   const [debtorSales, setDebtorSales]   = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentDate, setPaymentDate] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [editSale, setEditSale] = useState(null);
   const [paymentPhoto, setPaymentPhoto] = useState(null);
@@ -159,6 +162,8 @@ function Debtors() {
   const [editDepositModal, setEditDepositModal] = useState(null); // { debtorId, deposit }
   const [editDepositAmount, setEditDepositAmount] = useState('');
   const [editDepositReceipt, setEditDepositReceipt] = useState('');
+  const [editDepositMethod, setEditDepositMethod] = useState('cash');
+  const [editDepositNote, setEditDepositNote] = useState('');
   const [savingDeposit, setSavingDeposit] = useState(false);
   const [pdfSharing, setPdfSharing] = useState(false);
 
@@ -707,19 +712,28 @@ Kadaele Services`;
 
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) return showPayError('pay_amount', 'Enter a valid payment amount');
-    if (!receiptNumber.trim()) return showPayError('pay_receipt', 'Receipt Number is required');
     try {
-      await dataService.recordPayment(selectedDebtor.id, parseFloat(paymentAmount), [], paymentPhoto || null, receiptNumber.trim());
+      const date = paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString();
+      await dataService.addRepayment(selectedDebtor.id, {
+        amount: parseFloat(paymentAmount),
+        paymentMethod: paymentMethod || 'cash',
+        note: paymentNote.trim(),
+        date,
+        saleId: null,
+        photo: paymentPhoto || null,
+        receiptNumber: receiptNumber.trim(),
+      });
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
       await loadDebtors();
       const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
       if (updated) {
         setSelectedDebtor(updated);
-        // Refresh debt history to show new deposit row
         const allSales = await dataService.getSales();
         setDebtorSales(allSales.filter(s => updated.saleIds?.includes(s.id) || updated.purchaseIds?.includes(s.id)));
       }
-      setShowPaymentModal(false); setPaymentAmount(''); setPaymentPhoto(null); setReceiptNumber('');
+      setShowPaymentModal(false);
+      setPaymentAmount(''); setPaymentMethod('cash'); setPaymentDate('');
+      setPaymentNote(''); setPaymentPhoto(null); setReceiptNumber('');
     } catch (e) { console.error(e); alert('Failed to record payment'); }
   };
 
@@ -744,24 +758,26 @@ Kadaele Services`;
     if (!amount || amount <= 0) { alert('Enter a valid amount.'); return; }
     setSavingDeposit(true);
     try {
-      const debtors = await dataService.getDebtors();
-      const debtor = debtors.find(d => d.id === editDepositModal.debtorId);
-      if (!debtor) throw new Error('Debtor not found');
-      const dep = debtor.deposits?.find(d => d.id === editDepositModal.deposit.id);
-      if (!dep) throw new Error('Deposit not found');
-      const oldAmount = parseFloat(dep.amount) || 0;
-      const diff = amount - oldAmount;
-      dep.amount = amount;
-      if (editDepositReceipt.trim()) dep.receiptNumber = editDepositReceipt.trim();
-      debtor.totalPaid = (debtor.totalPaid || 0) + diff;
-      debtor.balance = (debtor.totalDue || 0) - debtor.totalPaid;
-      if (debtor.balance < 0) debtor.balance = 0;
-      await dataService.setDebtors(debtors);
-      setSelectedDebtor({...debtor});
-      setEditDepositModal(null); setEditDepositReceipt('');
+      const result = await dataService.updateRepayment(editDepositModal.debtorId, editDepositModal.deposit.id, {
+        amount,
+        paymentMethod: editDepositMethod,
+        note: editDepositNote,
+        saleId: editDepositModal.deposit.saleId || null,
+      });
+      setSelectedDebtor({...result.debtor});
+      setEditDepositModal(null); setEditDepositReceipt(''); setEditDepositNote(''); setEditDepositMethod('cash');
       await loadDebtors();
     } catch(e) { alert(e.message); }
     finally { setSavingDeposit(false); }
+  };
+
+  const handleDeleteRepayment = async (deposit) => {
+    if (!window.confirm('Delete this repayment? The outstanding balance will be restored.')) return;
+    try {
+      const updatedDebtor = await dataService.deleteRepayment(selectedDebtor.id, deposit.id);
+      setSelectedDebtor({...updatedDebtor});
+      await loadDebtors();
+    } catch (e) { alert(e.message || 'Failed to delete repayment'); }
   };
 
     const buildHistoryRows = () => {
@@ -952,29 +968,48 @@ Kadaele Services`;
 
                 {/* ── Edit Deposit Modal ── */}
                 {editDepositModal && (
-                  <div className="d-overlay" style={{zIndex:4000}} onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); }}>
+                  <div className="d-overlay" style={{zIndex:4000}} onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); setEditDepositNote(''); setEditDepositMethod('cash'); }}>
                     <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()} style={{maxWidth:'320px'}}>
                       <div className="d-modal-header">
-                        <h2 className="d-modal-title">Edit Deposit</h2>
-                        <button className="d-close-btn" onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); }}><X size={22}/></button>
+                        <h2 className="d-modal-title">Edit Repayment</h2>
+                        <button className="d-close-btn" onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); setEditDepositNote(''); setEditDepositMethod('cash'); }}><X size={22}/></button>
                       </div>
                       <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'12px'}}>
-                        <label style={{fontWeight:600,fontSize:'13px'}}>Deposit Amount</label>
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Amount</label>
                         <input type="number" min="0.01" step="0.01"
                           value={editDepositAmount}
                           onChange={e => setEditDepositAmount(e.target.value)}
                           style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
-                        <label style={{fontWeight:600,fontSize:'13px'}}>Receipt Number</label>
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Payment Method</label>
+                        <select value={editDepositMethod} onChange={e => setEditDepositMethod(e.target.value)}
+                          style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}}>
+                          <option value="cash">Cash</option>
+                          <option value="bank">Bank Transfer</option>
+                          <option value="mobile_money">Mobile Money</option>
+                          <option value="cheque">Cheque</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <label style={{fontWeight:600,fontSize:'13px'}}>Note (optional)</label>
                         <input type="text"
-                          value={editDepositReceipt}
-                          onChange={e => setEditDepositReceipt(e.target.value)}
-                          placeholder="Receipt number…"
+                          value={editDepositNote}
+                          onChange={e => setEditDepositNote(e.target.value)}
+                          placeholder="Note…"
                           style={{padding:'10px',border:'1.5px solid #ccc',borderRadius:'8px',fontSize:'14px'}} />
+                        {editDepositMethod === 'cash' && (
+                          <p style={{fontSize:'12px',color:'#667eea',margin:0,fontStyle:'italic'}}>💰 Linked Cash IN entry will be updated.</p>
+                        )}
                       </div>
-                      <div className="d-form-actions" style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
-                        <button className="d-btn-cancel" onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); }}>Cancel</button>
-                        <button className="d-btn-save" onClick={handleSaveDepositEdit} disabled={savingDeposit}>
-                          {savingDeposit ? 'Saving…' : 'Save'}
+                      <div className="d-form-actions" style={{padding:'0 20px 20px',display:'flex',gap:'10px',flexDirection:'column'}}>
+                        <div style={{display:'flex',gap:'10px'}}>
+                          <button className="d-btn-cancel" onClick={() => { setEditDepositModal(null); setEditDepositReceipt(''); setEditDepositNote(''); setEditDepositMethod('cash'); }}>Cancel</button>
+                          <button className="d-btn-save" onClick={handleSaveDepositEdit} disabled={savingDeposit}>
+                            {savingDeposit ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => { const dep = editDepositModal.deposit; setEditDepositModal(null); handleDeleteRepayment(dep); }}
+                          style={{width:'100%',padding:'10px',borderRadius:'8px',border:'none',background:'#fee2e2',color:'#dc2626',cursor:'pointer',fontWeight:700,fontSize:'13px'}}>
+                          Delete Repayment
                         </button>
                       </div>
                     </div>
@@ -1027,9 +1062,9 @@ Kadaele Services`;
                                 <td className="d-merged" style={{textAlign:'center'}}>
                                   {isDepositEditable(dep) && (
                                     <button
-                                      onClick={() => { setEditDepositModal({debtorId:selectedDebtor.id, deposit:dep}); setEditDepositAmount(String(dep.amount)); setEditDepositReceipt(dep.receiptNumber || ''); }}
+                                      onClick={() => { setEditDepositModal({debtorId:selectedDebtor.id, deposit:dep}); setEditDepositAmount(String(dep.amount)); setEditDepositMethod(dep.paymentMethod || 'cash'); setEditDepositNote(dep.note || ''); setEditDepositReceipt(dep.receiptNumber || ''); }}
                                       style={{background:'none',border:'none',cursor:'pointer',color:'#22c55e',padding:'4px',borderRadius:'4px',display:'inline-flex',alignItems:'center',fontSize:'16px'}}
-                                      title="Edit deposit">✔</button>
+                                      title="Edit repayment">✔</button>
                                   )}
                                 </td>
                               </tr>
@@ -1145,30 +1180,55 @@ Kadaele Services`;
         <div className="d-overlay" onClick={() => setShowPaymentModal(false)}>
           <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
             <div className="d-modal-header">
-              <h2 className="d-modal-title">Record Deposit</h2>
+              <h2 className="d-modal-title">Record Payment</h2>
               <button className="d-close-btn" onClick={() => setShowPaymentModal(false)}><X size={22} /></button>
             </div>
             <div className="d-payment-form">
               <div className="d-form-group">
-                <label>Deposit Amount</label>
+                <label>Date</label>
+                <input type="date" value={paymentDate}
+                  onChange={e => setPaymentDate(e.target.value)}
+                  max={new Date().toISOString().slice(0,10)}
+                  className="d-payment-input" />
+              </div>
+              <div className="d-form-group">
+                <label>Amount</label>
                 <input type="number" step="0.01" value={paymentAmount} placeholder="0.00" data-field="pay_amount"
                   style={errorBorder('pay_amount', payErrors)}
                   onChange={e => { setPaymentAmount(e.target.value); clearPayError('pay_amount'); }} className="d-payment-input" />
                 <ValidationNote field="pay_amount" errors={payErrors} />
               </div>
               <div className="d-form-group">
-                <label>Receipt Number *</label>
-                <input type="text" value={receiptNumber} placeholder="Enter receipt number" data-field="pay_receipt"
-                  style={errorBorder('pay_receipt', payErrors)}
-                  onChange={e => { setReceiptNumber(e.target.value); clearPayError('pay_receipt'); }} className="d-payment-input" />
-                <ValidationNote field="pay_receipt" errors={payErrors} />
+                <label>Payment Method</label>
+                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="d-payment-input">
+                  <option value="cash">Cash</option>
+                  <option value="bank">Bank Transfer</option>
+                  <option value="mobile_money">Mobile Money</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="d-form-group">
+                <label>Note (optional)</label>
+                <input type="text" value={paymentNote} placeholder="Add a note…"
+                  onChange={e => setPaymentNote(e.target.value)} className="d-payment-input" />
+              </div>
+              <div className="d-form-group">
+                <label>Receipt Number (optional)</label>
+                <input type="text" value={receiptNumber} placeholder="Enter receipt number"
+                  onChange={e => setReceiptNumber(e.target.value)} className="d-payment-input" />
               </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
               {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
+              {paymentMethod === 'cash' && (
+                <p style={{fontSize:'12px',color:'#667eea',margin:'4px 0 0',fontStyle:'italic'}}>
+                  💰 A Cash IN entry will be created automatically.
+                </p>
+              )}
               <div className="d-form-actions">
-                <button className="d-btn-cancel" onClick={() => { setShowPaymentModal(false); setReceiptNumber(''); }}>Cancel</button>
+                <button className="d-btn-cancel" onClick={() => { setShowPaymentModal(false); setReceiptNumber(''); setPaymentMethod('cash'); setPaymentDate(''); setPaymentNote(''); }}>Cancel</button>
                 <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
               </div>
             </div>
