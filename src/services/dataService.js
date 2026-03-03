@@ -1070,91 +1070,305 @@ class DataService {
     }
   }
 
-  async recordPayment(debtorId, amount, purchaseIds = [], photo = null, receiptNumber = '') {
-    // Read directly from localforage so we always have the latest local state
+  // ── Helper: find a linked cash_entry for a debt repayment ───────────────
+  // Matches by source='debt_payment' + debtorId (+ saleId if provided).
+  async _findLinkedDebtCashEntry(debtorId, saleId = null) {
+    const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    return entries.find(e =>
+      e.source === 'debt_payment' &&
+      e.debtorId === debtorId &&
+      (saleId ? e.saleId === saleId : true)
+    ) || null;
+  }
+
+  // ── Helper: create a cash_entry linked to a debt repayment ──────────────
+  async createCashEntryForLinkedSource({ debtorId, saleId = null, amount, note, date }) {
+    return this.addCashEntry({
+      type: 'in',
+      source: 'debt_payment',
+      amount,
+      note: note || 'Debt payment',
+      date,
+      business_date: (date || '').slice(0, 10),
+      debtorId,
+      ...(saleId ? { saleId } : {}),
+    });
+  }
+
+  // ── Helper: update a linked cash_entry for a debt repayment ─────────────
+  async updateCashEntryForLinkedSource({ debtorId, saleId = null, newAmount }) {
+    const entry = await this._findLinkedDebtCashEntry(debtorId, saleId);
+    if (!entry) return null;
+    const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    const idx = entries.findIndex(e => e.id === entry.id);
+    if (idx === -1) return null;
+    entries[idx] = { ...entries[idx], amount: newAmount, updatedAt: new Date().toISOString() };
+    await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+    if (this.isOnline && auth.currentUser) {
+      try {
+        await setDoc(doc(db, 'cash_entries', entry.id), { ...entries[idx], updatedAt: serverTimestamp() }, { merge: true });
+      } catch (err) { await this.addToSyncQueue({ type: 'cash_entry', data: entries[idx] }); }
+    } else {
+      await this.addToSyncQueue({ type: 'cash_entry', data: entries[idx] });
+    }
+    return entries[idx];
+  }
+
+  // ── Helper: delete a linked cash_entry for a debt repayment ─────────────
+  async deleteCashEntryForLinkedSource({ debtorId, saleId = null }) {
+    const entry = await this._findLinkedDebtCashEntry(debtorId, saleId);
+    if (!entry) return;
+    const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+    const filtered = entries.filter(e => e.id !== entry.id);
+    await localforage.setItem(DATA_KEYS.CASH_ENTRIES, filtered);
+    if (this.isOnline && auth.currentUser) {
+      try { await deleteDoc(doc(db, 'cash_entries', entry.id)); } catch (err) { console.error('Firebase delete linked cash entry error:', err); }
+    }
+  }
+
+  // ── Add a repayment record for a debtor ──────────────────────────────────
+  // paymentMethod: 'cash' | 'bank' | etc.
+  // If cash → auto-creates linked cash_entry with source='debt_payment'
+  async addRepayment(debtorId, { amount, paymentMethod, note = '', date, saleId = null, photo = null, receiptNumber = '' }) {
     const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
     const debtor = debtors.find(d => d.id === debtorId);
-    
-    if (debtor) {
-      const paymentAmount = parseFloat(amount);
-      debtor.totalPaid = (debtor.totalPaid || 0) + paymentAmount;
-      debtor.balance = (debtor.totalDue || 0) - debtor.totalPaid;
-      debtor.lastPayment = new Date().toISOString();
-      debtor.updatedAt = debtor.lastPayment;
+    if (!debtor) return null;
 
-      // If debt is now fully cleared, remove the repayment date lock
-      if (debtor.balance <= 0) {
-        debtor.balance = 0;
-        debtor.repaymentDate = '';   // cleared — new due date can be set
-      }
+    const paymentAmount = parseFloat(amount);
+    const now = new Date().toISOString();
+    const paymentDate = date || now;
 
-      // Record the deposit as a line item in the debtor's history
-      const depositEntry = {
-        id: this.generateId(),
-        type: 'deposit',
-        amount: paymentAmount,
-        date: debtor.lastPayment,
-        createdAt: debtor.lastPayment,
-        ...(photo ? { photo } : {}),
-        ...(receiptNumber ? { receiptNumber } : {}),
-      };
-      debtor.deposits = debtor.deposits || [];
-      debtor.deposits.push(depositEntry);
+    // Build repayment record
+    const repayment = {
+      id: this.generateId(),
+      debtorId,
+      ...(saleId ? { saleId } : {}),
+      amount: paymentAmount,
+      paymentMethod: paymentMethod || 'cash',
+      note: note || '',
+      date: paymentDate,
+      createdAt: now,
+      updatedAt: now,
+      ...(photo ? { photo } : {}),
+      ...(receiptNumber ? { receiptNumber } : {}),
+    };
 
-      // ── Save to localforage FIRST ──────────────────────────────────────
-      await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+    // Update debtor outstanding balance
+    debtor.totalPaid = (debtor.totalPaid || 0) + paymentAmount;
+    debtor.balance = Math.max(0, (debtor.totalDue || 0) - debtor.totalPaid);
+    debtor.lastPayment = now;
+    debtor.updatedAt = now;
+    if (debtor.balance <= 0) {
+      debtor.balance = 0;
+      debtor.repaymentDate = '';
+    }
 
-      // ── Wire to Cash Journal with correct description ──────────────────
+    // Store repayment in debtor.deposits for backward-compat with existing UI
+    const depositEntry = {
+      id: repayment.id,
+      type: 'deposit',
+      amount: paymentAmount,
+      paymentMethod: repayment.paymentMethod,
+      note: repayment.note,
+      date: paymentDate,
+      createdAt: now,
+      ...(saleId ? { saleId } : {}),
+      ...(photo ? { photo } : {}),
+      ...(receiptNumber ? { receiptNumber } : {}),
+    };
+    debtor.deposits = debtor.deposits || [];
+    debtor.deposits.push(depositEntry);
+
+    // Save to localforage first
+    await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+
+    // If cash → auto-create linked cash_entry
+    let cashEntry = null;
+    if (repayment.paymentMethod === 'cash') {
       const debtorName = debtor.name || debtor.customerName || 'Unknown';
       const gender = debtor.gender || '';
       const prefix = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
       const displayName = prefix ? `${prefix} ${debtorName}` : debtorName;
-      await this.addCashEntry({
-        type: 'in',
-        amount: paymentAmount,
-        note: `Received from ${displayName}`,
-        date: debtor.lastPayment,
-        source: 'deposit',
+      cashEntry = await this.createCashEntryForLinkedSource({
         debtorId,
+        saleId,
+        amount: paymentAmount,
+        note: `Debt payment — ${displayName}${note ? ': ' + note : ''}`,
+        date: paymentDate,
       });
-      
-      // Mark specific sales as paid if provided
-      if (purchaseIds.length > 0) {
-        const sales = await localforage.getItem(DATA_KEYS.SALES) || [];
-        purchaseIds.forEach(pid => {
-          const sale = sales.find(s => s.id === pid);
-          if (sale) {
-            sale.paid = true;
-            sale.paidDate = debtor.lastPayment;
-          }
+    }
+
+    // Sync debtor to Firebase
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const depositsForFirestore = (debtor.deposits || []).map(dep => {
+          const { photo: _p, ...rest } = dep;
+          return rest;
         });
-        await localforage.setItem(DATA_KEYS.SALES, sales);
-      }
-      
-      // ── Sync full debtor record to Firebase ───────────────────────────
-      if (this.isOnline && auth.currentUser) {
-        try {
-          const depositsForFirestore = (debtor.deposits || []).map(dep => {
-            const { photo: _p, ...rest } = dep;
-            return rest;
-          });
-          await setDoc(doc(db, 'debtors', debtorId.toString()), {
-            ...debtor,
-            deposits: depositsForFirestore,
-            lastPayment: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }, { merge: true });
-        } catch (error) {
-          console.error('Error syncing payment to Firebase:', error);
-          await this.addToSyncQueue({ type: 'debtor', data: debtor });
-        }
-      } else {
+        await setDoc(doc(db, 'debtors', debtorId.toString()), {
+          ...debtor,
+          deposits: depositsForFirestore,
+          lastPayment: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (error) {
+        console.error('Error syncing repayment to Firebase:', error);
         await this.addToSyncQueue({ type: 'debtor', data: debtor });
       }
-      
-      return debtor;
+    } else {
+      await this.addToSyncQueue({ type: 'debtor', data: debtor });
     }
-    return null;
+
+    return { repayment: depositEntry, cashEntry, debtor };
+  }
+
+  // ── Edit a repayment record ──────────────────────────────────────────────
+  // Handles: amount change, cash→non-cash, non-cash→cash transitions
+  async updateRepayment(debtorId, repaymentId, { amount, paymentMethod, note, saleId = null }) {
+    const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+    const debtor = debtors.find(d => d.id === debtorId);
+    if (!debtor) throw new Error('Debtor not found');
+
+    const dep = (debtor.deposits || []).find(d => d.id === repaymentId);
+    if (!dep) throw new Error('Repayment not found');
+
+    const oldAmount = parseFloat(dep.amount) || 0;
+    const newAmount = parseFloat(amount);
+    const oldMethod = dep.paymentMethod || 'cash';
+    const newMethod = paymentMethod || oldMethod;
+    const diff = newAmount - oldAmount;
+
+    // Update deposit record
+    dep.amount = newAmount;
+    dep.paymentMethod = newMethod;
+    if (note !== undefined) dep.note = note;
+    dep.updatedAt = new Date().toISOString();
+
+    // Adjust debtor balance
+    debtor.totalPaid = (debtor.totalPaid || 0) + diff;
+    debtor.balance = Math.max(0, (debtor.totalDue || 0) - debtor.totalPaid);
+    if (debtor.balance <= 0) { debtor.balance = 0; debtor.repaymentDate = ''; }
+    debtor.updatedAt = new Date().toISOString();
+
+    await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+
+    // Handle linked cash_entry transitions
+    const wasCash = oldMethod === 'cash';
+    const isCash  = newMethod === 'cash';
+
+    if (wasCash && isCash) {
+      // A) Amount changed, method stayed cash → update linked entry
+      await this.updateCashEntryForLinkedSource({ debtorId, saleId: dep.saleId || saleId, newAmount });
+    } else if (wasCash && !isCash) {
+      // B) cash → non-cash → delete linked entry
+      await this.deleteCashEntryForLinkedSource({ debtorId, saleId: dep.saleId || saleId });
+    } else if (!wasCash && isCash) {
+      // C) non-cash → cash → create linked entry
+      const debtorName = debtor.name || debtor.customerName || 'Unknown';
+      const gender = debtor.gender || '';
+      const prefix = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+      const displayName = prefix ? `${prefix} ${debtorName}` : debtorName;
+      await this.createCashEntryForLinkedSource({
+        debtorId,
+        saleId: dep.saleId || saleId,
+        amount: newAmount,
+        note: `Debt payment — ${displayName}${dep.note ? ': ' + dep.note : ''}`,
+        date: dep.date,
+      });
+    }
+
+    // Sync to Firebase
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const depositsForFirestore = (debtor.deposits || []).map(d => {
+          const { photo: _p, ...rest } = d;
+          return rest;
+        });
+        await setDoc(doc(db, 'debtors', debtorId.toString()), {
+          ...debtor,
+          deposits: depositsForFirestore,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (error) {
+        await this.addToSyncQueue({ type: 'debtor', data: debtor });
+      }
+    } else {
+      await this.addToSyncQueue({ type: 'debtor', data: debtor });
+    }
+
+    return { debtor, deposit: dep };
+  }
+
+  // ── Delete a repayment record ────────────────────────────────────────────
+  // Restores outstanding balance and deletes linked cash_entry if cash.
+  async deleteRepayment(debtorId, repaymentId) {
+    const debtors = await localforage.getItem(DATA_KEYS.DEBTORS) || [];
+    const debtor = debtors.find(d => d.id === debtorId);
+    if (!debtor) throw new Error('Debtor not found');
+
+    const depIdx = (debtor.deposits || []).findIndex(d => d.id === repaymentId);
+    if (depIdx === -1) throw new Error('Repayment not found');
+
+    const dep = debtor.deposits[depIdx];
+    const wasAmount = parseFloat(dep.amount) || 0;
+    const wasCash = (dep.paymentMethod || 'cash') === 'cash';
+
+    // Remove deposit and restore balance
+    debtor.deposits.splice(depIdx, 1);
+    debtor.totalPaid = Math.max(0, (debtor.totalPaid || 0) - wasAmount);
+    debtor.balance = Math.max(0, (debtor.totalDue || 0) - debtor.totalPaid);
+    debtor.updatedAt = new Date().toISOString();
+
+    await localforage.setItem(DATA_KEYS.DEBTORS, debtors);
+
+    // Delete linked cash_entry if payment was cash
+    if (wasCash) {
+      await this.deleteCashEntryForLinkedSource({ debtorId, saleId: dep.saleId || null });
+    }
+
+    // Sync to Firebase
+    if (this.isOnline && auth.currentUser) {
+      try {
+        const depositsForFirestore = (debtor.deposits || []).map(d => {
+          const { photo: _p, ...rest } = d;
+          return rest;
+        });
+        await setDoc(doc(db, 'debtors', debtorId.toString()), {
+          ...debtor,
+          deposits: depositsForFirestore,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (error) {
+        await this.addToSyncQueue({ type: 'debtor', data: debtor });
+      }
+    } else {
+      await this.addToSyncQueue({ type: 'debtor', data: debtor });
+    }
+
+    return debtor;
+  }
+
+  // ── Legacy recordPayment — now delegates to addRepayment (cash) ──────────
+  async recordPayment(debtorId, amount, purchaseIds = [], photo = null, receiptNumber = '') {
+    const result = await this.addRepayment(debtorId, {
+      amount,
+      paymentMethod: 'cash',
+      note: '',
+      date: new Date().toISOString(),
+      saleId: null,
+      photo,
+      receiptNumber,
+    });
+    // Mark specific sales as paid if provided (legacy behaviour)
+    if (result && purchaseIds.length > 0) {
+      const sales = await localforage.getItem(DATA_KEYS.SALES) || [];
+      purchaseIds.forEach(pid => {
+        const sale = sales.find(s => s.id === pid);
+        if (sale) { sale.paid = true; sale.paidDate = new Date().toISOString(); }
+      });
+      await localforage.setItem(DATA_KEYS.SALES, sales);
+    }
+    return result?.debtor || null;
   }
 
   async recalculateDebtors() {
