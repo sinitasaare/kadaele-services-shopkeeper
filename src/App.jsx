@@ -5,6 +5,7 @@ import Checkout from './screens/Checkout';
 import SalesRecord from './screens/SalesRecord';
 import CashRecord from './screens/CashRecord';
 import PurchaseRecord from './screens/PurchaseRecord';
+import ExpensesRecord from './screens/ExpensesRecord';
 import Debtors from './screens/Debtors';
 import AdvanceOrders from './screens/AdvanceOrders';
 import Creditors from './screens/Creditors';
@@ -23,8 +24,8 @@ import './App.css';
 })();
 
 // Cash Reconciliation page index (used for navigation from closed modal)
-const CASH_RECON_INDEX = 9;
-const SETTINGS_INDEX   = 10;
+const CASH_RECON_INDEX = 10;
+const SETTINGS_INDEX   = 11;
 
 const PAGES = [
   { 
@@ -93,6 +94,23 @@ const PAGES = [
       <h4>Filtering</h4>
       <p>Use Filter to view Cash In only, Cash Out only, or by date range. The summary boxes show Total Records and Net Balance.</p>
     `
+  },
+  {
+    name: 'EXPENSES RECORD',
+    component: ExpensesRecord,
+    helpContent: `
+      <h3>Expenses Record</h3>
+      <p>This page tracks all money going out of your shop that is <strong>not</strong> for buying stock — things like rent, wages, utilities, transport, and other operating costs.</p>
+
+      <h4>How It Works</h4>
+      <p>Tap <strong>+ Add Expense</strong> &rarr; choose a category &rarr; enter the amount and payment method &rarr; add an optional note &rarr; Save. Cash expenses automatically create a Cash OUT entry in Cash Record.</p>
+
+      <h4>Categories</h4>
+      <p>Quick filters include <strong>Utilities</strong> and <strong>Wages</strong>. Tap <strong>More&hellip;</strong> to browse all categories including Rent, Transport, Loan Repayment, Owner Withdrawals, and more.</p>
+
+      <h4>Cash vs Non-Cash</h4>
+      <p>The summary cards show <strong>Cash Spent</strong> (paid from the cash drawer) and <strong>Non-Cash</strong> (bank transfer, mobile money, check) separately so you can reconcile easily.</p>
+    \`
   },
   { 
     name: 'PURCHASE RECORD',  
