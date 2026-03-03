@@ -8,31 +8,20 @@ import './ExpensesRecord.css';
 // ── Category definitions ───────────────────────────────────────────────────────
 const CATEGORY_GROUPS = [
   {
-    group: 'Operating Expenses',
-    items: [
-      'Utilities',
-      'Rent',
-      'Transport/Fuel',
-      'Maintenance/Repairs',
-      'Shop Supplies',
-      'Marketing/Advertising',
-      'Fees/Licenses',
-      'Security',
-      'Communication',
-      'Wages',
-    ],
+    group: 'Operating',
+    items: ['Utilities', 'Rent', 'Fuel', 'Internet', 'Maintenance', 'Supplies', 'Wages'],
   },
   {
     group: 'Owner & Community',
-    items: ['Owner Withdrawal/Drawings', 'Donation/Church/Community Support'],
+    items: ['Donations', 'Community Support'],
   },
   {
     group: 'Bank & Loan',
-    items: ['Bank Charges', 'Loan Repayment', 'Interest'],
+    items: ['Loan Repayment', 'Bank Charges'],
   },
   {
     group: 'Adjustments',
-    items: ['Cash Shortage', 'Cash Over (Correction)', 'Damaged Money Replaced', 'Other Adjustment'],
+    items: ['Cash Short', 'Cash Over'],
   },
   {
     group: 'Other',
@@ -397,6 +386,10 @@ function ExpensesRecord() {
   const [appliedStart, setAppliedStart]   = useState('');
   const [appliedEnd, setAppliedEnd]       = useState('');
 
+  // Payment method filter
+  const [payFilter, setPayFilter]         = useState('all');
+  const [appliedPay, setAppliedPay]       = useState('all');
+
   useEffect(() => { loadExpenses(); }, []);
   useEffect(() => {
     const handleVisibility = () => { if (!document.hidden) loadExpenses(); };
@@ -404,7 +397,7 @@ function ExpensesRecord() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { applyFilters(); }, [expenses, appliedCat, appliedDate, appliedSelDate, appliedStart, appliedEnd]);
+  useEffect(() => { applyFilters(); }, [expenses, appliedCat, appliedDate, appliedSelDate, appliedStart, appliedEnd, appliedPay]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadExpenses = async () => {
     const data = await dataService.getExpenses();
@@ -425,6 +418,8 @@ function ExpensesRecord() {
   const applyFilters = () => {
     let f = [...expenses];
     if (appliedCat !== 'all') f = f.filter(e => e.category === appliedCat);
+    if (appliedPay === 'cash')     f = f.filter(e => (e.paymentMethod || 'cash') === 'cash');
+    if (appliedPay === 'non_cash') f = f.filter(e => (e.paymentMethod || 'cash') !== 'cash');
     const today = toMidnight(new Date());
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     if (appliedDate === 'today')
@@ -447,6 +442,7 @@ function ExpensesRecord() {
     setAppliedSelDate(selectedDate);
     setAppliedStart(startDate);
     setAppliedEnd(endDate);
+    setAppliedPay(payFilter);
     setShowFilters(false);
   };
 
@@ -555,6 +551,20 @@ function ExpensesRecord() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Payment method filter */}
+            <div className="er-filter-group">
+              <label>PAYMENT METHOD</label>
+              <div className="er-filter-buttons">
+                {[['all', 'All'], ['cash', 'Cash'], ['non_cash', 'Non-Cash']].map(([val, lbl]) => (
+                  <button key={val}
+                    className={`er-filter-btn${payFilter === val ? ' active' : ''}`}
+                    onClick={() => setPayFilter(val)}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <button className="er-filter-action-btn er-add-btn" style={{ alignSelf: 'flex-end' }}
