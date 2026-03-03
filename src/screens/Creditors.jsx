@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
@@ -113,6 +114,8 @@ function SaleEditModal({ sale, onSave, onClose, onDeleted, fmt }) {
 
 function Creditors() {
   const { fmt } = useCurrency();
+  const { fieldErrors: editErrors, showError: showEditError, clearFieldError: clearEditError } = useValidation();
+  const { fieldErrors: payErrors, showError: showPayError, clearFieldError: clearPayError } = useValidation();
   const [creditors, setCreditors]           = useState([]);
   const [searchTerm, setSearchTerm]     = useState('');
   const [selectedCreditor, setSelectedCreditor] = useState(null);
@@ -261,10 +264,12 @@ function Creditors() {
   const cancelEditMode  = () => { setIsEditMode(false); setEditedCreditor({...selectedCreditor}); };
 
   const saveCreditorEdits = async () => {
-    if (!editedCreditor.name || !editedCreditor.gender || !editedCreditor.phone) { alert('Full Name, Gender and Phone are required'); return; }
-    if (!editedCreditor.whatsapp && !editedCreditor.email) { alert('Please provide at least WhatsApp or Email'); return; }
-    if (editedCreditor.email && !editedCreditor.email.includes('@')) { alert('Email address must contain "@"'); return; }
-    if (!editedCreditor.address) { alert('Please provide an address'); return; }
+    if (!editedCreditor.name) return showEditError('edit_name', 'Full Name is required');
+    if (!editedCreditor.gender) return showEditError('edit_gender', 'Please select a gender');
+    if (!editedCreditor.phone) return showEditError('edit_phone', 'Phone is required');
+    if (!editedCreditor.whatsapp && !editedCreditor.email) return showEditError('edit_whatsapp', 'Provide at least WhatsApp or Email');
+    if (editedCreditor.email && !editedCreditor.email.includes('@')) return showEditError('edit_email', 'Email must contain @');
+    if (!editedCreditor.address) return showEditError('edit_address', 'Address is required');
     try {
       const current = await dataService.getCreditors();
       const idx = current.findIndex(d => d.id === editedCreditor.id);
@@ -641,8 +646,8 @@ Kadaele Services`;
   };
 
   const handleRecordPayment = async () => {
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) { alert('Please enter a valid payment amount'); return; }
-    if (!receiptNumber.trim()) { alert('Please enter a Receipt Number'); return; }
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) return showPayError('pay_amount', 'Enter a valid payment amount');
+    if (!receiptNumber.trim()) return showPayError('pay_receipt', 'Receipt Number is required');
     try {
       // Use recordCreditorPayment which correctly creates a Cash OUT entry
       await dataService.recordCreditorPayment(selectedCreditor.id, parseFloat(paymentAmount), paymentPhoto || null, receiptNumber || '');
@@ -798,26 +803,33 @@ Kadaele Services`;
               <div className="d-tab-body">
                 {isEditMode ? (
                   <div className="d-edit-form">
-                    {[['Full Name *','text',editedCreditor?.name||'','name'],['Phone *','tel',editedCreditor?.phone||'','phone'],
-                      ['WhatsApp','tel',editedCreditor?.whatsapp||'','whatsapp'],['Email','email',editedCreditor?.email||'','email']].map(([lbl,type,val,field]) => (
+                    {[['Full Name *','text',editedCreditor?.name||'','name','edit_name'],['Phone *','tel',editedCreditor?.phone||'','phone','edit_phone'],
+                      ['WhatsApp','tel',editedCreditor?.whatsapp||'','whatsapp','edit_whatsapp'],['Email','email',editedCreditor?.email||'','email','edit_email']].map(([lbl,type,val,field,errKey]) => (
                       <div className="d-form-group" key={field}>
                         <label>{lbl}</label>
-                        <input type={type} value={val} onChange={e => setEditedCreditor({...editedCreditor,[field]:e.target.value})} />
+                        <input type={type} value={val} data-field={errKey}
+                          style={errorBorder(errKey, editErrors)}
+                          onChange={e => { setEditedCreditor({...editedCreditor,[field]:e.target.value}); clearEditError(errKey); }} />
+                        <ValidationNote field={errKey} errors={editErrors} />
                       </div>
                     ))}
                     <div className="d-form-group">
                       <label>Gender *</label>
-                      <div className="d-gender">
+                      <div className="d-gender" data-field="edit_gender" style={editErrors['edit_gender'] ? {border:'1.5px solid #f59e0b',borderRadius:'6px',padding:'4px',boxShadow:'0 0 0 2px rgba(245,158,11,0.2)'} : {}}>
                         {['Male','Female'].map(g => (
                           <label key={g} className="d-gender-option">
-                            <input type="radio" name="edit-gender" checked={editedCreditor?.gender===g} onChange={() => setEditedCreditor({...editedCreditor,gender:g})} />{g}
+                            <input type="radio" name="edit-gender" checked={editedCreditor?.gender===g} onChange={() => { setEditedCreditor({...editedCreditor,gender:g}); clearEditError('edit_gender'); }} />{g}
                           </label>
                         ))}
                       </div>
+                      <ValidationNote field="edit_gender" errors={editErrors} />
                     </div>
                     <div className="d-form-group">
                       <label>Address *</label>
-                      <textarea rows="2" value={editedCreditor?.address||''} onChange={e => setEditedCreditor({...editedCreditor,address:e.target.value})} />
+                      <textarea rows="2" value={editedCreditor?.address||''} data-field="edit_address"
+                        style={errorBorder('edit_address', editErrors)}
+                        onChange={e => { setEditedCreditor({...editedCreditor,address:e.target.value}); clearEditError('edit_address'); }} />
+                      <ValidationNote field="edit_address" errors={editErrors} />
                     </div>
                     <div className="d-form-actions">
                       <button className="d-btn-cancel" onClick={cancelEditMode}>Cancel</button>
@@ -1003,14 +1015,17 @@ Kadaele Services`;
               </div>
               <div className="d-form-group">
                 <label>Amount Paid to Creditor (Cash OUT)</label>
-                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00"
-                  onChange={e => setPaymentAmount(e.target.value)} className="d-payment-input" />
+                <input type="number" step="0.01" value={paymentAmount} placeholder="0.00" data-field="pay_amount"
+                  style={errorBorder('pay_amount', payErrors)}
+                  onChange={e => { setPaymentAmount(e.target.value); clearPayError('pay_amount'); }} className="d-payment-input" />
+                <ValidationNote field="pay_amount" errors={payErrors} />
               </div>
               <div className="d-form-group">
                 <label>Receipt Number *</label>
-                <input type="text" value={receiptNumber} placeholder="Enter receipt number"
-                  onChange={e => setReceiptNumber(e.target.value)} className="d-payment-input" />
-              </div>
+                <input type="text" value={receiptNumber} placeholder="Enter receipt number" data-field="pay_receipt"
+                  style={errorBorder('pay_receipt', payErrors)}
+                  onChange={e => { setReceiptNumber(e.target.value); clearPayError('pay_receipt'); }} className="d-payment-input" />
+                <ValidationNote field="pay_receipt" errors={payErrors} />
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
               </button>
