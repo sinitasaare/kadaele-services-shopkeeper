@@ -1404,7 +1404,7 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-function CashRecord({ isUnlocked = false }) {
+function CashRecord() {
   const { fmt } = useCurrency();
   const { showError } = useValidation();
   const [entries, setEntries]             = useState([]);
@@ -1911,11 +1911,8 @@ function CashRecord({ isUnlocked = false }) {
           <button
             className={`cj-filter-action-btn${!showFilters ? ' cjfab-open' : showApply ? ' cjfab-apply' : ' cjfab-close'}`}
             onClick={handleFilterButtonClick}>{btnLabel}</button>
-          {!showFilters && isUnlocked && (
+          {!showFilters && (
             <button className="cj-add-btn" onClick={openAddModal}>+ Add Entry</button>
-          )}
-          {!showFilters && !isUnlocked && (
-            <span style={{ fontSize:'12px', color:'#ef4444', fontWeight:600, padding:'6px 8px' }}>🔒 Locked</span>
           )}
         </div>
         <h3 className="cj-table-title">{getTableTitle()}</h3>
@@ -2007,7 +2004,7 @@ function CashRecord({ isUnlocked = false }) {
       </div>
 
       {/* ── Add Entry modal ── */}
-      {showAddModal && isUnlocked && (
+      {showAddModal && (
         <div className="cj-modal-overlay">
           {/* Transparent overlay — blocks all interaction when any dropdown is open */}
           {anyDropOpen && (
