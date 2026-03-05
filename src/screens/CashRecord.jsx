@@ -103,38 +103,42 @@ function getCashFromBeingForOptions(role, gender, shopName) {
   const r = (role || '').toLowerCase().trim();
 
   if (r === "shop's withdrawals" || r === 'withdrawals') {
-    // [shop name]'s Withdrawals
     return [
-      { key: 'float',        label: 'Float (change money)',           phrase: 'for float (change money)' },
-      { key: 'purchases',    label: 'Purchases (money to buy stock)', phrase: 'to purchase stock' },
-      { key: 'wages',        label: 'Wages (to pay staff)',           phrase: 'to pay wages' },
-      { key: 'expenses',     label: 'Expenses (to pay for expenses)', phrase: 'to pay for expenses' },
-      { key: 'safe_keeping', label: 'Safe Keeping (temporary)',       phrase: 'for safe keeping' },
+      { key: 'float',        label: 'Float (change money)',                        phrase: 'for float (change money)' },
+      { key: 'purchases',    label: 'Purchases (money to buy stock)',               phrase: 'to purchase stock' },
+      { key: 'wages',        label: 'Wages (to pay staff)',                         phrase: 'to pay wages' },
+      { key: 'expenses',     label: 'Expenses (to pay for expenses)',               phrase: 'to pay for expenses' },
+      { key: 'safe_keeping', label: 'Safe Keeping (store its money temporarily)',   phrase: 'for safe keeping (shop funds)' },
     ];
   }
   if (r === 'shop owner') {
     return [
-      { key: 'float',        label: 'Float (top-up change money)',              phrase: 'for float top-up (change money)' },
-      { key: 'purchases',    label: 'Purchases (top-up money to buy stock)',    phrase: 'to top-up purchase money' },
-      { key: 'wages',        label: 'Wages (to pay staff)',                     phrase: 'to pay wages' },
-      { key: 'expenses',     label: 'Expenses (help pay for expenses)',         phrase: 'to help pay for expenses' },
-      { key: 'safe_keeping', label: 'Safe Keeping (temporary)',                 phrase: 'for safe keeping' },
+      { key: 'float',        label: 'Float (top-up change money)',                            phrase: 'for float top-up (change money)' },
+      { key: 'purchases',    label: 'Purchases (top-up money to buy stock)',                  phrase: 'to top-up purchase money' },
+      { key: 'wages',        label: 'Wages (to pay staff)',                                   phrase: 'to pay wages' },
+      { key: 'expenses',     label: 'Expenses (help pay for expenses)',                       phrase: 'to help pay for expenses' },
+      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`,      phrase: `for safe keeping (${pronoun} money)` },
     ];
   }
   if (r === 'shop manager') {
     return [
-      { key: 'float',        label: 'Float (top-up change money)',              phrase: 'for float top-up (change money)' },
-      { key: 'purchases',    label: 'Purchases (adding money to buy stock)',    phrase: 'to add money for purchases' },
-      { key: 'expenses',     label: 'Expenses (top-up money for expenses)',     phrase: 'to top-up expense money' },
-      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`, phrase: `for safe keeping (${pronoun} money)` },
+      { key: 'float',        label: 'Float (top-up change money)',                            phrase: 'for float top-up (change money)' },
+      { key: 'purchases',    label: 'Purchases (adding money to buy stock)',                  phrase: 'to add money for purchases' },
+      { key: 'expenses',     label: 'Expenses (top-up money for expenses)',                   phrase: 'to top-up expense money' },
+      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`,      phrase: `for safe keeping (${pronoun} money)` },
     ];
   }
   if (r === 'shopkeeper') {
     return [
-      { key: 'float',        label: 'Float (top-up change money)',              phrase: 'for float top-up (change money)' },
-      { key: 'purchases',    label: 'Purchases (adding money to buy stock)',    phrase: 'to add money for purchases' },
-      { key: 'expenses',     label: 'Expenses (top-up money for expenses)',     phrase: 'to top-up expense money' },
-      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`, phrase: `for safe keeping (${pronoun} money)` },
+      { key: 'float',        label: 'Float (top-up change money)',                            phrase: 'for float top-up (change money)' },
+      { key: 'purchases',    label: 'Purchases (adding money to buy stock)',                  phrase: 'to add money for purchases' },
+      { key: 'expenses',     label: 'Expenses (top-up money for expenses)',                   phrase: 'to top-up expense money' },
+      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`,      phrase: `for safe keeping (${pronoun} money)` },
+    ];
+  }
+  if (r === 'landlord') {
+    return [
+      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`,      phrase: `for safe keeping (${pronoun} money)` },
     ];
   }
   // Default fallback
@@ -324,7 +328,9 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
           padding: '18px 20px', borderBottom: '1px solid var(--border, #e5e7eb)',
           flexShrink: 0,
         }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>🛒 Buy Operational Assets/Expenses</h2>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+            🛒 Buy Operational Assets/Expenses{resolvedSupplierId && supplierSearch.trim() ? ` from ${supplierSearch.trim()}` : ''}
+          </h2>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-secondary, #6b7280)', padding: '4px', borderRadius: '4px',
@@ -2143,10 +2149,10 @@ function CashRecord() {
                         {/* [Shop Name]'s Withdrawals — comes before Shop Owner */}
                         <button
                           className="cj-desc-dropdown-item"
-                          style={{ fontWeight:600, color:'#7c3aed', borderBottom:'1px solid var(--border,#e5e7eb)', paddingBottom:'8px', marginBottom:'2px' }}
+                          style={{ borderBottom:'1px solid var(--border,#e5e7eb)', paddingBottom:'8px', marginBottom:'2px' }}
                           onMouseDown={() => handleNameSelect(`${shopName}'s Withdrawals`, "shop's withdrawals", '')}
                         >
-                          🏪 {shopName}'s Withdrawals
+                          {shopName}'s Withdrawals
                         </button>
                         {/* Staff (Firebase users) — ordered with owners last so they appear at top visually */}
                         {ordered.length > 0
@@ -2172,17 +2178,17 @@ function CashRecord() {
                             <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
                           </button>
                         )}
-                        {/* Customer — opens New Customer Advance Order modal */}
+                        {/* Customer Advance Order — opens New Customer Advance Order modal */}
                         <div
                           className="cj-desc-dropdown-item"
-                          style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
+                          style={{ borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
                           onMouseDown={e => {
                             e.preventDefault();
                             setShowNameDrop(false);
                             setShowCreateAdvanceModal(true);
                           }}
                         >
-                          👤 Customer
+                          Customer Advance Order
                         </div>
                       </div>
                     );
@@ -2260,7 +2266,6 @@ function CashRecord() {
                         <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
                           <div
                             className="cj-desc-dropdown-item"
-                            style={{ fontWeight:600, color:'#f59e0b' }}
                             onMouseDown={e => {
                               e.preventDefault();
                               setShowOthersSubDrop(false);
@@ -2270,7 +2275,7 @@ function CashRecord() {
                               setShowExpensesModal(true);
                             }}
                           >
-                            🏭 Supplier
+                            Supplier
                           </div>
                         </div>
                       )}
@@ -2353,7 +2358,7 @@ function CashRecord() {
                       {/* Supplier */}
                       <div
                         className="cj-desc-dropdown-item"
-                        style={{ fontWeight:600, color:'#f59e0b', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
+                        style={{ borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
                         onMouseDown={e => {
                           e.preventDefault();
                           setShowNameDrop(false);
@@ -2363,7 +2368,7 @@ function CashRecord() {
                           setShowExpensesModal(true);
                         }}
                       >
-                        🏭 Supplier
+                        Supplier
                       </div>
                     </div>
                   )}
