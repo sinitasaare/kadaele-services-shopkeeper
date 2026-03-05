@@ -3,50 +3,56 @@ import { Eye, EyeOff } from 'lucide-react';
 import dataService from '../services/dataService';
 import './Login.css';
 
+/**
+ * Converts a username into the hidden Firebase Auth email.
+ * Must match exactly what the Admin app constructs in authService.js.
+ * e.g. "maria_santos" → "maria_santos@kadaele.app"
+ */
+function usernameToEmail(username) {
+  return `${username.trim().toLowerCase()}@kadaele.app`;
+}
+
 function Login({ onLoginSuccess }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername]         = useState('');
+  const [password, setPassword]         = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError]               = useState('');
+  const [loading, setLoading]           = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setMessage('');
     setLoading(true);
 
-    const result = await dataService.login(email, password);
-    
-    if (result.success) {
-      localStorage.setItem('user_email', email);
-      onLoginSuccess(result.user);
-    } else {
-      setError(result.error || 'Login failed');
-    }
-    
-    setLoading(false);
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError('Please enter your email first');
+    const trimmedUsername = username.trim().toLowerCase();
+    if (!trimmedUsername) {
+      setError('Please enter your username.');
+      setLoading(false);
       return;
     }
 
-    setError('');
-    setMessage('');
-    setLoading(true);
+    // Construct the hidden email from the username and pass it to Firebase Auth
+    const hiddenEmail = usernameToEmail(trimmedUsername);
+    const result = await dataService.login(hiddenEmail, password);
 
-    const result = await dataService.sendPasswordReset(email);
-    
     if (result.success) {
-      setMessage('Password reset email sent! Check your inbox.');
+      // Store the display username (not the hidden email) for use in the app
+      localStorage.setItem('user_username', trimmedUsername);
+      localStorage.setItem('user_email', hiddenEmail);
+      onLoginSuccess(result.user);
     } else {
-      setError(result.error || 'Failed to send reset email');
+      // Make the error message username-friendly (Firebase says "email" internally)
+      let msg = result.error || 'Login failed. Please try again.';
+      if (
+        msg.toLowerCase().includes('email') ||
+        msg.toLowerCase().includes('user not found') ||
+        msg.toLowerCase().includes('no account')
+      ) {
+        msg = 'No account found for this username.';
+      }
+      setError(msg);
     }
-    
+
     setLoading(false);
   };
 
@@ -58,47 +64,46 @@ function Login({ onLoginSuccess }) {
           <h1 className="app-title">Kadaele Services</h1>
           <h2 className="app-subtitle">Shopkeeper</h2>
         </div>
+
         <form onSubmit={handleSubmit} className="login-form">
           <div className="input-group">
             <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
               className="login-input"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
             />
           </div>
+
           <div className="input-group password-group">
             <input
-              type={showPassword ? "text" : "password"}
+              type={showPassword ? 'text' : 'password'}
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               className="login-input password-input"
+              autoComplete="current-password"
             />
             <button
               type="button"
               className="password-toggle"
               onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
+
           {error && <div className="error-message">{error}</div>}
-          {message && <div className="success-message">{message}</div>}
+
           <button type="submit" disabled={loading} className="login-button">
             {loading ? 'Logging in...' : 'Login'}
-          </button>
-          <button 
-            type="button" 
-            onClick={handleForgotPassword} 
-            disabled={loading}
-            className="forgot-password-btn"
-          >
-            Forgot Password?
           </button>
         </form>
       </div>
