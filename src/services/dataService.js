@@ -2529,6 +2529,29 @@ class DataService {
     return u.uid.slice(0, 8);
   }
 
+  // ── Returns the shop/business name from the users collection ─────────────
+  // Looks for a user with role 'Shop Owner' and returns their shopName field,
+  // or falls back to localStorage, then to a generic label.
+  async getShopName() {
+    try {
+      const cached = localStorage.getItem('ks_shop_name');
+      // Always try to refresh from Firebase if online
+      if (this.isOnline && auth.currentUser) {
+        const users = await localforage.getItem('kadaele_users') || [];
+        const owner = users.find(u => (u.role || '').toLowerCase() === 'shop owner');
+        if (owner && (owner.shopName || owner.businessName || owner.storeName)) {
+          const name = owner.shopName || owner.businessName || owner.storeName;
+          localStorage.setItem('ks_shop_name', name);
+          return name;
+        }
+      }
+      if (cached) return cached;
+    } catch (err) {
+      console.error('getShopName error:', err);
+    }
+    return localStorage.getItem('ks_shop_name') || 'Shop';
+  }
+
   async getDailyCashRecords() {
     try {
       if (this.isOnline && auth.currentUser && !this._dailyCashFetched) {
@@ -2616,6 +2639,19 @@ class DataService {
     await this._saveDailyCashDoc(docData);
     await localforage.setItem('current_business_date', today);
 
+    // Record the opening float in the Cash Record table
+    if (float > 0) {
+      const openerName = this.userName();
+      await this.addCashEntry({
+        type: 'in',
+        amount: float,
+        note: `Shop OPENED by ${openerName} with float`,
+        date: now,
+        source: 'opening_float',
+        business_date: today,
+      });
+    }
+
     return docData;
   }
 
@@ -2702,6 +2738,21 @@ class DataService {
     };
 
     await this._saveDailyCashDoc(docData);
+
+    // Record the re-opening float in the Cash Record table
+    const reopenFloat = reopenFloatAmount !== undefined ? reopenFloatAmount : (existing.counted_cash ?? existing.opening_float ?? 0);
+    if (parseFloat(reopenFloat) > 0) {
+      const reopenerName = this.userName();
+      await this.addCashEntry({
+        type: 'in',
+        amount: parseFloat(reopenFloat),
+        note: `Shop RE-OPENED by ${reopenerName} with float`,
+        date: now,
+        source: 'reopen_float',
+        business_date: today,
+      });
+    }
+
     return docData;
   }
 
@@ -2736,6 +2787,8 @@ class DataService {
     let sum_in = 0, sum_out = 0;
     for (const e of entries) {
       if (e.source === 'open_day' || e.source === 'close_day') continue;
+      // opening_float and reopen_float are already accounted for in the opening_float field
+      if (e.source === 'opening_float' || e.source === 'reopen_float') continue;
       if (e.type === 'in')  sum_in  += parseFloat(e.amount) || 0;
       if (e.type === 'out') sum_out += parseFloat(e.amount) || 0;
     }
