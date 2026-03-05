@@ -95,6 +95,56 @@ function CashEditModal({ entry, onSave, onClose, onDeleted, fmt }) {
 const CASH_FROM_NAMES = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Landlord', 'Others'];
 const PAID_TO_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Landlord', 'Others'];
 
+// ── Role-based BEING FOR options for Cash In (CASH FROM) ───────────────────
+// Returns array of { key, label, phrase } based on the selected user's role & gender
+function getCashFromBeingForOptions(role, gender, shopName) {
+  const pronoun = gender === 'Female' ? 'her' : gender === 'Male' ? 'his' : 'their';
+  const shop = shopName || 'Shop';
+  const r = (role || '').toLowerCase().trim();
+
+  if (r === "shop's withdrawals" || r === 'withdrawals') {
+    // [shop name]'s Withdrawals
+    return [
+      { key: 'float',        label: 'Float (change money)',           phrase: 'for float (change money)' },
+      { key: 'purchases',    label: 'Purchases (money to buy stock)', phrase: 'to purchase stock' },
+      { key: 'wages',        label: 'Wages (to pay staff)',           phrase: 'to pay wages' },
+      { key: 'expenses',     label: 'Expenses (to pay for expenses)', phrase: 'to pay for expenses' },
+      { key: 'safe_keeping', label: 'Safe Keeping (temporary)',       phrase: 'for safe keeping' },
+    ];
+  }
+  if (r === 'shop owner') {
+    return [
+      { key: 'float',        label: 'Float (top-up change money)',              phrase: 'for float top-up (change money)' },
+      { key: 'purchases',    label: 'Purchases (top-up money to buy stock)',    phrase: 'to top-up purchase money' },
+      { key: 'wages',        label: 'Wages (to pay staff)',                     phrase: 'to pay wages' },
+      { key: 'expenses',     label: 'Expenses (help pay for expenses)',         phrase: 'to help pay for expenses' },
+      { key: 'safe_keeping', label: 'Safe Keeping (temporary)',                 phrase: 'for safe keeping' },
+    ];
+  }
+  if (r === 'shop manager') {
+    return [
+      { key: 'float',        label: 'Float (top-up change money)',              phrase: 'for float top-up (change money)' },
+      { key: 'purchases',    label: 'Purchases (adding money to buy stock)',    phrase: 'to add money for purchases' },
+      { key: 'expenses',     label: 'Expenses (top-up money for expenses)',     phrase: 'to top-up expense money' },
+      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`, phrase: `for safe keeping (${pronoun} money)` },
+    ];
+  }
+  if (r === 'shopkeeper') {
+    return [
+      { key: 'float',        label: 'Float (top-up change money)',              phrase: 'for float top-up (change money)' },
+      { key: 'purchases',    label: 'Purchases (adding money to buy stock)',    phrase: 'to add money for purchases' },
+      { key: 'expenses',     label: 'Expenses (top-up money for expenses)',     phrase: 'to top-up expense money' },
+      { key: 'safe_keeping', label: `Safe Keeping (store ${pronoun} money temporarily)`, phrase: `for safe keeping (${pronoun} money)` },
+    ];
+  }
+  // Default fallback
+  return [
+    { key: 'float',        label: 'Float (change money)',           phrase: 'for float (change money)' },
+    { key: 'purchases',    label: 'Purchases (money to buy stock)', phrase: 'to purchase stock' },
+    { key: 'safe_keeping', label: 'Safe Keeping',                   phrase: 'for safe keeping' },
+  ];
+}
+
 const CASH_IN_REASONS = [
   { key: 'float',        label: 'Float (change money)',           phrase: 'for float (change money)' },
   { key: 'purchases',    label: 'Purchases (money to buy stock)', phrase: 'to purchase stock' },
@@ -1440,6 +1490,9 @@ function CashRecord() {
   const [suppliersList, setSuppliersList]      = useState([]);
   const [usersList, setUsersList]              = useState([]);
   const [landlordInfo, setLandlordInfo]        = useState(null); // { name, monthlyRent }
+  const [shopName, setShopName]                = useState('Shop');
+  const [selectedUserRole, setSelectedUserRole]   = useState('');
+  const [selectedUserGender, setSelectedUserGender] = useState('');
   const [refNumber, setRefNumber]              = useState('');
   // Others-mode sub-dropdown (Advance Orders List vs Create New)
   const [showOthersSubDrop, setShowOthersSubDrop] = useState(false);
@@ -1571,33 +1624,38 @@ function CashRecord() {
     setShowExpensesModal(false); setShowNewSupplierModal(false); setExpensesResult(null);
     setShowOthersSubDrop(false); setShowCreateAdvanceModal(false);
     setSelectedAdvanceOrder(null);
+    setSelectedUserRole(''); setSelectedUserGender('');
   };
   const openAddModal = async () => {
     resetAddModal();
     setShowAddModal(true);
-    // Pre-load creditors, suppliers, advance orders, users, and landlord for dropdowns
-    const [creds, supps, advOrders, users, landlord] = await Promise.all([
+    // Pre-load creditors, suppliers, advance orders, users, landlord and shopName for dropdowns
+    const [creds, supps, advOrders, users, landlord, sName] = await Promise.all([
       dataService.getCreditors(),
       dataService.getSuppliers(),
       dataService.getAdvanceOrders(),
       dataService.getUsers(),
       dataService.getLandlord(),
+      dataService.getShopName(),
     ]);
     setCreditorsList(creds || []);
     setSuppliersList(supps || []);
     setAdvanceOrdersList(advOrders || []);
     setUsersList((users || []).filter(u => u.id !== '__landlord__'));
     setLandlordInfo(landlord || null);
+    setShopName(sName || 'Shop');
   };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
-  const handleNameSelect = (name) => {
+  const handleNameSelect = (name, role, gender) => {
     setShowNameDrop(false);
     // Reset being-for and expenses when name changes
     setBeingForKey(''); setExpensesResult(null);
     setOtherReasonText(''); setShowOtherReasonInput(false);
     setSelectedAdvanceOrder(null);
     setAdvanceOrderCardData(null);
+    setSelectedUserRole(role || '');
+    setSelectedUserGender(gender || '');
     if (name === 'Others') {
       setIsOthersMode(true);
       setPersonName('');
@@ -1706,7 +1764,11 @@ function CashRecord() {
       if (cashInReasonKey === '__advance_order__' && selectedAdvanceOrder) {
         return `Advance Order ref: ${selectedAdvanceOrder.invoiceRef || '—'} by ${selectedAdvanceOrder.name}.`;
       }
-      const reasonObj = CASH_IN_REASONS.find(r => r.key === cashInReasonKey);
+      // Use role-based reasons if available, otherwise fall back to CASH_IN_REASONS
+      const roleReasons = selectedUserRole
+        ? getCashFromBeingForOptions(selectedUserRole, selectedUserGender, shopName)
+        : CASH_IN_REASONS;
+      const reasonObj = roleReasons.find(r => r.key === cashInReasonKey) || CASH_IN_REASONS.find(r => r.key === cashInReasonKey);
       const phrase = reasonObj?.phrase || '';
       if (name && phrase) return `From ${name} ${phrase}.`;
       if (name) return `From ${name}.`;
@@ -1747,6 +1809,11 @@ function CashRecord() {
     }
     return true;
   };
+
+  // Derive the active BEING FOR options for Cash In based on the selected user's role
+  const activeCashInReasons = selectedUserRole
+    ? getCashFromBeingForOptions(selectedUserRole, selectedUserGender, shopName)
+    : CASH_IN_REASONS;
 
   const handleSaveEntry = async () => {
     const name = getResolvedName();
@@ -2029,6 +2096,7 @@ function CashRecord() {
                     setBeingForKey(''); setShowBeingForDrop(false);
                     setOtherReasonText(''); setShowOtherReasonInput(false);
                     setExpensesResult(null); setShowExpensesModal(false);
+                    setSelectedUserRole(''); setSelectedUserGender('');
                     setNewType(TYPE_IN);
                   }}>
                   Cash In
@@ -2042,6 +2110,7 @@ function CashRecord() {
                     setBeingForKey(''); setShowBeingForDrop(false);
                     setOtherReasonText(''); setShowOtherReasonInput(false);
                     setExpensesResult(null); setShowExpensesModal(false);
+                    setSelectedUserRole(''); setSelectedUserGender('');
                     setNewType(TYPE_OUT);
                   }}>
                   Cash Out
@@ -2062,46 +2131,62 @@ function CashRecord() {
                     <span className="cj-desc-trigger-text">{personName || 'Select name…'}</span>
                     <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
                   </button>
-                  {showNameDrop && (
-                    <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {/* Staff (Firebase users) */}
-                      {usersList.length > 0
-                        ? usersList.map(u => {
-                            const n = u.fullName || u.username || '';
-                            return (
-                              <button key={u.id} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n)}>
-                                {n}
-                                {u.role ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({u.role})</span> : null}
-                              </button>
-                            );
-                          })
-                        : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No staff found…</div>
-                      }
-                      {/* Landlord */}
-                      {landlordInfo && (
+                  {showNameDrop && (() => {
+                    // Separate users by role for ordering: Shop Owner, Shop Manager, Shopkeepers, others
+                    const owners    = usersList.filter(u => (u.role||'').toLowerCase() === 'shop owner');
+                    const managers  = usersList.filter(u => (u.role||'').toLowerCase() === 'shop manager');
+                    const keepers   = usersList.filter(u => (u.role||'').toLowerCase() === 'shopkeeper');
+                    const others    = usersList.filter(u => !['shop owner','shop manager','shopkeeper'].includes((u.role||'').toLowerCase()));
+                    const ordered   = [...others, ...keepers, ...managers, ...owners];
+                    return (
+                      <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
+                        {/* [Shop Name]'s Withdrawals — comes before Shop Owner */}
                         <button
                           className="cj-desc-dropdown-item"
-                          onMouseDown={() => handleNameSelect(landlordInfo.name || landlordInfo.fullName)}
-                          style={{ color:'#92400e' }}
+                          style={{ fontWeight:600, color:'#7c3aed', borderBottom:'1px solid var(--border,#e5e7eb)', paddingBottom:'8px', marginBottom:'2px' }}
+                          onMouseDown={() => handleNameSelect(`${shopName}'s Withdrawals`, "shop's withdrawals", '')}
                         >
-                          🏠 {landlordInfo.name || landlordInfo.fullName}
-                          <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
+                          🏪 {shopName}'s Withdrawals
                         </button>
-                      )}
-                      {/* Customer — opens New Customer Advance Order modal */}
-                      <div
-                        className="cj-desc-dropdown-item"
-                        style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
-                        onMouseDown={e => {
-                          e.preventDefault();
-                          setShowNameDrop(false);
-                          setShowCreateAdvanceModal(true);
-                        }}
-                      >
-                        👤 Customer
+                        {/* Staff (Firebase users) — ordered with owners last so they appear at top visually */}
+                        {ordered.length > 0
+                          ? ordered.map(u => {
+                              const n = u.fullName || u.username || '';
+                              return (
+                                <button key={u.id} className="cj-desc-dropdown-item" onMouseDown={() => handleNameSelect(n, u.role || '', u.gender || '')}>
+                                  {n}
+                                  {u.role ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({u.role})</span> : null}
+                                </button>
+                              );
+                            })
+                          : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No staff found…</div>
+                        }
+                        {/* Landlord */}
+                        {landlordInfo && (
+                          <button
+                            className="cj-desc-dropdown-item"
+                            onMouseDown={() => handleNameSelect(landlordInfo.name || landlordInfo.fullName, 'landlord', landlordInfo.gender || '')}
+                            style={{ color:'#92400e' }}
+                          >
+                            🏠 {landlordInfo.name || landlordInfo.fullName}
+                            <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
+                          </button>
+                        )}
+                        {/* Customer — opens New Customer Advance Order modal */}
+                        <div
+                          className="cj-desc-dropdown-item"
+                          style={{ fontWeight:600, color:'#667eea', borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            setShowNameDrop(false);
+                            setShowCreateAdvanceModal(true);
+                          }}
+                        >
+                          👤 Customer
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* Being For (reason dropdown) */}
@@ -2115,14 +2200,14 @@ function CashRecord() {
                       {cashInReasonKey === '__advance_order__' && selectedAdvanceOrder
                         ? `Advance Order ref: ${selectedAdvanceOrder.invoiceRef || '—'}`
                         : cashInReasonKey
-                          ? CASH_IN_REASONS.find(r => r.key === cashInReasonKey)?.label
+                          ? (activeCashInReasons.find(r => r.key === cashInReasonKey)?.label || CASH_IN_REASONS.find(r => r.key === cashInReasonKey)?.label)
                           : 'Select reason…'}
                     </span>
                     <span className="cj-desc-chevron">{showCashInReasonDrop ? '▲' : '▼'}</span>
                   </button>
                   {showCashInReasonDrop && (
                     <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {CASH_IN_REASONS.map(r => (
+                      {activeCashInReasons.map(r => (
                         <button key={r.key} className={`cj-desc-dropdown-item${cashInReasonKey === r.key ? ' selected' : ''}`}
                           onMouseDown={() => { setCashInReasonKey(r.key); setShowCashInReasonDrop(false); setSelectedAdvanceOrder(null); }}>
                           {r.label}
@@ -2239,6 +2324,7 @@ function CashRecord() {
                                 setPersonName(n); setPersonSearch('');
                                 setIsOthersMode(false); setShowNameDrop(false);
                                 setBeingForKey(''); setExpensesResult(null);
+                                setSelectedUserRole(u.role || ''); setSelectedUserGender(u.gender || '');
                               }}>
                                 {n}
                                 {u.role ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({u.role})</span> : null}
@@ -2257,6 +2343,7 @@ function CashRecord() {
                             setPersonName(n); setPersonSearch('');
                             setIsOthersMode(false); setShowNameDrop(false);
                             setBeingForKey(''); setExpensesResult(null);
+                            setSelectedUserRole('landlord'); setSelectedUserGender(landlordInfo.gender || '');
                           }}
                         >
                           🏠 {landlordInfo.name || landlordInfo.fullName}
