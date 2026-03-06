@@ -49,6 +49,9 @@ const DATA_KEYS = {
   SETTINGS: 'app_settings',
   OPERATIONAL_ASSETS: 'operational_assets',
   ADVANCE_ORDERS: 'advance_orders',
+  WITHDRAWALS: 'withdrawals',
+  BANK_TRANSFERS: 'bank_transfers',
+  MPAISA_TRANSFERS: 'mpaisa_transfers',
 };
 
 class DataService {
@@ -1215,7 +1218,7 @@ class DataService {
         debtorId,
         saleId,
         amount: paymentAmount,
-        note: `Debt payment — ${displayName}${note ? ': ' + note : ''}`,
+        note: `${displayName} pays debt`,
         date: paymentDate,
       });
     }
@@ -2650,6 +2653,16 @@ class DataService {
         source: 'opening_float',
         business_date: today,
       });
+      // Float returned from withdrawals balance back into shop
+      await this.addWithdrawal({
+        type: 'in',
+        amount: float,
+        description: `Float returned to shop — opened by ${openerName}`,
+        source: 'open_float',
+        date: now,
+        business_date: today,
+        relatedId: today,
+      });
     }
 
     return docData;
@@ -2689,6 +2702,20 @@ class DataService {
     };
 
     await this._saveDailyCashDoc(docData);
+
+    // Full counted cash is taken out of the shop at end of day
+    if (counted > 0) {
+      const closerName = this.userName();
+      await this.addWithdrawal({
+        type: 'out',
+        amount: counted,
+        description: `Shop closed by ${closerName} — cash taken out`,
+        source: 'close_day',
+        date: now,
+        business_date: today,
+        relatedId: today,
+      });
+    }
 
     return docData;
   }
@@ -2750,6 +2777,16 @@ class DataService {
         date: now,
         source: 'reopen_float',
         business_date: today,
+      });
+      // Float returned from withdrawals balance back into shop
+      await this.addWithdrawal({
+        type: 'in',
+        amount: parseFloat(reopenFloat),
+        description: `Float returned to shop — re-opened by ${reopenerName}`,
+        source: 'open_float',
+        date: now,
+        business_date: today,
+        relatedId: today,
       });
     }
 
@@ -3032,7 +3069,8 @@ class DataService {
       }
 
       // If cash payment, auto-create a cash_entries OUT record
-      if ((expense.paymentMethod || 'cash') === 'cash') {
+      // _skipCashEntry is set by Supplier Purchase flow — the assets modal already wrote the cash entry
+      if ((expense.paymentMethod || 'cash') === 'cash' && !expense._skipCashEntry) {
         await this.addCashEntry({
           type: 'out',
           amount: expense.amount,
@@ -3041,6 +3079,19 @@ class DataService {
           note: expense.note || expense.category,
           date: expense.date || now,
           business_date: (expense.date || now).slice(0, 10),
+        });
+      }
+
+      // Owner drawings → also record as a withdrawal (money leaves shop to owner)
+      const drawingCategories = ['Owner Drawings', 'Owner Withdrawal', 'Drawings'];
+      if (drawingCategories.some(c => (expense.category || '').toLowerCase().includes(c.toLowerCase()))) {
+        await this.addWithdrawal({
+          type: 'out',
+          amount: expense.amount,
+          description: `Owner drawings — ${expense.note || expense.category}`,
+          source: 'expense',
+          date: expense.date || now,
+          relatedId: expense.id,
         });
       }
 
@@ -3133,6 +3184,114 @@ class DataService {
   }
 
   // ════════════════════════════════════════════════════════════════════
+
+  // ── Bank Transfers (debt payments via bank) ──────────────────────────
+  async addBankTransfer(data) {
+    try {
+      const entries = await localforage.getItem(DATA_KEYS.BANK_TRANSFERS) || [];
+      const now = new Date().toISOString();
+      const entry = {
+        id: this.generateId(),
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+      };
+      entries.push(entry);
+      await localforage.setItem(DATA_KEYS.BANK_TRANSFERS, entries);
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'bank_transfers', entry.id), { ...entry, createdAt: serverTimestamp() }, { merge: true });
+        } catch (err) { console.error('addBankTransfer Firebase error:', err); }
+      }
+      return entry;
+    } catch (err) { console.error('addBankTransfer error:', err); throw err; }
+  }
+
+  async getBankTransfers() {
+    return await localforage.getItem(DATA_KEYS.BANK_TRANSFERS) || [];
+  }
+
+  // ── MPAiSA Transfers (debt payments via MPAiSA) ──────────────────────
+  async addMpaisaTransfer(data) {
+    try {
+      const entries = await localforage.getItem(DATA_KEYS.MPAISA_TRANSFERS) || [];
+      const now = new Date().toISOString();
+      const entry = {
+        id: this.generateId(),
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+      };
+      entries.push(entry);
+      await localforage.setItem(DATA_KEYS.MPAISA_TRANSFERS, entries);
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'mpaisa_transfers', entry.id), { ...entry, createdAt: serverTimestamp() }, { merge: true });
+        } catch (err) { console.error('addMpaisaTransfer Firebase error:', err); }
+      }
+      return entry;
+    } catch (err) { console.error('addMpaisaTransfer error:', err); throw err; }
+  }
+
+  async getMpaisaTransfers() {
+    return await localforage.getItem(DATA_KEYS.MPAISA_TRANSFERS) || [];
+  }
+
+  // ── Withdrawals ───────────────────────────────────────────────────────
+  // A withdrawal entry has: type ('out'=money leaves shop, 'in'=money returned),
+  // amount, description, source, date, relatedId (sessionId, expenseId, etc.)
+  async addWithdrawal(data) {
+    try {
+      const entries = await localforage.getItem(DATA_KEYS.WITHDRAWALS) || [];
+      const now = new Date().toISOString();
+      const entry = {
+        id: this.generateId(),
+        type: data.type,           // 'out' = taken from shop, 'in' = returned to shop
+        amount: parseFloat(data.amount),
+        description: data.description || '',
+        source: data.source || 'manual', // 'close_day'|'open_float'|'expense'|'cash_in'|'manual'
+        date: data.date || now,
+        business_date: (data.date || now).slice(0, 10),
+        relatedId: data.relatedId || null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      entries.push(entry);
+      await localforage.setItem(DATA_KEYS.WITHDRAWALS, entries);
+      if (this.isOnline && auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'withdrawals', entry.id), { ...entry, createdAt: serverTimestamp() }, { merge: true });
+        } catch (err) { console.error('addWithdrawal Firebase error:', err); }
+      }
+      return entry;
+    } catch (err) { console.error('addWithdrawal error:', err); throw err; }
+  }
+
+  async getWithdrawals() {
+    try {
+      if (this.isOnline && auth.currentUser && !this._withdrawalsFetched) {
+        this._withdrawalsFetched = true;
+        const snap = await getDocs(collection(db, 'withdrawals'));
+        const fbDocs = snap.docs.map(d => ({ id: d.id, ...d.data(),
+          date: typeof d.data().date === 'string' ? d.data().date : (d.data().date?.toDate?.()?.toISOString?.() || null),
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString?.() || d.data().createdAt,
+        }));
+        const local = await localforage.getItem(DATA_KEYS.WITHDRAWALS) || [];
+        const localMap = new Map(local.map(r => [r.id, r]));
+        for (const fb of fbDocs) {
+          const loc = localMap.get(fb.id);
+          if (!loc) { localMap.set(fb.id, fb); continue; }
+          const fbT  = new Date(fb.updatedAt  || 0).getTime();
+          const locT = new Date(loc.updatedAt || 0).getTime();
+          if (fbT > locT) localMap.set(fb.id, fb);
+        }
+        const merged = Array.from(localMap.values());
+        await localforage.setItem(DATA_KEYS.WITHDRAWALS, merged);
+        return merged;
+      }
+    } catch (err) { console.error('getWithdrawals error:', err); }
+    return await localforage.getItem(DATA_KEYS.WITHDRAWALS) || [];
+  }
 
 }
 
