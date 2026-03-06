@@ -1852,6 +1852,18 @@ function CashRecord() {
         ...(refNumber.trim() ? { invoiceRef: refNumber.trim() } : {}),
       });
 
+      // If this is a "Shop's Withdrawals" Cash In — money returned to shop
+      // from the withdrawal balance. Record as a Withdrawal IN entry.
+      if (newType === TYPE_IN && selectedUserRole === "shop's withdrawals") {
+        await dataService.addWithdrawal({
+          type: 'in',
+          amount,
+          description: note,
+          source: 'cash_in',
+          date: _now.toISOString(),
+        });
+      }
+
       // If Cash In "Others" with a new name, create a creditor stub
       if (newType === TYPE_IN && isOthersMode && name) {
         const existing = creditorsList.find(c =>
@@ -1985,7 +1997,7 @@ function CashRecord() {
             className={`cj-filter-action-btn${!showFilters ? ' cjfab-open' : showApply ? ' cjfab-apply' : ' cjfab-close'}`}
             onClick={handleFilterButtonClick}>{btnLabel}</button>
           {!showFilters && (
-            <button className="cj-add-btn" onClick={openAddModal}>+ Add Entry</button>
+            <button className="cj-add-btn" onClick={openAddModal}>+ Add Cash In</button>
           )}
         </div>
         <h3 className="cj-table-title">{getTableTitle()}</h3>
@@ -2087,42 +2099,7 @@ function CashRecord() {
             />
           )}
           <div className="cj-modal-content">
-            <h2 className="cj-modal-title">Add Cash Entry</h2>
-
-            {/* Type */}
-            <div className="cj-modal-field">
-              <label>Type</label>
-              <div className="cj-modal-type-btns">
-                <button
-                  className={`cj-modal-type-btn${newType === TYPE_IN ? ' active-in' : ''}`}
-                  onClick={() => {
-                    setPersonName(''); setIsOthersMode(false); setPersonSearch('');
-                    setShowNameDrop(false); setShowSearchDrop(false); setRefNumber('');
-                    setCashInReasonKey(''); setShowCashInReasonDrop(false);
-                    setBeingForKey(''); setShowBeingForDrop(false);
-                    setOtherReasonText(''); setShowOtherReasonInput(false);
-                    setExpensesResult(null); setShowExpensesModal(false);
-                    setSelectedUserRole(''); setSelectedUserGender('');
-                    setNewType(TYPE_IN);
-                  }}>
-                  Cash In
-                </button>
-                <button
-                  className={`cj-modal-type-btn${newType === TYPE_OUT ? ' active-out' : ''}`}
-                  onClick={() => {
-                    setPersonName(''); setIsOthersMode(false); setPersonSearch('');
-                    setShowNameDrop(false); setShowSearchDrop(false); setRefNumber('');
-                    setCashInReasonKey(''); setShowCashInReasonDrop(false);
-                    setBeingForKey(''); setShowBeingForDrop(false);
-                    setOtherReasonText(''); setShowOtherReasonInput(false);
-                    setExpensesResult(null); setShowExpensesModal(false);
-                    setSelectedUserRole(''); setSelectedUserGender('');
-                    setNewType(TYPE_OUT);
-                  }}>
-                  Cash Out
-                </button>
-              </div>
-            </div>
+            <h2 className="cj-modal-title">Add Cash In</h2>
 
             {/* ── Cash In fields ── */}
             {newType === TYPE_IN && (
@@ -2240,217 +2217,6 @@ function CashRecord() {
               </>
             )}
 
-            {/* ── Cash Out fields ── */}
-            {newType === TYPE_OUT && (
-              <>
-                {/* Paid To — users + Suppliers List + Add Operational Assets */}
-                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
-                  <label>Paid To</label>
-                  {isOthersMode ? (
-                    <>
-                      <input
-                        className="cj-modal-input"
-                        value={personSearch}
-                        onChange={e => {
-                          setPersonSearch(e.target.value);
-                          setShowSearchDrop(true);
-                          setBeingForKey(''); setExpensesResult(null);
-                        }}
-                        onFocus={() => setShowOthersSubDrop(true)}
-                        onBlur={() => setTimeout(() => { setShowSearchDrop(false); setShowOthersSubDrop(false); }, 220)}
-                        placeholder="Search suppliers…"
-                        autoFocus
-                      />
-                      {/* Sub-dropdown when focused and not typing */}
-                      {showOthersSubDrop && !personSearch && (
-                        <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
-                          <div
-                            className="cj-desc-dropdown-item"
-                            onMouseDown={e => {
-                              e.preventDefault();
-                              setShowOthersSubDrop(false);
-                              setPersonName('');
-                              setPersonSearch('');
-                              setIsOthersMode(false);
-                              setShowExpensesModal(true);
-                            }}
-                          >
-                            Supplier
-                          </div>
-                        </div>
-                      )}
-                      {/* Suppliers search dropdown */}
-                      {showSearchDrop && (() => {
-                        const q = personSearch.toLowerCase();
-                        const matches = q
-                          ? suppliersList.filter(s => (s.name || s.customerName || '').toLowerCase().includes(q))
-                          : suppliersList;
-                        return matches.length > 0 ? (
-                          <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:400 }}>
-                            {matches.map(s => {
-                              const n = s.name || s.customerName || '';
-                              return (
-                                <button key={s.id} className="cj-desc-dropdown-item"
-                                  onMouseDown={() => {
-                                    setPersonSearch(n);
-                                    setPersonName(n);
-                                    setShowSearchDrop(false);
-                                    setBeingForKey(''); setExpensesResult(null);
-                                  }}>
-                                  {n}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : null;
-                      })()}
-                      <button style={{ marginTop:'4px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0 }}
-                        onClick={() => { setIsOthersMode(false); setPersonName(''); setPersonSearch(''); setBeingForKey(''); setExpensesResult(null); }}>
-                        ← Back to list
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      className={`cj-desc-trigger${personName ? ' has-value' : ''}`}
-                      onClick={() => setShowNameDrop(o => !o)}
-                    >
-                      <span className="cj-desc-trigger-text">{personName || 'Select name…'}</span>
-                      <span className="cj-desc-chevron">{showNameDrop ? '▲' : '▼'}</span>
-                    </button>
-                  )}
-                  {showNameDrop && !isOthersMode && (
-                    <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {/* Firebase users */}
-                      {usersList.length > 0
-                        ? usersList.map(u => {
-                            const n = u.fullName || u.username || '';
-                            return (
-                              <button key={u.id} className="cj-desc-dropdown-item" onMouseDown={() => {
-                                setPersonName(n); setPersonSearch('');
-                                setIsOthersMode(false); setShowNameDrop(false);
-                                setBeingForKey(''); setExpensesResult(null);
-                                setSelectedUserRole(u.role || ''); setSelectedUserGender(u.gender || '');
-                              }}>
-                                {n}
-                                {u.role ? <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>({u.role})</span> : null}
-                              </button>
-                            );
-                          })
-                        : <div className="cj-desc-dropdown-item" style={{ color:'#9ca3af', fontStyle:'italic', pointerEvents:'none' }}>No users found…</div>
-                      }
-                      {/* Landlord */}
-                      {landlordInfo && (
-                        <button
-                          className="cj-desc-dropdown-item"
-                          style={{ color:'#92400e' }}
-                          onMouseDown={() => {
-                            const n = landlordInfo.name || landlordInfo.fullName;
-                            setPersonName(n); setPersonSearch('');
-                            setIsOthersMode(false); setShowNameDrop(false);
-                            setBeingForKey(''); setExpensesResult(null);
-                            setSelectedUserRole('landlord'); setSelectedUserGender(landlordInfo.gender || '');
-                          }}
-                        >
-                          🏠 {landlordInfo.name || landlordInfo.fullName}
-                          <span style={{ fontSize:'11px', color:'#9ca3af', marginLeft:'6px' }}>(Landlord)</span>
-                        </button>
-                      )}
-                      {/* Supplier */}
-                      <div
-                        className="cj-desc-dropdown-item"
-                        style={{ borderTop:'1px solid var(--border, #e5e7eb)', marginTop:'2px', paddingTop:'8px' }}
-                        onMouseDown={e => {
-                          e.preventDefault();
-                          setShowNameDrop(false);
-                          setIsOthersMode(false);
-                          setPersonName('');
-                          setPersonSearch('');
-                          setShowExpensesModal(true);
-                        }}
-                      >
-                        Supplier
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Being For */}
-                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
-                  <label>Being For</label>
-                  {beingForKey === '__supplier_purchase__' && expensesResult ? (
-                    /* Supplier purchase already saved — show ref-based summary */
-                    <div style={{padding:'8px 12px',background:expensesResult.paymentType==='cash'?'#f0fdf4':'#eff6ff',
-                      border:`1.5px solid ${expensesResult.paymentType==='cash'?'#16a34a':'#3b82f6'}`,
-                      borderRadius:'8px',fontSize:'13px',color:expensesResult.paymentType==='cash'?'#166534':'#1e40af'}}>
-                      <div style={{fontWeight:700,marginBottom:'2px'}}>
-                        {expensesResult.paymentType === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {expensesResult.invoiceRef}
-                      </div>
-                      <div style={{fontSize:'12px',opacity:0.85,marginTop:'2px'}}>
-                        Paid {expensesResult.supplierName} for ref: {expensesResult.invoiceRef}
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      className={`cj-desc-trigger${beingForKey ? ' has-value' : ''}`}
-                      onClick={handleBeingForClick}
-                    >
-                      <span className="cj-desc-trigger-text">
-                        {(() => {
-                          const name = getResolvedName();
-                          if (name && isKnownSupplier(name, suppliersList)) return '🔧 Tap to add operational assets…';
-                          if (beingForKey === 'other' && otherReasonText) return otherReasonText;
-                          if (beingForKey) return PAID_TO_REASONS.find(r => r.key === beingForKey)?.label;
-                          return 'Select reason…';
-                        })()}
-                      </span>
-                      <span className="cj-desc-chevron">{showBeingForDrop ? '▲' : '▼'}</span>
-                    </button>
-                  )}
-                  {showBeingForDrop && (
-                    <div className="cj-desc-dropdown" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300 }}>
-                      {PAID_TO_REASONS.map(r => (
-                        <button key={r.key} className={`cj-desc-dropdown-item${beingForKey === r.key ? ' selected' : ''}`}
-                          onMouseDown={() => handleBeingForSelect(r.key)}>
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Other reason text input (shown inline when "Other reason" is selected) */}
-                {showOtherReasonInput && (
-                  <div className="cj-modal-field">
-                    <label>Reason for payment</label>
-                    <input className="cj-modal-input" value={otherReasonText}
-                      onChange={e => setOtherReasonText(e.target.value)}
-                      placeholder="Describe the reason…" autoFocus />
-                  </div>
-                )}
-
-                {/* Amount — hide for supplier purchases since it's auto-set from the assets modal */}
-                {!(beingForKey === '__supplier_purchase__' && expensesResult) && (
-                  <div className="cj-modal-field">
-                    <label>Amount</label>
-                    <input type="number" className="cj-modal-input" placeholder="0.00"
-                      value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01"
-                      readOnly={!!expensesResult}
-                    />
-                    <div style={{ fontSize:'12px', color:'#6b7280', marginTop:'4px' }}>
-                      Current cash balance: {fmt(Math.max(0, currentBalance))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Ref Number */}
-                <div className="cj-modal-field">
-                  <label>Reference Number <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
-                  <input className="cj-modal-input" value={refNumber} onChange={e => setRefNumber(e.target.value)}
-                    placeholder="Invoice / receipt ref…" />
-                </div>
-              </>
-            )}
-
             <div className="cj-modal-buttons">
               <button className="cj-modal-cancel" onClick={closeAddModal}>Cancel</button>
               <button className="cj-modal-save" onClick={handleSaveEntry}
@@ -2472,22 +2238,6 @@ function CashRecord() {
           onClose={() => setEditEntry(null)}
         />
       )}
-
-      {/* ── Add Operational Assets Modal (supplier purchase from Cash Out) ── */}
-      {showExpensesModal && (() => {
-        const name = getResolvedName();
-        const sup = getSupplierRecord(name, suppliersList);
-        return (
-          <AddOperationalAssetsModal
-            initialSupplierName={name}
-            initialSupplierId={sup?.id || null}
-            suppliersList={suppliersList}
-            onSave={handleExpensesSaved}
-            onClose={() => setShowExpensesModal(false)}
-            onNewSupplier={() => { setShowExpensesModal(false); setShowNewSupplierModal(true); }}
-          />
-        );
-      })()}
 
       {/* ── Create New Customer Advanced Order Modal ── */}
       {showCreateAdvanceModal && (
@@ -2514,27 +2264,7 @@ function CashRecord() {
         />
       )}
 
-      {/* ── New Supplier Modal ── */}
-      {showNewSupplierModal && (
-        <NewSupplierModal
-          suppliersList={suppliersList}
-          onSave={(result) => {
-            setShowNewSupplierModal(false);
-            setPersonName(result.supplierName);
-            setIsOthersMode(true);
-            setPersonSearch(result.supplierName);
-            setBeingForKey('__supplier_purchase__');
-            setExpensesResult(result);
-            dataService.getSuppliers().then(supps => setSuppliersList(supps || []));
-          }}
-          onClose={() => {
-            setShowNewSupplierModal(false);
-            setShowExpensesModal(true);
-          }}
-        />
-      )}
-
-      {/* ── Advance Order Card — shown when CASH FROM name matches a customer ── */}
+      {/* ── Advance Order Card ── */}
       {advanceOrderCardData && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:3500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
           <div style={{ background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'400px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 12px 48px rgba(0,0,0,0.3)' }}>
