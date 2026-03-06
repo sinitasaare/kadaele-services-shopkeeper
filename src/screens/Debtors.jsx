@@ -12,6 +12,17 @@ function isWithin30Mins(entry) {
   if (!ts) return false;
   return (new Date() - new Date(ts)) / (1000 * 60) <= 30;
 }
+
+// ── Payment method helpers ────────────────────────────────────────────────
+function refFieldLabel(method) {
+  if (method === 'bank')   return 'Bank Transfer Reference';
+  if (method === 'mpaisa') return 'Transaction ID';
+  if (method === 'cheque') return 'Cheque Number';
+  return 'Receipt Number (optional)';
+}
+function refFieldRequired(method) {
+  return ['bank', 'mpaisa', 'cheque'].includes(method);
+}
 function isDepositEditable(dep) {
   const ts = dep.createdAt || dep.date;
   if (!ts) return false;
@@ -712,8 +723,14 @@ Kadaele Services`;
 
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) return showPayError('pay_amount', 'Enter a valid payment amount');
+    // Ref field is required for non-cash methods
+    if (['bank', 'mpaisa', 'cheque'].includes(paymentMethod) && !receiptNumber.trim()) {
+      return showPayError('pay_ref', `${refFieldLabel(paymentMethod)} is required`);
+    }
     try {
       const date = paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString();
+      const debtorName = selectedDebtor?.name || selectedDebtor?.customerName || 'Debtor';
+
       await dataService.addRepayment(selectedDebtor.id, {
         amount: parseFloat(paymentAmount),
         paymentMethod: paymentMethod || 'cash',
@@ -723,6 +740,45 @@ Kadaele Services`;
         photo: paymentPhoto || null,
         receiptNumber: receiptNumber.trim(),
       });
+
+      // Route non-cash payments to their own Firebase collections
+      if (paymentMethod === 'bank') {
+        await dataService.addBankTransfer({
+          amount: parseFloat(paymentAmount),
+          description: `${debtorName} pays debt`,
+          reference: receiptNumber.trim(),
+          date,
+          source: 'debt_repayment',
+          debtorId: selectedDebtor.id,
+          debtorName,
+        });
+      } else if (paymentMethod === 'mpaisa') {
+        await dataService.addMpaisaTransfer({
+          amount: parseFloat(paymentAmount),
+          description: `${debtorName} pays debt`,
+          transactionId: receiptNumber.trim(),
+          date,
+          source: 'debt_repayment',
+          debtorId: selectedDebtor.id,
+          debtorName,
+        });
+      }
+      // Cash is handled automatically by addRepayment (creates cash_entry)
+      // Cheque goes to cash_entry with cheque ref — already handled by addRepayment
+      // but we need to fix the description for cheque:
+      if (paymentMethod === 'cheque') {
+        // The cash entry was already created by addRepayment for 'cheque' — but
+        // addRepayment only creates cash entries for 'cash'. So we create it here.
+        await dataService.addCashEntry({
+          type: 'in',
+          amount: parseFloat(paymentAmount),
+          note: `${debtorName} pays debt - Cheque: ${receiptNumber.trim()}`,
+          date,
+          source: 'debt_repayment',
+          debtorId: selectedDebtor.id,
+        });
+      }
+
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
       await loadDebtors();
       const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
@@ -1200,12 +1256,11 @@ Kadaele Services`;
               </div>
               <div className="d-form-group">
                 <label>Payment Method</label>
-                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="d-payment-input">
+                <select value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value); setReceiptNumber(''); clearPayError('pay_ref'); }} className="d-payment-input">
                   <option value="cash">Cash</option>
                   <option value="bank">Bank Transfer</option>
-                  <option value="mobile_money">Mobile Money</option>
+                  <option value="mpaisa">MPAiSA</option>
                   <option value="cheque">Cheque</option>
-                  <option value="other">Other</option>
                 </select>
               </div>
               <div className="d-form-group">
@@ -1214,9 +1269,18 @@ Kadaele Services`;
                   onChange={e => setPaymentNote(e.target.value)} className="d-payment-input" />
               </div>
               <div className="d-form-group">
-                <label>Receipt Number (optional)</label>
-                <input type="text" value={receiptNumber} placeholder="Enter receipt number"
-                  onChange={e => setReceiptNumber(e.target.value)} className="d-payment-input" />
+                <label>{refFieldLabel(paymentMethod)}</label>
+                <input
+                  type="text"
+                  value={receiptNumber}
+                  placeholder={refFieldRequired(paymentMethod) ? 'Required' : 'Enter receipt number'}
+                  required={refFieldRequired(paymentMethod)}
+                  data-field="pay_ref"
+                  style={errorBorder('pay_ref', payErrors)}
+                  onChange={e => { setReceiptNumber(e.target.value); clearPayError('pay_ref'); }}
+                  className="d-payment-input"
+                />
+                <ValidationNote field="pay_ref" errors={payErrors} />
               </div>
               <button className="d-camera-btn" onClick={handleTakePhoto}>
                 <Camera size={18} /> {paymentPhoto ? 'Retake Photo' : 'Take Receipt Photo'}
@@ -1224,11 +1288,26 @@ Kadaele Services`;
               {paymentPhoto && <img className="d-photo-preview" src={paymentPhoto} alt="Receipt" />}
               {paymentMethod === 'cash' && (
                 <p style={{fontSize:'12px',color:'#667eea',margin:'4px 0 0',fontStyle:'italic'}}>
-                  💰 A Cash IN entry will be created automatically.
+                  💰 A Cash IN entry will be created automatically in Cash at Shop.
+                </p>
+              )}
+              {paymentMethod === 'bank' && (
+                <p style={{fontSize:'12px',color:'#3b82f6',margin:'4px 0 0',fontStyle:'italic'}}>
+                  🏦 This will be recorded in Cash at Bank (Admin).
+                </p>
+              )}
+              {paymentMethod === 'mpaisa' && (
+                <p style={{fontSize:'12px',color:'#8b5cf6',margin:'4px 0 0',fontStyle:'italic'}}>
+                  📱 This will be recorded in Cash at MPAiSA (Admin).
+                </p>
+              )}
+              {paymentMethod === 'cheque' && (
+                <p style={{fontSize:'12px',color:'#f59e0b',margin:'4px 0 0',fontStyle:'italic'}}>
+                  🧾 A Cash IN entry with cheque reference will be created in Cash at Shop.
                 </p>
               )}
               <div className="d-form-actions">
-                <button className="d-btn-cancel" onClick={() => { setShowPaymentModal(false); setReceiptNumber(''); setPaymentMethod('cash'); setPaymentDate(''); setPaymentNote(''); }}>Cancel</button>
+                <button className="d-btn-cancel" onClick={() => { setShowPaymentModal(false); setReceiptNumber(''); setPaymentMethod('cash'); setPaymentDate(''); setPaymentNote(''); clearPayError('pay_amount'); clearPayError('pay_ref'); }}>Cancel</button>
                 <button className="d-btn-save" onClick={handleRecordPayment}>Confirm</button>
               </div>
             </div>
