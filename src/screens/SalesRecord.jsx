@@ -490,7 +490,13 @@ function SalesRecord() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  useEffect(() => { loadSales(); }, []);
+  useEffect(() => {
+    loadSales();
+    // Reload whenever the screen becomes visible again (e.g. returning from Checkout)
+    const handleVisibility = () => { if (!document.hidden) loadSales(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { applyFilters(); },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
