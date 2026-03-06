@@ -6,6 +6,7 @@ import SalesRecord from './screens/SalesRecord';
 import CashRecord from './screens/CashRecord';
 import PurchaseRecord from './screens/PurchaseRecord';
 import ExpensesRecord from './screens/ExpensesRecord';
+import Withdrawals from './screens/Withdrawals';
 import Debtors from './screens/Debtors';
 import AdvanceOrders from './screens/AdvanceOrders';
 import Creditors from './screens/Creditors';
@@ -24,8 +25,9 @@ import './App.css';
 })();
 
 // Cash Reconciliation page index (used for navigation from closed modal)
-const CASH_RECON_INDEX = 10;
-const SETTINGS_INDEX   = 11;
+// NOTE: Withdrawals is inserted at index 4 (after Expenses), so indices shift by 1
+const CASH_RECON_INDEX = 11;
+const SETTINGS_INDEX   = 12;
 
 const PAGES = [
   { 
@@ -71,25 +73,21 @@ const PAGES = [
     `
   },
   { 
-    name: 'CASH RECORD',      
+    name: 'CASH AT SHOP',      
     component: CashRecord,
     helpContent: `
-      <h3>Cash Record</h3>
+      <h3>Cash at Shop</h3>
       <p>This page tracks every dollar that comes in or goes out of your business cash box.</p>
 
       <h4>How It Works</h4>
-      <p>Tap <strong>+ Add Entry</strong> and choose Cash IN or Cash OUT. Select who the money is from/to, pick the reason, enter the amount, and save.</p>
+      <p>Tap <strong>+ Add Cash In</strong> to record money coming into the cash box. Select who the money is from, pick the reason, enter the amount, and save.</p>
 
       <h4>Cash IN Examples</h4>
-      <p>&#x1f4b5; <em>Riti gives you $500 for float (change money):</em> Cash IN &rarr; select "Riti" &rarr; Being For "Float (change money)" &rarr; Amount $500 &rarr; Save. Description shows: "From Riti for float (change money)."</p>
-      <p>&#x1f4b5; <em>Kamwatie gives you $2,000 to purchase stock:</em> Cash IN &rarr; select "Kamwatie" &rarr; Being For "Purchases (money to buy stock)" &rarr; Amount $2,000 &rarr; Save.</p>
-
-      <h4>Cash OUT Examples</h4>
-      <p>&#x1f4b8; <em>You pay the Landlord $1,000 rent:</em> Cash OUT &rarr; select "Landlord" &rarr; Being For "Land Rental" &rarr; Amount $1,000 &rarr; Save. Description shows: "Paid Landlord to pay land rental."</p>
-      <p>&#x1f4b8; <em>You buy stock from a supplier (e.g. Kamwatie):</em> Cash OUT &rarr; select "Kamwatie" &rarr; Being For opens the purchase form &rarr; fill in items purchased &rarr; Save. The purchase is recorded and stock levels update automatically.</p>
+      <p>&#x1f4b5; <em>Riti gives you $500 for float (change money):</em> Add Cash In &rarr; select "Riti" &rarr; Being For "Float (change money)" &rarr; Amount $500 &rarr; Save. Description shows: "From Riti for float (change money)."</p>
+      <p>&#x1f4b5; <em>Kamwatie gives you $2,000 to purchase stock:</em> Add Cash In &rarr; select "Kamwatie" &rarr; Being For "Purchases (money to buy stock)" &rarr; Amount $2,000 &rarr; Save.</p>
 
       <h4>Automatic Entries</h4>
-      <p>You don't need to manually add these &mdash; they happen on their own: cash sales from Checkout (Cash IN), cash purchases from Purchase Record (Cash OUT), and debtor repayments (Cash IN).</p>
+      <p>You don't need to manually add these &mdash; they happen on their own: cash sales from Checkout (Cash IN), and debtor repayments (Cash IN).</p>
 
       <h4>Filtering</h4>
       <p>Use Filter to view Cash In only, Cash Out only, or by date range. The summary boxes show Total Records and Net Balance.</p>
@@ -110,6 +108,23 @@ const PAGES = [
 
       <h4>Cash vs Non-Cash</h4>
       <p>The summary cards show <strong>Cash Spent</strong> (paid from the cash drawer) and <strong>Non-Cash</strong> (bank transfer, mobile money, check) separately so you can reconcile easily.</p>
+    `
+  },
+  {
+    name: 'WITHDRAWALS',
+    component: Withdrawals,
+    helpContent: `
+      <h3>Withdrawals</h3>
+      <p>This page tracks all money taken out of the shop and held outside — with the owner, in a safe, or awaiting banking. It also records when money is returned to the shop (as float or for purchases).</p>
+
+      <h4>How It Works</h4>
+      <p>You do not add entries here manually. Records are created automatically when: the shop is <strong>closed</strong> at end of day (full counted cash taken out), the shop is <strong>opened</strong> with a float (money returned to shop), or <strong>Owner Drawings</strong> are recorded in Expenses.</p>
+
+      <h4>Reading the Balance</h4>
+      <p>The <strong>Balance Outside Shop</strong> card shows the total money currently held outside the shop. It goes <strong>up</strong> when cash is taken out and <strong>down</strong> when money is returned as float or for business use.</p>
+
+      <h4>OUT vs IN</h4>
+      <p><strong>OUT</strong> &mdash; money leaves the shop (end-of-day close, owner drawings). <strong>IN</strong> &mdash; money returns to the shop (opening float, re-open float).</p>
     `
   },
   { 
