@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, ZoomIn } from 'lucide-react';
+import { Search, X, ZoomIn, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Inventory.css';
@@ -57,6 +57,7 @@ function Inventory() {
   // Shared
   const [searchTerm, setSearchTerm] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [assetDetailItem, setAssetDetailItem] = useState(null);
 
   // ── Load goods ──────────────────────────────────────────────────────────
   useEffect(() => { loadGoods(); }, []);
@@ -293,6 +294,8 @@ function Inventory() {
                     <th>SUPPLIER</th>
                     <th>REF</th>
                     <th className="inv-col-center">PAYMENT</th>
+                    <th className="inv-col-center">DETAILS</th>
+                    <th>COMMENTS</th>
                     <th>DATE</th>
                   </tr>
                 </thead>
@@ -319,6 +322,18 @@ function Inventory() {
                           {asset.paymentType === 'cash' ? 'Cash' : 'Credit'}
                         </span>
                       </td>
+                      <td className="inv-col-center">
+                        <button
+                          className="inv-detail-btn"
+                          title="View details"
+                          onClick={() => setAssetDetailItem(asset)}
+                        >
+                          <FileText size={15} strokeWidth={1.8} />
+                        </button>
+                      </td>
+                      <td className="inv-cat-cell" style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {asset.comments || '—'}
+                      </td>
                       <td className="inv-cat-cell">{formatDate(asset.date)}</td>
                     </tr>
                   ))}
@@ -331,5 +346,43 @@ function Inventory() {
     </div>
   );
 }
+
+      {/* ── Asset Detail Modal ── */}
+      {assetDetailItem && (
+        <Portal>
+          <div
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}
+            onClick={() => setAssetDetailItem(null)}
+          >
+            <div
+              style={{ background:'var(--surface,white)', borderRadius:'16px', width:'100%', maxWidth:'380px', maxHeight:'85vh', overflowY:'auto', boxShadow:'0 12px 40px rgba(0,0,0,0.25)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 18px 12px', borderBottom:'1px solid var(--border,#e5e7eb)' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:700, color:'var(--text-primary,#111)' }}>📋 Asset Details</h3>
+                <button onClick={() => setAssetDetailItem(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary,#6b7280)', padding:'2px' }}><X size={20}/></button>
+              </div>
+              <div style={{ padding:'16px 18px', display:'flex', flexDirection:'column', gap:'10px' }}>
+                {[
+                  ['Asset Name',    assetDetailItem.name       || '—'],
+                  ['Quantity',      assetDetailItem.qty        ?? '—'],
+                  ['Unit Cost',     fmt(parseFloat(assetDetailItem.costPrice || 0))],
+                  ['Subtotal',      fmt(parseFloat(assetDetailItem.subtotal  || 0))],
+                  ['Supplier',      assetDetailItem.supplierName || '—'],
+                  ['Invoice / Ref', assetDetailItem.invoiceRef  || '—'],
+                  ['Payment',       assetDetailItem.paymentType === 'cash' ? 'Cash' : 'Credit'],
+                  ['Comments',      assetDetailItem.comments   || '—'],
+                  ['Date',          formatDate(assetDetailItem.date)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display:'flex', justifyContent:'space-between', gap:'12px', fontSize:'13px', borderBottom:'1px solid var(--border,#f3f4f6)', paddingBottom:'8px' }}>
+                    <span style={{ fontWeight:600, color:'var(--text-secondary,#6b7280)', flexShrink:0 }}>{label}</span>
+                    <span style={{ color:'var(--text-primary,#111)', textAlign:'right', wordBreak:'break-word' }}>{String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
 
 export default Inventory;
