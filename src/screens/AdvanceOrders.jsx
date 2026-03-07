@@ -285,12 +285,37 @@ function AdvanceOrders() {
     const debtor = selectedDebtor;
     const name = debtor.name || debtor.customerName || 'Valued Customer';
     const gender = debtor.gender || '';
-    const prefix = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
+    const prefix = gender === 'Male' ? 'Mr' : gender === 'Female' ? 'Ms' : '';
     const salutation = prefix ? `${prefix} ${name}` : name;
-    const balance = historyRows.length > 0 ? historyRows[0].runningBalance : (debtor.balance || debtor.totalDue || 0);
-    const balanceStr = fmt(Math.abs(balance));
-    const subject = `Advance Order Reminder — ${balanceStr} outstanding`;
-    const body = `Dear ${salutation},\n\nThis is a polite reminder from Kadaele Services regarding your advance order.\n\nYou have an outstanding balance of ${balanceStr}.\n\nPlease contact us to arrange delivery or payment.\n\nThank you.\n\nBest regards,\nKadaele Services`;
+
+    // Collect all ordered items and subtract delivered quantities
+    const orderedItems = debtor.items || [];
+    const deliveries = debtor.deliveries || [];
+
+    // Build a map of total delivered qty per item name
+    const deliveredMap = {};
+    deliveries.forEach(del => {
+      (del.items || []).forEach(di => {
+        deliveredMap[di.name] = (deliveredMap[di.name] || 0) + (parseFloat(di.deliveredQty) || 0);
+      });
+    });
+
+    // Find items not yet fully collected
+    const uncollected = orderedItems
+      .map(item => {
+        const ordered = parseFloat(item.qty || item.quantity || 0);
+        const delivered = deliveredMap[item.name] || 0;
+        const remaining = ordered - delivered;
+        return { name: item.name, remaining };
+      })
+      .filter(item => item.remaining > 0);
+
+    const itemLines = uncollected.length > 0
+      ? uncollected.map(i => `  - ${i.remaining} x ${i.name}`).join('\n')
+      : '  - (all items collected)';
+
+    const subject = `Advance Order Reminder — ${name}`;
+    const body = `Dear ${salutation},\n\nThis is a polite reminder from Kadaele Services regarding your advance order.\n\nYou still haven't collected the following items of yours that you have already paid:\n${itemLines}\n\nPlease contact us to arrange your collection.\n\nThank you.\n\nBest regards,\nKadaele Services`;
     return { subject, body };
   };
 
@@ -370,7 +395,7 @@ function AdvanceOrders() {
           tableBody.push([
             dDate.toLocaleDateString('en-GB'),
             del.ref || '—',
-            { content: `Delivery: ${(del.items||[]).map(i => `${i.deliveredQty}x ${i.name}`).join(', ')}`, colSpan: 5, styles: { fillColor: [220,252,231], fontStyle:'italic', halign:'center', textColor:[22,101,52] } },
+            { content: `Delivery: ${(del.items||[]).map(i => `${i.deliveredQty} x ${i.name}`).join(', ')}`, colSpan: 5, styles: { fillColor: [220,252,231], fontStyle:'italic', halign:'center', textColor:[22,101,52] } },
             fmt(Math.abs(row.runningBalance)),
           ]);
         } else {
@@ -694,7 +719,7 @@ function AdvanceOrders() {
                         historyRows.map((row, rowIdx) => {
                           if (row.kind === 'delivery') {
                             const del = row.delivery;
-                            const deliveredSummary = (del.items || []).map(i => `${i.deliveredQty}× ${i.name}`).join(', ');
+                            const deliveredSummary = (del.items || []).map(i => `${i.deliveredQty} x ${i.name}`).join(', ');
                             return (
                               <tr key={`del-${del.id}`} style={{ background:'#f0fdf4' }}>
                                 <td style={{ fontSize:'11px', color:'#166534', fontWeight:600 }}>{formatDate(del.date)}</td>
