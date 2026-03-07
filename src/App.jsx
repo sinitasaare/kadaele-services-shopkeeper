@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HelpCircle, Menu, X, LogOut } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import Checkout from './screens/Checkout';
@@ -16,6 +16,8 @@ import Settings from './screens/Settings';
 import CashReconciliation from './screens/CashReconciliation';
 import Login from './components/Login';
 import dataService from './services/dataService';
+import { db } from './services/firebaseConfig';
+import { doc, onSnapshot } from 'firebase/firestore';
 import './App.css';
 
 // ── Apply dark/light mode immediately on load (before React renders) ──────────
@@ -323,7 +325,63 @@ function App() {
   const [storeIsOpen, setStoreIsOpen] = useState(null); // null = loading, true/false
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [closedModalMessage, setClosedModalMessage] = useState('');
+  const storeListenerRef = useRef(null); // Firebase real-time listener for daily_cash
 
+  // ── Apply shop status from a daily_cash record (or absence of one) ────────
+  const applyShopStatus = useCallback((rec) => {
+    if (!rec) {
+      setStoreIsOpen(false);
+      setClosedModalMessage('The shop has not been opened today. Please open the day in Cash Reconciliation before using the app.');
+      setShowClosedModal(true);
+    } else if (rec.status === 'closed') {
+      setStoreIsOpen(false);
+      setClosedModalMessage('The shop is currently closed. Please re-open the day in Cash Reconciliation to continue.');
+      setShowClosedModal(true);
+    } else {
+      setStoreIsOpen(true);
+      setShowClosedModal(false);
+    }
+  }, []);
+
+  // ── Subscribe to today's daily_cash doc in Firebase for real-time sync ────
+  // This ensures that when ANY device closes/re-opens the shop, all other
+  // devices immediately reflect the correct status — no refresh needed.
+  const startStoreListener = useCallback(() => {
+    if (storeListenerRef.current) return; // already listening
+    const todayKey = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    })();
+    try {
+      storeListenerRef.current = onSnapshot(
+        doc(db, 'daily_cash', todayKey),
+        (snap) => {
+          if (snap.exists()) {
+            applyShopStatus({ id: snap.id, ...snap.data() });
+          } else {
+            applyShopStatus(null);
+          }
+        },
+        (err) => {
+          console.error('Store status listener error:', err);
+          // On listener error, fall back to a one-time local read
+          checkStoreStatus();
+        }
+      );
+    } catch (err) {
+      console.error('Could not start store listener:', err);
+      checkStoreStatus();
+    }
+  }, [applyShopStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stopStoreListener = useCallback(() => {
+    if (storeListenerRef.current) {
+      storeListenerRef.current();
+      storeListenerRef.current = null;
+    }
+  }, []);
+
+  // ── One-time async check (offline fallback / first load) ─────────────────
   const checkStoreStatus = useCallback(async () => {
     try {
       const todayStr = (() => {
@@ -332,24 +390,12 @@ function App() {
       })();
       const allRecs = await dataService.getDailyCashRecords();
       const todayRec = (allRecs || []).find(r => r.business_date === todayStr);
-
-      if (!todayRec) {
-        setStoreIsOpen(false);
-        setClosedModalMessage('The shop has not been opened today. Please open the day in Cash Reconciliation before using the app.');
-        setShowClosedModal(true);
-      } else if (todayRec.status === 'closed') {
-        setStoreIsOpen(false);
-        setClosedModalMessage('The shop is currently closed. Please re-open the day in Cash Reconciliation to continue.');
-        setShowClosedModal(true);
-      } else {
-        setStoreIsOpen(true);
-        setShowClosedModal(false);
-      }
+      applyShopStatus(todayRec || null);
     } catch (e) {
       console.error('Error checking store status:', e);
       setStoreIsOpen(true);
     }
-  }, []);
+  }, [applyShopStatus]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -364,8 +410,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser) checkStoreStatus();
-  }, [currentUser, checkStoreStatus]);
+    if (currentUser) {
+      // Immediate local check for fast feedback
+      checkStoreStatus();
+      // Real-time Firebase listener keeps status in sync across all devices
+      startStoreListener();
+    } else {
+      stopStoreListener();
+    }
+    return () => { stopStoreListener(); };
+  }, [currentUser, checkStoreStatus, startStoreListener, stopStoreListener]);
 
   useEffect(() => {
     const goOnline  = () => setIsOnline(true);
