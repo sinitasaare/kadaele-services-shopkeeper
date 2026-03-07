@@ -8,7 +8,7 @@
     }
   },
   "server": {
-    "androidScheme": "http"
+    "androidScheme": "https"
   },
   "plugins": {
     "SplashScreen": {
