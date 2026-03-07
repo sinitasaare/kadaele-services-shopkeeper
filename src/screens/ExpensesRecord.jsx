@@ -493,15 +493,15 @@ function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, 
 
   const payeeMode = CATEGORY_PAYEE_MODE[category] || 'supplier';
 
-  const owner    = users.find(u => (u.role||'').toLowerCase().includes('owner'));
-  const manager  = users.find(u => (u.role||'').toLowerCase().includes('manager'));
-  const staff    = users.filter(u => {
-    const r = (u.role||'').toLowerCase();
-    return r.includes('staff') || r.includes('cashier') || r.includes('employee');
-  });
-  const landlord = users.find(u => u.id === '__landlord__' || (u.role||'').toLowerCase().includes('landlord'));
+  // Role matching mirrors exactly what the Admin app (UserSettings.jsx) stores:
+  // 'Shop Owner'|'owner', 'Shop Manager'|'manager', 'Shopkeeper'|'staff', 'Landlord'
+  const owner    = users.find(u => ['shop owner','owner'].includes((u.role||'').toLowerCase()));
+  const manager  = users.find(u => ['shop manager','manager'].includes((u.role||'').toLowerCase()));
+  const staff    = users.filter(u => ['shopkeeper','staff'].includes((u.role||'').toLowerCase()));
+  const landlord = users.find(u => u.id === '__landlord__' || (u.role||'').toLowerCase() === 'landlord');
 
-  const displayName = u => u?.name || u?.displayName || u?.email?.split('@')[0] || '—';
+  // Firebase stores the person's name in the 'fullName' field (set by Admin → UserSettings)
+  const displayName = u => u?.fullName || u?.name || u?.displayName || u?.email?.split('@')[0] || '—';
 
   let suggestions = [];
   if (payeeMode === 'owner' && owner) {
