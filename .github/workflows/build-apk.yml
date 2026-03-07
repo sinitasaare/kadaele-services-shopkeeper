@@ -36,8 +36,8 @@ jobs:
       run: |
         sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
-    - name: Install Capacitor CLI
-      run: npm install -g @capacitor/cli
+    - name: Install Capacitor CLI (pinned to v6 to match project)
+      run: npm install -g @capacitor/cli@6
 
     - name: Add Android Platform
       run: npx cap add android
