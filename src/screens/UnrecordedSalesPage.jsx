@@ -12,7 +12,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import { Camera as CapCamera } from '@capacitor/camera';
+
 import { Capacitor } from '@capacitor/core';
 import ImageViewer from '../components/ImageViewer';
 import './UnrecordedSalesPage.css';
@@ -222,7 +222,7 @@ export default function UnrecordedSalesPage({ onClose, onSaved }) {
 
   const handleTakePhoto = async () => {
     try {
-      const { CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const { Camera: CapCamera, CameraResultType, CameraSource } = await import('@capacitor/camera');
       const image = await CapCamera.getPhoto({ quality:90, allowEditing:false, resultType:CameraResultType.DataUrl, source:CameraSource.Camera });
       setCapturedPhoto(image.dataUrl);
     } catch(e) { console.error(e); }

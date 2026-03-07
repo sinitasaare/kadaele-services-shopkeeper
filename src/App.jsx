@@ -365,13 +365,15 @@ function App() {
   const [showMenuModal, setShowMenuModal] = useState(false);
 
   // ── Store open/close state ────────────────────────────────────────────────
-  const [storeIsOpen, setStoreIsOpen] = useState(null); // null = loading, true/false
+  const [storeIsOpen, setStoreIsOpen] = useState(null);
+  const [storeStatusLoading, setStoreStatusLoading] = useState(true);
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [closedModalMessage, setClosedModalMessage] = useState('');
   const storeListenerRef = useRef(null); // Firebase real-time listener for daily_cash
 
   // ── Apply shop status from a daily_cash record (or absence of one) ────────
   const applyShopStatus = useCallback((rec) => {
+    setStoreStatusLoading(false);
     if (!rec) {
       setStoreIsOpen(false);
       setClosedModalMessage('The shop has not been opened today. Please open the day in Cash Reconciliation before using the app.');
@@ -382,6 +384,7 @@ function App() {
       setShowClosedModal(true);
     } else {
       setStoreIsOpen(true);
+      setStoreStatusLoading(false);
       setShowClosedModal(false);
     }
   }, []);
@@ -437,6 +440,7 @@ function App() {
     } catch (e) {
       console.error('Error checking store status:', e);
       setStoreIsOpen(true);
+      setStoreStatusLoading(false);
     }
   }, [applyShopStatus]);
 
@@ -630,7 +634,7 @@ function App() {
       </main>
 
       {/* ── Shop Closed Modal ── */}
-      {showClosedModal && (
+      {!storeStatusLoading && showClosedModal && (
         <div style={{
           position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999,
           display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'

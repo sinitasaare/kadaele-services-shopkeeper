@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { Camera as CapCamera } from '@capacitor/camera';
+
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
@@ -123,6 +123,7 @@ function AddPurchaseModal({ onSave, onClose }) {
       input.click();
     } else {
       try {
+        const { Camera: CapCamera } = await import('@capacitor/camera');
         const image = await CapCamera.getPhoto({ quality: 70, allowEditing: false, resultType: 'dataUrl' });
         setReceiptPhoto(image.dataUrl);
       } catch { alert('Could not capture photo.'); }

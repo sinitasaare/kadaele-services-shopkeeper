@@ -33,6 +33,7 @@ body {
 }
 
 #root {
+  background: red !important;
   min-height: 100vh;
 }
 

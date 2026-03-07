@@ -343,9 +343,6 @@ function Inventory() {
           )
         )}
       </div>
-    </div>
-  );
-}
 
       {/* ── Asset Detail Modal ── */}
       {assetDetailItem && (
@@ -384,5 +381,8 @@ function Inventory() {
           </div>
         </Portal>
       )}
+    </div>
+  );
+}
 
 export default Inventory;

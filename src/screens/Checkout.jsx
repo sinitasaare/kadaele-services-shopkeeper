@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { Calculator } from 'lucide-react';
-import { Camera as CapCamera } from '@capacitor/camera';
+
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
@@ -381,6 +381,7 @@ function Checkout() {
       input.click();
     } else {
       try {
+        const { Camera: CapCamera } = await import('@capacitor/camera');
         const image = await CapCamera.getPhoto({ quality: 70, allowEditing: false, resultType: 'dataUrl' });
         setCapturedPhoto(image.dataUrl);
       } catch { alert('Could not capture photo. Please try again.'); }
