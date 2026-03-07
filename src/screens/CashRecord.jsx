@@ -201,6 +201,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
   // Shared fields across all items in this submission
   const [paymentType, setPaymentType] = useState('cash');
   const [invoiceRef, setInvoiceRef]   = useState('');
+  const [comments, setComments]       = useState('');
   const [date, setDate]               = useState(todayStr());
   const [saving, setSaving]           = useState(false);
 
@@ -286,6 +287,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
           supplierId: resolvedSupplierId || null,
           invoiceRef: invoiceRef.trim(),
           paymentType,
+          comments: comments.trim(),
           date: dateISO,
           source: 'purchase',
         });
@@ -444,6 +446,23 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
               value={invoiceRef}
               placeholder="Receipt or invoice number…"
               onChange={e => setInvoiceRef(e.target.value)}
+            />
+          </div>
+
+          {/* Comments */}
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary, #374151)' }}>
+              Comments <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+            </label>
+            <textarea
+              style={{
+                width: '100%', padding: '10px 12px', border: '2px solid var(--border, #e5e7eb)',
+                borderRadius: '8px', fontSize: '14px', background: 'var(--surface, white)',
+                color: 'var(--text-primary, #111)', boxSizing: 'border-box', minHeight: '70px', resize: 'vertical',
+              }}
+              value={comments}
+              placeholder="Any additional notes or comments…"
+              onChange={e => setComments(e.target.value)}
             />
           </div>
 
@@ -667,6 +686,7 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
   const [saving, setSaving] = useState(false);
   const [detailsError, setDetailsError] = useState('');
   const detailsErrorRef = useRef(null);
+  const modalBodyRef = useRef(null);
   const fieldRefs = {
     fullName: useRef(null),
     gender:   useRef(null),
@@ -726,12 +746,31 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
   const scrollToField = (fieldKey) => {
     setTimeout(() => {
       const ref = fieldRefs[fieldKey];
-      if (ref?.current) {
-        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const target = ref?.current || detailsErrorRef.current;
+      if (!target) return;
+
+      // Scroll the modal body container so the field comes into view
+      const body = modalBodyRef.current;
+      if (body) {
+        const targetTop = target.getBoundingClientRect().top;
+        const bodyTop   = body.getBoundingClientRect().top;
+        body.scrollTop += (targetTop - bodyTop) - 24; // 24px breathing room above
       } else {
-        detailsErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    }, 50);
+
+      // Highlight the first focusable input/select inside the target element
+      const focusable = target.querySelector('input, select, textarea');
+      if (focusable) {
+        focusable.focus();
+        focusable.style.outline = '2.5px solid #ef4444';
+        focusable.style.outlineOffset = '1px';
+        setTimeout(() => {
+          focusable.style.outline = '';
+          focusable.style.outlineOffset = '';
+        }, 2000);
+      }
+    }, 60);
   };
 
   const handleNextToOrder = () => {
@@ -855,7 +894,7 @@ function CreateNewCustomerAdvanceOrderModal({ onSave, onClose, advanceOrdersList
         </div>
 
         {/* Body */}
-        <div style={{ overflowY: 'auto', padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div ref={modalBodyRef} style={{ overflowY: 'auto', padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
           {/* ── Customer Details Tab ── */}
           {activeTab === 'details' && (
