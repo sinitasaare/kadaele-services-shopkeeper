@@ -40,7 +40,6 @@ const PAYMENT_METHODS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'mpaisa',        label: 'MPAiSA' },
   { value: 'check',         label: 'Cheque' },
-  { value: 'other',         label: 'Other' },
 ];
 
 function methodBadgeClass(m) {
