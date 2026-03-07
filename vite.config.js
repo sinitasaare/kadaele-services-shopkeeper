@@ -9,9 +9,6 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     rollupOptions: {
-      // Capacitor plugins that are only available at runtime on native builds
-      // must be externalised so Vite doesn't try to bundle them for the web.
-      external: ['@capacitor/local-notifications'],
       output: {
         manualChunks: undefined,
       },
@@ -25,4 +22,3 @@ export default defineConfig({
     host: true,
   },
 });
-// cache bust
