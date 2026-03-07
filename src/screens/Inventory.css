@@ -943,3 +943,20 @@
   border-color: #d97706;
   color: white;
 }
+
+/* ── Asset detail button ─────────────────────────────────────────── */
+.inv-detail-btn {
+  background: none;
+  border: 1.5px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: #667eea;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.inv-detail-btn:hover {
+  background: #eef2ff;
+  border-color: #667eea;
+}
