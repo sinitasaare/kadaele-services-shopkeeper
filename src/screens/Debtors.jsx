@@ -5,6 +5,8 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import kadaeleLogo from '../assets/kadaeleLogo.js';
 import './Debtors.css';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // ── Shared 30-minute edit window helper ──────────────────────────────────
 function isWithin30Mins(entry) {
@@ -400,13 +402,10 @@ Kadaele Services`;
   };
 
   // ── Generate A4 PDF of the debt statement ────────────────────────────────
-  // Uses jsPDF + jspdf-autotable (both loaded via CDN in index.html).
   // Draws: Kadaele logo, debtor info, full Debt History table, outstanding total.
   const generateA4PDF = async () => {
     try {
-      const { jsPDF } = window.jspdf;
-      if (!jsPDF) throw new Error('jsPDF not loaded');
-
+            
       const pageW  = 210;
       const pageH  = 297;
       const margin = 12;
