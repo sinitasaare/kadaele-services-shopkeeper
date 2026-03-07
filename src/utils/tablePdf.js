@@ -1,7 +1,6 @@
 /**
  * tablePdf.js
  * Shared utility: export any HTML table to a branded A4 PDF.
- * Requires jsPDF + jspdf-autotable loaded globally (via index.html CDN).
  *
  * Usage:
  *   import { exportTableToPDF } from '../utils/tablePdf';
@@ -11,14 +10,11 @@
  * rows:    array of objects keyed by column.key
  * summary: [{ label: 'Total', value: '1,234.00' }, ...]  (optional)
  */
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export async function exportTableToPDF({ title, columns, rows, summary = [] }) {
-  const { jsPDF } = window.jspdf;
-  if (!jsPDF) { alert('PDF library not loaded. Please check your internet connection.'); return; }
-  if (!window.jspdf?.jsPDF?.prototype?.autoTable && !document.querySelector('script[src*="autotable"]')) {
-    console.warn('jspdf-autotable may not be loaded');
-  }
-
+      
   const pageW  = 210;
   const pageH  = 297;
   const margin = 12;
