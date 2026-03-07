@@ -5,6 +5,8 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import './Creditors.css';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // ── Shared 30-minute edit window helper ──────────────────────────────────
 function isWithin30Mins(entry) {
@@ -360,7 +362,6 @@ Kadaele Services`;
   };
 
   // ── Generate A4 PDF of the debt statement ────────────────────────────────
-  // Uses jsPDF (loaded from CDN via index.html) + html2canvas.
   // The PDF is A4 portrait, with the business logo at the top, creditor info,
   // then the full debt history table rendered at full width.
   const generateA4PDF = async () => {
@@ -379,9 +380,7 @@ Kadaele Services`;
         width: el.scrollWidth,
       });
 
-      const { jsPDF } = window.jspdf;
-      if (!jsPDF) throw new Error('jsPDF not loaded');
-
+            
       // A4 dimensions in mm
       const pageW = 210;
       const pageH = 297;
