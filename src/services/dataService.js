@@ -71,6 +71,9 @@ class DataService {
     this._cashEntriesFetched = false;
     this._dailyCashFetched = false;
     this._advanceOrdersFetched = false;
+    this._expensesFetched = false;
+    this._withdrawalsFetched = false;
+    this._operationalAssetsFetched = false;
     this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     this._goodsUnsubscribe = null;   // Firebase real-time listener handle for goods
     
@@ -253,6 +256,9 @@ class DataService {
       this._creditorsFetchedFromFirebase = false;
       this._suppliersFetchedFromFirebase = false;
       this._dailyCashFetched = false;
+      this._expensesFetched = false;
+      this._withdrawalsFetched = false;
+      this._operationalAssetsFetched = false;
       
       // Start real-time listeners for debtors and goods (handles remote changes)
       this.startDebtorsListener();
@@ -993,6 +999,9 @@ class DataService {
     this._salesFetchedFromFirebase = false;
     this._purchasesFetchedFromFirebase = false;
     this._dailyCashFetched = false;
+    this._expensesFetched = false;
+    this._withdrawalsFetched = false;
+    this._operationalAssetsFetched = false;
   }
 
   async setDebtors(debtors) {
@@ -1742,6 +1751,22 @@ class DataService {
           await setDoc(doc(db, 'goods', item.data.id.toString()), {
             ...item.data,
             updatedAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by addWithdrawal have { type: 'withdrawal', data: entry }
+        if (item.type === 'withdrawal' && item.data) {
+          await setDoc(doc(db, 'withdrawals', item.data.id), {
+            ...item.data,
+            createdAt: serverTimestamp(),
+          }, { merge: true });
+          synced++;
+        }
+        // Queue items added by addExpense have { type: 'expense', data: expense }
+        if (item.type === 'expense' && item.data) {
+          await setDoc(doc(db, 'expenses', item.data.id), {
+            ...item.data,
+            createdAt: serverTimestamp(),
           }, { merge: true });
           synced++;
         }
@@ -3038,6 +3063,28 @@ class DataService {
 
   async getExpenses() {
     try {
+      // On first call of the session, pull from Firebase to sync across devices
+      if (this.isOnline && auth.currentUser && !this._expensesFetched) {
+        this._expensesFetched = true;
+        try {
+          const snap = await getDocs(collection(db, 'expenses'));
+          const fbExpenses = snap.docs.map(d => ({
+            id: d.id, ...d.data(),
+            date: typeof d.data().date === 'string' ? d.data().date : (d.data().date?.toDate?.()?.toISOString?.() || null),
+            createdAt: d.data().createdAt?.toDate?.()?.toISOString?.() || d.data().createdAt,
+          }));
+          const local = await localforage.getItem(DATA_KEYS.EXPENSES) || [];
+          const fbIds = new Set(fbExpenses.map(e => e.id));
+          const localOnly = local.filter(e => !fbIds.has(e.id));
+          // Prefer Firebase version for shared entries, keep local-only for offline entries
+          const merged = [...fbExpenses, ...localOnly]
+            .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+          await localforage.setItem(DATA_KEYS.EXPENSES, merged);
+          return merged;
+        } catch (err) {
+          console.error('Error fetching expenses from Firebase:', err);
+        }
+      }
       const data = await localforage.getItem(DATA_KEYS.EXPENSES);
       return data || [];
     } catch (err) {
@@ -3065,7 +3112,10 @@ class DataService {
           await setDoc(doc(db, 'expenses', expense.id), { ...expense, createdAt: serverTimestamp() }, { merge: true });
         } catch (err) {
           console.error('Firebase addExpense error:', err);
+          await this.addToSyncQueue({ type: 'expense', data: expense });
         }
+      } else {
+        await this.addToSyncQueue({ type: 'expense', data: expense });
       }
 
       // If cash payment, auto-create a cash_entries OUT record
@@ -3261,7 +3311,12 @@ class DataService {
       if (this.isOnline && auth.currentUser) {
         try {
           await setDoc(doc(db, 'withdrawals', entry.id), { ...entry, createdAt: serverTimestamp() }, { merge: true });
-        } catch (err) { console.error('addWithdrawal Firebase error:', err); }
+        } catch (err) {
+          console.error('addWithdrawal Firebase error:', err);
+          await this.addToSyncQueue({ type: 'withdrawal', data: entry });
+        }
+      } else {
+        await this.addToSyncQueue({ type: 'withdrawal', data: entry });
       }
       return entry;
     } catch (err) { console.error('addWithdrawal error:', err); throw err; }
