@@ -3,7 +3,6 @@ import { useValidation, ValidationNote, errorBorder } from '../utils/validation.
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import PdfTableButton from '../components/PdfTableButton';
 import './Suppliers.css';
 
 // ── Shared 2-hour edit window helper ──────────────────────────────────────
@@ -153,8 +152,6 @@ function Suppliers() {
   const [sortOrder, setSortOrder]       = useState(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef                     = useRef(null);
-  const historyRef                      = useRef(null);  // ref for debt history section → PDF
-  const [pdfGenerating, setPdfGenerating] = useState(false);
 
   useEffect(() => { loadSuppliers(); }, []);
 
@@ -376,212 +373,17 @@ Kadaele Services`;
     return { subject, body };
   };
 
-  // ── Generate A4 PDF of the debt statement ────────────────────────────────
-  // Uses jsPDF (loaded from CDN via index.html) + html2canvas.
-  // The PDF is A4 portrait, with the business logo at the top, supplier info,
-  // then the full debt history table rendered at full width.
-  const generateA4PDF = async () => {
-    const el = historyRef.current;
-    if (!el) return null;
 
-    try {
-      // 1. Capture the history section as a high-res canvas
-      const canvas = await html2canvas(el, {
-        backgroundColor: 'var(--surface)',
-        scale: 3,          // high DPI so text is sharp in the PDF
-        useCORS: true,
-        logging: false,
-        // Expand to full scrollWidth so the wide table is not clipped
-        windowWidth: el.scrollWidth,
-        width: el.scrollWidth,
-      });
-
-      const { jsPDF } = window.jspdf;
-      if (!jsPDF) throw new Error('jsPDF not loaded');
-
-      // A4 dimensions in mm
-      const pageW = 210;
-      const pageH = 297;
-      const margin = 12;
-      const contentW = pageW - margin * 2;
-
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-      // ── Header: purple bar with business name ──────────────────────────
-      pdf.setFillColor(102, 126, 234);          // brand purple
-      pdf.rect(0, 0, pageW, 22, 'F');
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Kadaele Services', margin, 10);
-      pdf.setFontSize(8);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Debt Statement', margin, 16);
-
-      // Date generated (right side of header)
-      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-      pdf.setFontSize(8);
-      pdf.text(`Generated: ${today}`, pageW - margin, 14, { align: 'right' });
-
-      // ── Supplier info block ──────────────────────────────────────────────
-      let y = 30;
-      const supplier = selectedSupplier;
-      const supplierName = supplier.name || supplier.customerName || 'N/A';
-      const gender  = supplier.gender || '';
-      const prefix  = gender === 'Male' ? 'Mr.' : gender === 'Female' ? 'Ms.' : '';
-      const balance = historyRows.length > 0
-        ? historyRows[0].runningBalance
-        : (supplier.balance || supplier.totalDue || 0);
-
-      pdf.setTextColor(30, 30, 30);
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`${prefix ? prefix + ' ' : ''}${supplierName}`, margin, y);
-
-      y += 6;
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(80, 80, 80);
-      if (supplier.phone || supplier.customerPhone) pdf.text(`Phone: ${supplier.phone || supplier.customerPhone}`, margin, y); y += 5;
-      if (supplier.whatsapp) { pdf.text(`WhatsApp: ${supplier.whatsapp}`, margin, y); y += 5; }
-      if (supplier.email)    { pdf.text(`Email: ${supplier.email}`, margin, y); y += 5; }
-      if (supplier.repaymentDate) { pdf.text(`Due Date: ${supplier.repaymentDate}`, margin, y); y += 5; }
-
-      // Outstanding balance box
-      pdf.setFillColor(balance > 0 ? 255 : 220, balance > 0 ? 235 : 252, balance > 0 ? 220 : 231);
-      pdf.roundedRect(pageW - margin - 55, 28, 55, 18, 2, 2, 'F');
-      pdf.setTextColor(balance > 0 ? 22 : 3, balance > 0 ? 101 : 105, balance > 0 ? 52 : 81);
-      pdf.setFontSize(7);
-      pdf.text('OUTSTANDING BALANCE', pageW - margin - 27.5, 34, { align: 'center' });
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`${fmt(Math.abs(balance))}`, pageW - margin - 27.5, 42, { align: 'center' });
-
-      // Divider
-      y = Math.max(y, 50) + 4;
-      pdf.setDrawColor(200, 200, 200);
-      pdf.line(margin, y, pageW - margin, y);
-      y += 5;
-
-      // ── Debt History table (rendered via html2canvas → image) ─────────
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(50, 50, 50);
-      pdf.text('Debt History', margin, y);
-      y += 4;
-
-      // Convert canvas to PNG data URL and embed as image
-      const imgData  = canvas.toDataURL('image/png');
-      const imgW     = contentW;
-      const imgH     = (canvas.height / canvas.width) * imgW;
-
-      // If the table is taller than what fits on one page, scale it
-      const maxH = pageH - y - margin;
-      const finalH = imgH > maxH ? maxH : imgH;
-
-      pdf.addImage(imgData, 'PNG', margin, y, imgW, finalH);
-
-      // ── Footer ────────────────────────────────────────────────────────
-      const footerY = pageH - 8;
-      pdf.setFontSize(7);
-      pdf.setTextColor(150, 150, 150);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, footerY, { align: 'center' });
-
-      return pdf;
-    } catch (err) {
-      console.error('PDF generation error:', err);
-      return null;
-    }
-  };
-
-  // ── Save PDF and return a Blob URL or Capacitor URI ───────────────────────
-  const savePDFAndGetURI = async (pdf, supplierName) => {
-    const fileName = `statement_${supplierName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-    const pdfBlob  = pdf.output('blob');
-
-    // On native Android, write to cache directory via Capacitor Filesystem
-    const isNative = window.Capacitor?.isNativePlatform?.();
-    if (isNative) {
-      try {
-        const { Filesystem, Directory } = await import('@capacitor/filesystem');
-        const reader = new FileReader();
-        const base64 = await new Promise((res, rej) => {
-          reader.onload  = () => res(reader.result.split(',')[1]);
-          reader.onerror = rej;
-          reader.readAsDataURL(pdfBlob);
-        });
-        await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
-        const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
-        return { uri, fileName, blob: pdfBlob };
-      } catch (err) {
-        console.error('Capacitor Filesystem error:', err);
-      }
-    }
-
-    // On web: create an object URL so we can trigger a download
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    return { uri: blobUrl, fileName, blob: pdfBlob, isWeb: true };
-  };
-
-  const handleNotify = async (method) => {
+  const handleNotify = (method) => {
     const supplier = selectedSupplier;
     const { subject, body } = buildNotifyMessage();
-    const supplierName = supplier.name || supplier.customerName || 'supplier';
-
-    // ── Step 1: Generate A4 PDF ───────────────────────────────────────────
-    setPdfGenerating(true);
-    let pdfInfo = null;
-    try {
-      const pdf = await generateA4PDF();
-      if (pdf) {
-        pdfInfo = await savePDFAndGetURI(pdf, supplierName);
-        // On web, also trigger a download so the user has the PDF to attach manually
-        if (pdfInfo?.isWeb) {
-          const link = document.createElement('a');
-          link.href = pdfInfo.uri;
-          link.download = pdfInfo.fileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          // Don't revoke immediately — let the download complete
-          setTimeout(() => URL.revokeObjectURL(pdfInfo.uri), 10000);
-        }
-      }
-    } catch (err) {
-      console.error('PDF error:', err);
-    } finally {
-      setPdfGenerating(false);
-    }
-
-    // ── Step 2: Open messaging app (with PDF attached if native) ──────────
-    const isNative = window.Capacitor?.isNativePlatform?.();
-
     if (method === 'whatsapp') {
       const phone = supplier.whatsapp || supplier.phone || supplier.customerPhone;
       if (!phone) { alert('No WhatsApp number available'); return; }
-      if (isNative && pdfInfo?.uri) {
-        try {
-          const { Share } = await import('@capacitor/share');
-          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Send to ${supplierName}` });
-          setShowNotifyModal(false);
-          return;
-        } catch (err) { console.error('Share error:', err); }
-      }
       window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(body)}`, '_blank');
-
     } else if (method === 'email') {
       if (!supplier.email) { alert('No email available'); return; }
-      if (isNative && pdfInfo?.uri) {
-        try {
-          const { Share } = await import('@capacitor/share');
-          await Share.share({ title: subject, text: body, url: pdfInfo.uri, dialogTitle: `Email to ${supplierName}` });
-          setShowNotifyModal(false);
-          return;
-        } catch (err) { console.error('Share error:', err); }
-      }
       window.location.href = `mailto:${supplier.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
     } else if (method === 'sms') {
       const phone = supplier.phone || supplier.customerPhone;
       if (!phone) { alert('No phone number available'); return; }
@@ -797,45 +599,7 @@ Kadaele Services`;
 
             {/* ── Purchase History tab ── */}
             {activeTab === 'history' && (
-              <div className="d-history-wrapper" ref={historyRef} style={{position:'relative'}}>
-                <PdfTableButton
-                  title={`Purchase History — ${selectedSupplier?.name||selectedSupplier?.customerName||''}`}
-                  columns={[
-                    {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Supplier',key:'supplier'},
-                    {header:'QTY',key:'qty'},{header:'PACKSIZE',key:'packSize'},
-                    {header:'Items',key:'items'},{header:'Pay',key:'pay'},
-                    {header:'Total',key:'total'},{header:'Ref',key:'ref'}
-                  ]}
-                  rows={historyRows.flatMap(row => {
-                    if (row.kind === 'deposit') {
-                      const dep = row.deposit;
-                      const d = dep.date ? (dep.date.seconds ? new Date(dep.date.seconds*1000) : new Date(dep.date)) : null;
-                      return [{
-                        date: d ? d.toLocaleDateString('en-GB') : 'N/A',
-                        time: dep.isUnrecorded ? 'UNRECORDED' : (d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A'),
-                        supplier:'—', qty:'—', packSize:'—', items:'Deposited Cash to repay Debt',
-                        pay:'—', total: fmt(parseFloat(dep.amount)), ref:'—',
-                      }];
-                    }
-                    const sale = row.sale; const items = sale.items&&sale.items.length>0 ? sale.items : [null];
-                    const rawTs = sale.date||sale.timestamp||sale.createdAt;
-                    const d = rawTs ? (rawTs.seconds ? new Date(rawTs.seconds*1000) : new Date(rawTs)) : null;
-                    const supName = selectedSupplier?.name||selectedSupplier?.customerName||'—';
-                    const payLabel = sale.paymentType==='credit' ? 'Credit' : sale.paymentType==='cash' ? 'Cash' : (sale.paymentType||'—');
-                    return items.map((item,idx) => ({
-                      date: idx===0 ? (d ? d.toLocaleDateString('en-GB') : 'N/A') : '',
-                      time: idx===0 ? (sale.isUnrecorded?'UNRECORDED':(d ? d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}) : 'N/A')) : '',
-                      supplier: idx===0 ? supName : '',
-                      qty: String(item?.qty||item?.quantity||'—'),
-                      packSize: item?.packSize||'—',
-                      items: item ? (item.description||item.name||'N/A') : 'N/A',
-                      pay: idx===0 ? payLabel : '',
-                      total: idx===0 ? fmt(sale.total||0) : '',
-                      ref: idx===0 ? (sale.invoiceRef||sale.notes||'—') : '',
-                    }));
-                  })}
-                  summary={[{label:'Total Purchases', value: fmt(historyRows.filter(r=>r.kind==='sale').reduce((s,r)=>s+(r.sale?.total||0),0))}]}
-                />
+              <div className="d-history-wrapper">
                 <div className="d-history-scroll">
                   <table className="d-history-table">
                     <thead>
@@ -987,28 +751,21 @@ Kadaele Services`;
 
       {/* ── Notify Modal ── */}
       {showNotifyModal && (
-        <div className="d-overlay" onClick={() => !pdfGenerating && setShowNotifyModal(false)}>
+        <div className="d-overlay" onClick={() => setShowNotifyModal(false)}>
           <div className="d-modal d-modal-sm d-notify-modal" onClick={e => e.stopPropagation()}>
             <div className="d-modal-header" style={{ flexShrink: 0 }}>
               <h2 className="d-modal-title">Notify via</h2>
-              <button className="d-close-btn" onClick={() => !pdfGenerating && setShowNotifyModal(false)}><X size={22} /></button>
+              <button className="d-close-btn" onClick={() => setShowNotifyModal(false)}><X size={22} /></button>
             </div>
-            {pdfGenerating && (
-              <div style={{ padding: '10px 16px', background: '#fef3c7', borderRadius: '8px', margin: '0 16px 8px',
-                fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '16px' }}>⏳</span>
-                Generating statement image, please wait…
-              </div>
-            )}
             <div className="d-notify-options" style={{ flexShrink: 0 }}>
-              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')} disabled={pdfGenerating}>
-                <MessageSquare size={20}/> {pdfGenerating ? '…' : 'WhatsApp'}
+              <button className="d-notify-opt d-notify-wa"  onClick={() => handleNotify('whatsapp')}>
+                <MessageSquare size={20}/> WhatsApp
               </button>
-              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')} disabled={pdfGenerating}>
-                <Mail size={20}/> {pdfGenerating ? '…' : 'Email'}
+              <button className="d-notify-opt d-notify-em"  onClick={() => handleNotify('email')}>
+                <Mail size={20}/> Email
               </button>
-              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')} disabled={pdfGenerating}>
-                <Phone size={20}/> {pdfGenerating ? '…' : 'SMS'}
+              <button className="d-notify-opt d-notify-sms" onClick={() => handleNotify('sms')}>
+                <Phone size={20}/> SMS
               </button>
             </div>
             <div className="d-notify-preview d-notify-preview-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
