@@ -107,6 +107,7 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   const nsFieldRefs = { fullName: useRef(null), phone: useRef(null), whatsapp: useRef(null), address: useRef(null) };
   const [paymentType, setPaymentType] = useState('cash');
   const [invoiceRef, setInvoiceRef] = useState('');
+  const [comments, setComments]     = useState('');
   const [date, setDate] = useState(todayStr);
   const nextId = useRef(2);
   const [items, setItems] = useState([{ id: 1, name: '', qty: '', costPrice: '' }]);
@@ -303,6 +304,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
   const [resolvedSupplierId, setResolvedSupplierId] = useState(initialSupplierId || null);
   const [paymentType, setPaymentType] = useState('cash');
   const [invoiceRef, setInvoiceRef] = useState('');
+  const [comments, setComments]     = useState('');
   const [date, setDate] = useState(todayStr);
   const [saving, setSaving] = useState(false);
   const nextId = useRef(2);
@@ -343,7 +345,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
       const savedItems = [];
       for (const it of validItems) {
         const qty=parseFloat(it.qty)||0, costPrice=parseFloat(it.costPrice)||0, subtotal=qty*costPrice;
-        await dataService.addOperationalAsset({ name:it.name.trim(), qty, costPrice, subtotal, supplierName, supplierId:resolvedSupplierId||null, invoiceRef:invoiceRef.trim(), paymentType, date:dateISO, source:'purchase' });
+        await dataService.addOperationalAsset({ name:it.name.trim(), qty, costPrice, subtotal, supplierName, supplierId:resolvedSupplierId||null, invoiceRef:invoiceRef.trim(), paymentType, comments:comments.trim(), date:dateISO, source:'purchase' });
         savedItems.push({ name:it.name.trim(), qty, costPrice, subtotal });
       }
       if (paymentType==='cash' && grandTotal>0) {
@@ -399,6 +401,10 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
           <div>
             <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Invoice / Ref *</label>
             <input style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={invoiceRef} placeholder="Receipt or invoice number…" onChange={e => setInvoiceRef(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Comments <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <textarea style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box', minHeight:'70px', resize:'vertical' }} value={comments} placeholder="Any additional notes or comments…" onChange={e => setComments(e.target.value)} />
           </div>
           <div>
             <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Date *</label>
