@@ -1,5 +1,5 @@
 /* ============================================================
-   ExpensesRecord.css  — mirrors PurchaseRecord layout
+   ExpensesRecord.css
    ============================================================ */
 
 .er-record {
@@ -300,3 +300,50 @@
 .er-detail-row span:first-child { color: #6b7280; font-weight: 500; flex-shrink: 0; margin-right: 8px; }
 .er-detail-row span:last-child { color: var(--text-primary, #111); font-weight: 600; text-align: right; }
 .er-detail-amount { font-size: 18px; font-weight: 800; color: #dc2626; }
+
+/* ── Paid To smart dropdown ──────────────────────────────────────────────────── */
+.er-payee-dropdown {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface, #ffffff);
+  border: 1.5px solid #667eea;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 6px 18px rgba(102,126,234,0.15);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.er-payee-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border, #f0f0f0);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary, #111);
+  text-align: left;
+  transition: background 0.15s;
+}
+.er-payee-option:last-child { border-bottom: none; }
+.er-payee-option:hover { background: var(--background, #f5f7ff); }
+
+.er-payee-action {
+  font-weight: 700;
+  color: #667eea;
+  background: #eef2ff;
+}
+.er-payee-action:hover { background: #e0e7ff; }
+
+.er-payee-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+}
