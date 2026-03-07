@@ -16,22 +16,20 @@ const CATEGORY_GROUPS = [
     items: ['Owner Drawings'],
   },
   {
-    group: 'Owner & Community',
+    group: 'Community',
     items: ['Donations', 'Community Support'],
   },
-  {
-    group: 'Bank & Loan',
-    items: ['Loan Repayment', 'Bank Charges'],
-  },
-  {
-    group: 'Adjustments',
-    items: ['Cash Short', 'Cash Over'],
-  },
-  {
-    group: 'Other',
-    items: ['Other'],
-  },
 ];
+
+// Categories where the Paid To field shows specific pre-filled suggestions
+// (all other categories show the Supplier button)
+const CATEGORY_PAYEE_MODE = {
+  'Owner Drawings':     'owner',
+  'Wages':              'wages',
+  'Rent':               'landlord',
+  'Donations':          'donation',
+  'Community Support':  'community',
+};
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.items); // eslint-disable-line no-unused-vars
 const QUICK_CATS = ['Utilities', 'Wages', 'Owner Drawings'];
 
@@ -452,6 +450,138 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
   );
 }
 
+// ── Group / Organisation child modal ─────────────────────────────────────────
+function GroupOrgModal({ mode, onConfirm, onClose }) {
+  const label = mode === 'community' ? 'Community Name' : 'Church, Group, NGO or Cause';
+  const placeholder = mode === 'community' ? 'e.g. Honiara Village' : 'e.g. Red Cross, Church of Melanesia…';
+  const [name, setName] = useState('');
+  return (
+    <div className="er-cat-modal-overlay" onClick={onClose} style={{ zIndex: 2100 }}>
+      <div className="er-cat-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 340 }}>
+        <div className="er-modal-header" style={{ borderRadius: '20px 20px 0 0' }}>
+          <h2>{mode === 'community' ? '🏘️ Community' : '🤝 Group / Organisation'}</h2>
+          <button className="er-modal-close" onClick={onClose}><X size={20} /></button>
+        </div>
+        <div style={{ padding: '20px 20px 10px' }}>
+          <label className="er-label">{label} *</label>
+          <input
+            className="er-input"
+            style={{ marginTop: 6 }}
+            placeholder={placeholder}
+            value={name}
+            autoFocus
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onConfirm(name.trim()); }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 10, padding: '10px 20px 20px' }}>
+          <button className="er-btn-cancel" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
+          <button className="er-btn-save" onClick={() => { if (name.trim()) onConfirm(name.trim()); }}
+            style={{ flex: 1 }} disabled={!name.trim()}>Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Paid To smart dropdown ────────────────────────────────────────────────────
+function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, clearFieldError, users }) {
+  const [open, setOpen] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupModalMode, setGroupModalMode] = useState('donation');
+  const wrapRef = useRef(null);
+
+  const payeeMode = CATEGORY_PAYEE_MODE[category] || 'supplier';
+
+  const owner    = users.find(u => (u.role||'').toLowerCase().includes('owner'));
+  const manager  = users.find(u => (u.role||'').toLowerCase().includes('manager'));
+  const staff    = users.filter(u => {
+    const r = (u.role||'').toLowerCase();
+    return r.includes('staff') || r.includes('cashier') || r.includes('employee');
+  });
+  const landlord = users.find(u => u.id === '__landlord__' || (u.role||'').toLowerCase().includes('landlord'));
+
+  const displayName = u => u?.name || u?.displayName || u?.email?.split('@')[0] || '—';
+
+  let suggestions = [];
+  if (payeeMode === 'owner' && owner) {
+    suggestions = [{ label: displayName(owner), value: displayName(owner), icon: '👤' }];
+  } else if (payeeMode === 'wages') {
+    if (manager) suggestions.push({ label: displayName(manager), value: displayName(manager), icon: '🧑‍💼' });
+    staff.forEach(s => suggestions.push({ label: displayName(s), value: displayName(s), icon: '👷' }));
+  } else if (payeeMode === 'landlord' && landlord) {
+    suggestions = [{ label: displayName(landlord), value: displayName(landlord), icon: '🏠' }];
+  } else if (payeeMode === 'donation') {
+    suggestions = [{ label: 'Group or Organisation', value: '__group__', icon: '🤝', isAction: true }];
+  } else if (payeeMode === 'community') {
+    suggestions = [{ label: 'Community', value: '__community__', icon: '🏘️', isAction: true }];
+  } else {
+    suggestions = [{ label: 'Supplier', value: '__supplier__', icon: '🛒', isAction: true }];
+  }
+
+  useEffect(() => {
+    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelect = (item) => {
+    setOpen(false);
+    if (item.value === '__supplier__')  { onSupplierClick(); return; }
+    if (item.value === '__group__')     { setGroupModalMode('donation');  setShowGroupModal(true); return; }
+    if (item.value === '__community__') { setGroupModalMode('community'); setShowGroupModal(true); return; }
+    onChange(item.value);
+    clearFieldError('ex_payee');
+  };
+
+  const handleGroupConfirm = (name) => {
+    setShowGroupModal(false);
+    onChange(name);
+    clearFieldError('ex_payee');
+  };
+
+  return (
+    <div className="er-field" ref={wrapRef} style={{ position: 'relative' }}>
+      <label className="er-label">Paid To *</label>
+      <input
+        type="text"
+        className="er-input"
+        data-field="ex_payee"
+        style={errorBorder('ex_payee', fieldErrors)}
+        placeholder="Who was paid?"
+        value={value}
+        onChange={e => { onChange(e.target.value); clearFieldError('ex_payee'); }}
+        onFocus={() => setOpen(true)}
+        autoComplete="off"
+      />
+      <ValidationNote field="ex_payee" errors={fieldErrors} />
+
+      {open && suggestions.length > 0 && (
+        <div className="er-payee-dropdown">
+          {suggestions.map((item, i) => (
+            <button
+              key={i}
+              className={`er-payee-option${item.isAction ? ' er-payee-action' : ''}`}
+              onMouseDown={e => { e.preventDefault(); handleSelect(item); }}
+            >
+              <span className="er-payee-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showGroupModal && (
+        <GroupOrgModal
+          mode={groupModalMode}
+          onConfirm={handleGroupConfirm}
+          onClose={() => setShowGroupModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Add Expense Modal ──────────────────────────────────────────────────────────
 function AddExpenseModal({ onSave, onClose }) {
   const { fmt } = useCurrency();
@@ -469,10 +599,17 @@ function AddExpenseModal({ onSave, onClose }) {
   const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
   const [suppliersList, setSuppliersList]     = useState([]);
   const [assetsResult, setAssetsResult]       = useState(null);
+  const [users, setUsers]                     = useState([]);
 
   useEffect(() => {
     dataService.getSuppliers().then(s => setSuppliersList(s || []));
+    dataService.getUsers().then(async (us) => {
+      const landlord = await dataService.getLandlord();
+      setUsers(landlord ? [...us, landlord] : us);
+    });
   }, []);
+
+  useEffect(() => { setPayee(''); }, [category]);
 
   const isSupplierPurchase = category === 'Supplier Purchase';
 
@@ -481,7 +618,7 @@ function AddExpenseModal({ onSave, onClose }) {
     if (!category) return showError('ex_cat',    'Category is required');
 
     if (isSupplierPurchase) {
-      if (!assetsResult) return showError('ex_cat','Please complete the supplier purchase form');
+      if (!assetsResult) return showError('ex_cat', 'Please complete the supplier purchase form');
       try {
         const now = new Date().toISOString();
         await dataService.addExpense({
@@ -494,19 +631,19 @@ function AddExpenseModal({ onSave, onClose }) {
           _skipCashEntry: true,
         });
         onSave();
-      } catch (e) { console.error(e); showError('ex_cat','Failed to save. Please try again.'); }
+      } catch (e) { console.error(e); showError('ex_cat', 'Failed to save. Please try again.'); }
       return;
     }
 
-    if (!amount || parseFloat(amount)<=0) return showError('ex_amount','Enter a valid amount');
-    if (category==='Other' && !note.trim()) return showError('ex_note','Note is required when category is "Other"');
+    if (!amount || parseFloat(amount) <= 0) return showError('ex_amount', 'Enter a valid amount');
+    if (!payee.trim()) return showError('ex_payee', 'Paid To is required');
 
     setSaving(true);
     try {
       const now = new Date().toISOString();
-      await dataService.addExpense({ date, amount:parseFloat(amount), category, paymentMethod, payee:payee.trim(), note:note.trim(), createdAt:now, updatedAt:now });
+      await dataService.addExpense({ date, amount: parseFloat(amount), category, paymentMethod, payee: payee.trim(), note: note.trim(), createdAt: now, updatedAt: now });
       onSave();
-    } catch (e) { console.error(e); showError('ex_date','Failed to save. Please try again.'); }
+    } catch (e) { console.error(e); showError('ex_date', 'Failed to save. Please try again.'); }
     finally { setSaving(false); }
   };
 
@@ -516,7 +653,7 @@ function AddExpenseModal({ onSave, onClose }) {
     setPayee(result.supplierName);
     setAmount(String(result.total));
     setNote(`Ref: ${result.invoiceRef}`);
-    setPaymentMethod(result.paymentType==='cash'?'cash':'other');
+    setPaymentMethod(result.paymentType === 'cash' ? 'cash' : 'other');
   };
 
   return (
@@ -538,31 +675,24 @@ function AddExpenseModal({ onSave, onClose }) {
 
           <div className="er-field">
             <label className="er-label">Category *</label>
-            <div style={{ display:'flex', gap:'8px' }}>
-              <button data-field="ex_cat"
-                style={{ flex:1, ...errorBorder('ex_cat', fieldErrors), textAlign:'left', padding:'10px 12px', borderRadius:'8px', border:'1.5px solid var(--border,#e5e7eb)', background:'var(--surface,white)', fontSize:'14px', cursor:'pointer', color:category?'var(--text-primary,#111)':'#9ca3af' }}
-                onClick={() => { setShowCatModal(true); clearFieldError('ex_cat'); }}>
-                {category || 'Select category…'}
-              </button>
-              <button
-                style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border:`2px solid ${isSupplierPurchase?'#f59e0b':'#667eea'}`, background:isSupplierPurchase?'#fef3c7':'#eef2ff', color:isSupplierPurchase?'#92400e':'#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}
-                onClick={() => { setCategory('Supplier Purchase'); setAssetsResult(null); clearFieldError('ex_cat'); setShowAssetsModal(true); }}>
-                🛒 Supplier
-              </button>
-            </div>
+            <button data-field="ex_cat"
+              style={{ width: '100%', ...errorBorder('ex_cat', fieldErrors), textAlign: 'left', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid var(--border,#e5e7eb)', background: 'var(--surface,white)', fontSize: '14px', cursor: 'pointer', color: category ? 'var(--text-primary,#111)' : '#9ca3af' }}
+              onClick={() => { setShowCatModal(true); clearFieldError('ex_cat'); }}>
+              {category || 'Select category…'}
+            </button>
             <ValidationNote field="ex_cat" errors={fieldErrors} />
           </div>
 
           {isSupplierPurchase && assetsResult && (
-            <div style={{ padding:'10px 14px', background:assetsResult.paymentType==='cash'?'#f0fdf4':'#eff6ff', border:`1.5px solid ${assetsResult.paymentType==='cash'?'#16a34a':'#3b82f6'}`, borderRadius:'8px', fontSize:'13px', color:assetsResult.paymentType==='cash'?'#166534':'#1e40af' }}>
-              <div style={{ fontWeight:700, marginBottom:'2px' }}>{assetsResult.paymentType==='cash'?'✓ Cash Purchase':'✓ Credit Purchase'} — Ref: {assetsResult.invoiceRef}</div>
-              <div style={{ fontSize:'12px', opacity:0.85 }}>{assetsResult.supplierName} · {fmt(assetsResult.total)}</div>
-              <button onClick={() => setShowAssetsModal(true)} style={{ marginTop:'6px', fontSize:'11px', color:'#667eea', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>Edit / Change</button>
+            <div style={{ padding: '10px 14px', background: assetsResult.paymentType === 'cash' ? '#f0fdf4' : '#eff6ff', border: `1.5px solid ${assetsResult.paymentType === 'cash' ? '#16a34a' : '#3b82f6'}`, borderRadius: '8px', fontSize: '13px', color: assetsResult.paymentType === 'cash' ? '#166534' : '#1e40af' }}>
+              <div style={{ fontWeight: 700, marginBottom: '2px' }}>{assetsResult.paymentType === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {assetsResult.invoiceRef}</div>
+              <div style={{ fontSize: '12px', opacity: 0.85 }}>{assetsResult.supplierName} · {fmt(assetsResult.total)}</div>
+              <button onClick={() => setShowAssetsModal(true)} style={{ marginTop: '6px', fontSize: '11px', color: '#667eea', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Edit / Change</button>
             </div>
           )}
           {isSupplierPurchase && !assetsResult && (
-            <div style={{ padding:'10px 14px', background:'#fef3c7', border:'1.5px solid #f59e0b', borderRadius:'8px', fontSize:'13px', color:'#92400e' }}>
-              ⚠️ Tap <strong>🛒 Supplier</strong> above to complete the purchase form.
+            <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1.5px solid #f59e0b', borderRadius: '8px', fontSize: '13px', color: '#92400e' }}>
+              ⚠️ Tap <strong>🛒 Supplier</strong> in the Paid To field to complete the purchase form.
             </div>
           )}
 
@@ -580,24 +710,31 @@ function AddExpenseModal({ onSave, onClose }) {
                 {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
+
+            <PaidToField
+              category={category}
+              value={payee}
+              onChange={setPayee}
+              onSupplierClick={() => { setCategory('Supplier Purchase'); setAssetsResult(null); clearFieldError('ex_cat'); setShowAssetsModal(true); }}
+              fieldErrors={fieldErrors}
+              clearFieldError={clearFieldError}
+              users={users}
+            />
+
             <div className="er-field">
-              <label className="er-label">Paid To (optional)</label>
-              <input type="text" className="er-input" placeholder="Who was paid?" value={payee} onChange={e => setPayee(e.target.value)} />
-            </div>
-            <div className="er-field">
-              <label className="er-label">Note {category==='Other'?'*':'(optional)'}</label>
+              <label className="er-label">Note (optional)</label>
               <textarea className="er-input er-textarea" data-field="ex_note"
                 style={errorBorder('ex_note', fieldErrors)} placeholder="Description or reason…"
                 value={note} onChange={e => { setNote(e.target.value); clearFieldError('ex_note'); }} />
               <ValidationNote field="ex_note" errors={fieldErrors} />
             </div>
-            {paymentMethod==='cash' && (
-              <p style={{ fontSize:'12px', color:'#667eea', margin:'4px 0 0', fontStyle:'italic' }}>
+            {paymentMethod === 'cash' && (
+              <p style={{ fontSize: '12px', color: '#667eea', margin: '4px 0 0', fontStyle: 'italic' }}>
                 💰 A Cash OUT entry will be created automatically in Cash at Shop.
               </p>
             )}
-            {category==='Owner Drawings' && (
-              <p style={{ fontSize:'12px', color:'#8b5cf6', margin:'4px 0 0', fontStyle:'italic' }}>
+            {category === 'Owner Drawings' && (
+              <p style={{ fontSize: '12px', color: '#8b5cf6', margin: '4px 0 0', fontStyle: 'italic' }}>
                 📤 This will also be recorded in Withdrawals.
               </p>
             )}
@@ -606,7 +743,7 @@ function AddExpenseModal({ onSave, onClose }) {
         </div>
         <div className="er-modal-footer">
           <button className="er-btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="er-btn-save" onClick={handleSave} disabled={saving}>{saving?'Saving…':'Save Expense'}</button>
+          <button className="er-btn-save" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Expense'}</button>
         </div>
       </div>
 
@@ -623,7 +760,7 @@ function AddExpenseModal({ onSave, onClose }) {
       )}
       {showNewSupplierModal && (
         <NewSupplierModal suppliersList={suppliersList}
-          onSave={result => { setShowNewSupplierModal(false); handleAssetsResult(result); dataService.getSuppliers().then(s => setSuppliersList(s||[])); }}
+          onSave={result => { setShowNewSupplierModal(false); handleAssetsResult(result); dataService.getSuppliers().then(s => setSuppliersList(s || [])); }}
           onClose={() => { setShowNewSupplierModal(false); setShowAssetsModal(true); }}
         />
       )}
