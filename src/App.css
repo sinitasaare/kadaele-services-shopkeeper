@@ -52,7 +52,9 @@ body {
 
 .header-user {
   font-size: 12px;
-  opacity: 0.8;
+  font-weight: bold;
+  color: #90ee90;
+  opacity: 1;
 }
 
 .header-right {

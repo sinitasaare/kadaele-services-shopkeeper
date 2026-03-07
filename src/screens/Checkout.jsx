@@ -240,59 +240,27 @@ function Checkout() {
     setScannerError('');
     setLastScanned(null);
 
-    if (!('BarcodeDetector' in window)) {
-      setScannerError('Barcode scanning is not supported on this device.');
-      return;
-    }
-
-    // Request camera permission explicitly on Capacitor / Android
     try {
-      if (navigator.permissions) {
-        const result = await navigator.permissions.query({ name: 'camera' });
-        if (result.state === 'denied') {
-          setScannerError('Camera permission is denied. Please enable it in your device Settings → Apps → Kadaele Shopkeeper → Permissions.');
-          return;
-        }
-      }
-    } catch (_) { /* permissions API not available — proceed anyway */ }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      streamRef.current = stream;
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const codeReader = new BrowserMultiFormatReader();
+      streamRef.current = codeReader;
       setScannerActive(true);
 
-      // Wait a tick for the video element to mount
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
-      }, 50);
+      await new Promise(r => setTimeout(r, 100));
+      if (!videoRef.current) { setScannerActive(false); return; }
 
-      const detector = new window.BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'itf', 'data_matrix']
-      });
-
-      // Poll every 400ms — fast enough to be snappy, not so fast it hammers CPU
-      scanIntervalRef.current = setInterval(async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2) return;
-        try {
-          const barcodes = await detector.detect(videoRef.current);
-          if (barcodes.length === 0) return;
-
-          const code = barcodes[0].rawValue;
+      await codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        videoRef.current,
+        (result, err) => {
+          if (!result) return;
+          const code = result.getText();
           const now = Date.now();
-
-          // Debounce: ignore same code within 1.5 seconds
           if (code === lastScanRef.current.code && now - lastScanRef.current.ts < 1500) return;
           lastScanRef.current = { code, ts: now };
-
           handleBarcodeDetected(code);
-        } catch (_) {}
-      }, 400);
-
+        }
+      );
     } catch (err) {
       setScannerError('Camera access denied. Please allow camera permission and try again.');
       setScannerActive(false);
@@ -300,8 +268,10 @@ function Checkout() {
   };
 
   const stopScanner = () => {
-    if (scanIntervalRef.current) { clearInterval(scanIntervalRef.current); scanIntervalRef.current = null; }
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    if (streamRef.current) {
+      try { streamRef.current.reset(); } catch (_) {}
+      streamRef.current = null;
+    }
     if (videoRef.current) { videoRef.current.srcObject = null; }
     setScannerActive(false);
   };
@@ -472,9 +442,9 @@ function Checkout() {
 
           <button
             className="sr-btn-scan"
-            onClick={() => alert('🚧 Barcode scanning feature is coming soon!')}
+            onClick={scannerActive ? stopScanner : startScanner}
             disabled={isProcessing}
-            title="Barcode scanning — coming soon"
+            title="Scan barcode"
           >
             {/* Barcode scanner SVG icon */}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

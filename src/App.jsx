@@ -358,6 +358,7 @@ const PAGES = [
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -450,6 +451,7 @@ function App() {
       if (user) {
         setCurrentUser(user);
         setUserEmail(user.email);
+    fetchUserFullName(user.email);
       }
       setIsCheckingAuth(false);
     };
@@ -496,9 +498,19 @@ function App() {
     return () => { listener?.remove?.(); };
   }, []);
 
+  const fetchUserFullName = async (email) => {
+    try {
+      const users = await dataService.getUsers();
+      const match = users.find(u => u.username === email.split('@')[0]);
+      if (match && match.fullName) setUserName(match.fullName);
+      else setUserName(email.split('@')[0]);
+    } catch { setUserName(email.split('@')[0]); }
+  };
+
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
     setUserEmail(user.email);
+    fetchUserFullName(user.email);
   };
 
   const handleLogout = async () => {
@@ -578,7 +590,7 @@ function App() {
           <img src="/kadaele-logo.png" alt="Kadaele Logo" className="header-logo" />
           <div className="header-text">
             <h1 className="header-title">Shopkeeper</h1>
-            <span className="header-user">{userEmail.split('@')[0]}</span>
+            <span className="header-user">{userName || userEmail.split('@')[0]}</span>
           </div>
         </div>
         <div className="header-right">
