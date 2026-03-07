@@ -20,6 +20,49 @@ import { db } from './services/firebaseConfig';
 import { doc, onSnapshot } from 'firebase/firestore';
 import './App.css';
 
+// ── Error Boundary — catches render crashes and shows a readable message ──────
+export class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('App error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', height: '100vh', padding: '24px',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white', textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: '20px' }}>Something went wrong</h2>
+          <p style={{ margin: '0 0 20px', opacity: 0.85, fontSize: '14px' }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '12px 28px', borderRadius: '10px', border: 'none',
+              background: 'white', color: '#667eea', fontWeight: 700,
+              fontSize: '15px', cursor: 'pointer'
+            }}
+          >
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Apply dark/light mode immediately on load (before React renders) ──────────
 (function applyInitialTheme() {
   const dark = localStorage.getItem('ks_darkMode') === 'true';
