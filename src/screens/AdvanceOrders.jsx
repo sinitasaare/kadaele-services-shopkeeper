@@ -4,6 +4,8 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import kadaeleLogo from '../assets/kadaeleLogo.js';
 import './AdvanceOrders.css';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // ── Deliver Modal ─────────────────────────────────────────────────────────
 function DeliverModal({ order, onSave, onClose, fmt }) {
@@ -321,9 +323,7 @@ function AdvanceOrders() {
 
   const generateA4PDF = async () => {
     try {
-      const { jsPDF } = window.jspdf;
-      if (!jsPDF) throw new Error('jsPDF not loaded');
-      const pageW = 210, pageH = 297, margin = 12;
+                  const pageW = 210, pageH = 297, margin = 12;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
       let logoLoaded = false;
