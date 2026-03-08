@@ -1,3 +1,4 @@
+import { APP_NAME } from '../utils/appConfig';
 import React, { useState, useEffect, useRef } from 'react';
 import { Edit2, X, Plus, Trash2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -99,7 +100,7 @@ const PAID_TO_NAMES   = ['Riti', 'Kamwatie', 'Tikanboi', 'Baikite', 'Landlord', 
 // Returns array of { key, label, phrase } based on the selected user's role & gender
 function getCashFromBeingForOptions(role, gender, shopName) {
   const pronoun = gender === 'Female' ? 'her' : gender === 'Male' ? 'his' : 'their';
-  const shop = shopName || 'Shop';
+  const shop = shopName || APP_NAME;
   const r = (role || '').toLowerCase().trim();
 
   if (r === "shop's withdrawals" || r === 'withdrawals') {
@@ -1535,7 +1536,7 @@ function CashRecord() {
   const [suppliersList, setSuppliersList]      = useState([]);
   const [usersList, setUsersList]              = useState([]);
   const [landlordInfo, setLandlordInfo]        = useState(null); // { name, monthlyRent }
-  const [shopName, setShopName]                = useState('Shop');
+  const [shopName, setShopName]                = useState(APP_NAME);
   const [selectedUserRole, setSelectedUserRole]   = useState('');
   const [selectedUserGender, setSelectedUserGender] = useState('');
   const [refNumber, setRefNumber]              = useState('');
@@ -1688,7 +1689,7 @@ function CashRecord() {
     setAdvanceOrdersList(advOrders || []);
     setUsersList((users || []).filter(u => u.id !== '__landlord__'));
     setLandlordInfo(landlord || null);
-    setShopName(sName || 'Shop');
+    setShopName(sName || APP_NAME);
   };
   const closeAddModal = () => { setShowAddModal(false); resetAddModal(); };
 
