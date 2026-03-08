@@ -1835,6 +1835,13 @@ function CashRecord() {
     }
   };
 
+  // ── Sequential unlock for add-cash modal fields ─────────────────────────
+  const cr_seq_person   = !!(getResolvedName());                           // Cash From must be filled first
+  const cr_seq_reason   = cr_seq_person;                                   // Being For unlocks after Cash From
+  const cr_seq_amount   = cr_seq_reason && !!cashInReasonKey;               // Amount unlocks after Being For
+  const cr_seq_ref      = cr_seq_amount && (parseFloat(newAmount) > 0 ||
+    (newType === TYPE_OUT && beingForKey === '__supplier_purchase__' && !!expensesResult)); // Ref after Amount
+
   const canSave = () => {
     const name = getResolvedName();
     if (!name) return false;
@@ -2221,11 +2228,12 @@ function CashRecord() {
                 </div>
 
                 {/* Being For (reason dropdown) */}
-                <div className="cj-modal-field" style={{ position:'relative' }} data-dropdown-field>
+                <div className="cj-modal-field" style={{ position:'relative', opacity: cr_seq_reason ? 1 : 0.4, pointerEvents: cr_seq_reason ? 'auto' : 'none' }} data-dropdown-field>
                   <label>Being For</label>
                   <button
                     className={`cj-desc-trigger${cashInReasonKey ? ' has-value' : ''}`}
-                    onClick={() => setShowCashInReasonDrop(o => !o)}
+                    disabled={!cr_seq_reason}
+                    onClick={() => { if(cr_seq_reason) setShowCashInReasonDrop(o => !o); }}
                   >
                     <span className="cj-desc-trigger-text">
                       {cashInReasonKey === '__advance_order__' && selectedAdvanceOrder
@@ -2249,17 +2257,20 @@ function CashRecord() {
                 </div>
 
                 {/* Amount */}
-                <div className="cj-modal-field">
+                <div className="cj-modal-field" style={{opacity: cr_seq_amount ? 1 : 0.4, pointerEvents: cr_seq_amount ? 'auto' : 'none'}}>
                   <label>Amount</label>
                   <input type="number" className="cj-modal-input" placeholder="0.00"
-                    value={newAmount} onChange={e => setNewAmount(e.target.value)} min="0.01" step="0.01"
+                    disabled={!cr_seq_amount}
+                    value={newAmount} onChange={e => { if(cr_seq_amount) setNewAmount(e.target.value); }} min="0.01" step="0.01"
                   />
                 </div>
 
                 {/* Ref Number */}
-                <div className="cj-modal-field">
+                <div className="cj-modal-field" style={{opacity: cr_seq_ref ? 1 : 0.4, pointerEvents: cr_seq_ref ? 'auto' : 'none'}}>
                   <label>Reference Number <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
-                  <input className="cj-modal-input" value={refNumber} onChange={e => setRefNumber(e.target.value)}
+                  <input className="cj-modal-input" value={refNumber}
+                    disabled={!cr_seq_ref}
+                    onChange={e => { if(cr_seq_ref) setRefNumber(e.target.value); }}
                     placeholder="Invoice / receipt ref…" />
                 </div>
               </>
