@@ -37,6 +37,7 @@ export default function Withdrawals() {
   const [entries, setEntries]         = useState([]);
   const [filtered, setFiltered]       = useState([]);
   const [shopName, setShopName]       = useState('Shop');
+  const [ownerUser, setOwnerUser]     = useState(null);
 
   // ── Filter state (pending / applied — same pattern as SalesRecord) ──
   const [dateFilter, setDateFilter]         = useState('today');
@@ -57,6 +58,10 @@ export default function Withdrawals() {
   useEffect(() => {
     load();
     dataService.getShopName().then(n => setShopName(n || 'Shop'));
+    dataService.getUsers().then(users => {
+      const owner = (users||[]).find(u => ['shop owner','owner'].includes((u.role||'').toLowerCase()));
+      setOwnerUser(owner || null);
+    });
     const handleVisibility = () => { if (!document.hidden) load(); };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
@@ -143,7 +148,7 @@ export default function Withdrawals() {
 
   // ── Filter title ──────────────────────────────────────────────────────
   const getTitle = () => {
-    const typeMap = { all:'All Withdrawals', out:'Money Out', in:'Money Returned' };
+    const typeMap = { all:'All Withdrawals', out:'Taken from Shop', in:'Returned to Shop' };
     const label = typeMap[appliedTypeFilter] || 'All Withdrawals';
     if (appliedDateFilter === 'today') return `${label} Today`;
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
@@ -167,12 +172,12 @@ export default function Withdrawals() {
           <div className="wd-card-value">{fmt(overallBalance)}</div>
         </div>
         <div className="wd-summary-card wd-card-out">
-          <div className="wd-card-label">Taken Out</div>
-          <div className="wd-card-value">{fmt(totalIn)}</div>
+          <div className="wd-card-label">Returned to Shop</div>
+          <div className="wd-card-value">{fmt(totalOut)}</div>
         </div>
         <div className="wd-summary-card wd-card-in">
-          <div className="wd-card-label">Returned</div>
-          <div className="wd-card-value">{fmt(totalOut)}</div>
+          <div className="wd-card-label">{ownerUser ? `Handed to ${(ownerUser.gender||'').toLowerCase()==='female'?'Ms':'Mr'} ${ownerUser.fullName||ownerUser.name||'Owner'}` : 'Handed to Owner'}</div>
+          <div className="wd-card-value">{fmt(totalIn)}</div>
         </div>
       </div>
 
@@ -196,7 +201,7 @@ export default function Withdrawals() {
           <div className="wd-filter-section">
             <div className="wd-filter-section-label">Type</div>
             <div className="wd-filter-btns">
-              {[['all','All'],['out','Money Out'],['in','Returned']].map(([val,lbl])=>(
+              {[['all','All'],['out','Taken from Shop'],['in','Returned to Shop']].map(([val,lbl])=>(
                 <button key={val} className={`wd-ftype-btn${typeFilter===val?' active':''}`}
                   onClick={()=>setTypeFilter(val)}>{lbl}</button>
               ))}
@@ -269,12 +274,12 @@ export default function Withdrawals() {
                   </td>
                   <td className="wd-col-desc">{entry.description || '—'}</td>
                   <td>
-                    <span className={`wd-type-badge ${entry.type === 'out' ? 'wd-badge-in' : 'wd-badge-out'}`}>
-                      {entry.type === 'out' ? 'IN' : 'OUT'}
+                    <span className={`wd-type-badge ${entry.type === 'out' ? 'wd-badge-out' : 'wd-badge-in'}`}>
+                      {entry.type === 'out' ? 'OUT' : 'IN'}
                     </span>
                   </td>
-                  <td className={`wd-col-right wd-amount ${entry.type === 'out' ? 'wd-amount-in' : 'wd-amount-out'}`}>
-                    {entry.type === 'out' ? '+' : '-'}{fmt(entry.amount)}
+                  <td className={`wd-col-right wd-amount ${entry.type === 'out' ? 'wd-amount-out' : 'wd-amount-in'}`}>
+                    {entry.type === 'out' ? '-' : '+'}{fmt(entry.amount)}
                   </td>
                   <td className="wd-col-right wd-balance">{fmt(entry.balance)}</td>
                 </tr>
