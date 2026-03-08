@@ -260,6 +260,23 @@ class DataService {
       this._withdrawalsFetched = false;
       this._operationalAssetsFetched = false;
       
+      // Update lastSeen for this user in Firestore
+      if (userCredential.user) {
+        const uid = userCredential.user.uid;
+        try {
+          const users = await localforage.getItem('kadaele_users') || [];
+          const userDoc = users.find(u => u.authUid === uid || u.id === uid);
+          if (userDoc) {
+            userDoc.lastSeen = new Date().toISOString();
+            userDoc.isOnline = true;
+            await localforage.setItem('kadaele_users', users);
+            if (this.isOnline) {
+              await setDoc(doc(db, 'users', userDoc.id), { lastSeen: serverTimestamp(), isOnline: true }, { merge: true }).catch(() => {});
+            }
+          }
+        } catch (_) {}
+      }
+
       // Start real-time listeners for debtors and goods (handles remote changes)
       this.startDebtorsListener();
       this.startGoodsListener();
@@ -296,6 +313,17 @@ class DataService {
     try {
       this.stopDebtorsListener();
       this.stopGoodsListener();
+      // Mark user offline before signing out
+      try {
+        const u = auth.currentUser;
+        if (u && this.isOnline) {
+          const users = await localforage.getItem('kadaele_users') || [];
+          const userDoc = users.find(ud => ud.authUid === u.uid || ud.id === u.uid);
+          if (userDoc) {
+            await setDoc(doc(db, 'users', userDoc.id), { isOnline: false, lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
+          }
+        }
+      } catch (_) {}
       await signOut(auth);
       this.currentUser = null;
       // Clear persistent login state
@@ -2930,6 +2958,41 @@ class DataService {
         await this.addToSyncQueue({ type: 'operational_asset', data: newAsset });
       }
 
+      // ── Credit purchase: link to creditor ──────────────────────────────
+      if (newAsset.paymentType === 'credit' && newAsset.supplierId) {
+        try {
+          const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
+          const suppliers = await localforage.getItem(DATA_KEYS.SUPPLIERS) || [];
+          const supplier = suppliers.find(s => s.id === newAsset.supplierId);
+          const stubName = newAsset.supplierName || (supplier && (supplier.name || supplier.customerName)) || 'Unknown';
+          let existing = creditors.find(c => c.id === newAsset.supplierId) ||
+                         creditors.find(c => (c.name||c.customerName||'').toLowerCase() === stubName.toLowerCase());
+          let creditorId;
+          if (existing) {
+            creditorId = existing.id;
+          } else {
+            const nc = {
+              id: newAsset.supplierId, name: stubName, customerName: stubName,
+              phone: supplier?.phone||'', customerPhone: supplier?.phone||'',
+              whatsapp: supplier?.whatsapp||'', email: supplier?.email||'',
+              address: supplier?.address||'', gender: supplier?.gender||'',
+              repaymentDate: newAsset.dueDate||'',
+              totalDue: 0, totalPaid: 0, balance: 0, deposits: [], purchaseIds: [],
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            };
+            creditors.push(nc);
+            await localforage.setItem(DATA_KEYS.CREDITORS, creditors);
+            if (this.isOnline && auth.currentUser) {
+              await setDoc(doc(db, 'creditors', nc.id.toString()),
+                {...nc, createdAt: serverTimestamp(), updatedAt: serverTimestamp()},
+                { merge: true }).catch(e => console.error('Creditor asset sync error:', e));
+            }
+            creditorId = nc.id;
+          }
+          await this.addCreditorDebt(creditorId, newAsset.subtotal || 0, newAsset.id, newAsset.dueDate || null);
+        } catch (err) { console.error('Error linking asset to creditor:', err); }
+      }
+
       return newAsset;
     } catch (error) {
       console.error('Error adding operational asset:', error);
@@ -3320,6 +3383,82 @@ class DataService {
       }
       return entry;
     } catch (err) { console.error('addWithdrawal error:', err); throw err; }
+  }
+
+  // ── Commission Goods ─────────────────────────────────────────────────────
+  async getCommissionGoods() {
+    try {
+      if (this.isOnline && auth.currentUser) {
+        const snap = await getDocs(collection(db, 'commission_goods'));
+        const fbGoods = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        await localforage.setItem('commission_goods', fbGoods);
+        return fbGoods;
+      }
+    } catch (e) { console.error('getCommissionGoods error:', e); }
+    return await localforage.getItem('commission_goods') || [];
+  }
+
+  async addCommissionGood(good) {
+    try {
+      const id = this.generateId();
+      const newGood = {
+        id, name: good.name.trim(),
+        sellingPrice: parseFloat(good.sellingPrice) || 0,
+        commissionRate: parseFloat(good.commissionRate) || 0,
+        ownerName: good.ownerName?.trim() || '',
+        notes: good.notes?.trim() || '',
+        commissionEarned: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const all = await localforage.getItem('commission_goods') || [];
+      all.unshift(newGood);
+      await localforage.setItem('commission_goods', all);
+      if (this.isOnline && auth.currentUser) {
+        await setDoc(doc(db, 'commission_goods', id), { ...newGood, createdAt: serverTimestamp() }, { merge: true }).catch(e => console.error('commission sync error:', e));
+      }
+      return newGood;
+    } catch (e) { console.error('addCommissionGood error:', e); throw e; }
+  }
+
+  async updateCommissionGood(id, updates) {
+    try {
+      const all = await localforage.getItem('commission_goods') || [];
+      const idx = all.findIndex(g => g.id === id);
+      if (idx === -1) return;
+      all[idx] = { ...all[idx], ...updates, sellingPrice: parseFloat(updates.sellingPrice)||0, commissionRate: parseFloat(updates.commissionRate)||0, updatedAt: new Date().toISOString() };
+      await localforage.setItem('commission_goods', all);
+      if (this.isOnline && auth.currentUser) {
+        await setDoc(doc(db, 'commission_goods', id), { ...all[idx], updatedAt: serverTimestamp() }, { merge: true }).catch(e => console.error('commission update sync error:', e));
+      }
+    } catch (e) { console.error('updateCommissionGood error:', e); throw e; }
+  }
+
+  async deleteCommissionGood(id) {
+    try {
+      const all = await localforage.getItem('commission_goods') || [];
+      const filtered = all.filter(g => g.id !== id);
+      await localforage.setItem('commission_goods', filtered);
+      if (this.isOnline && auth.currentUser) {
+        await deleteDoc(doc(db, 'commission_goods', id)).catch(e => console.error('commission delete sync error:', e));
+      }
+    } catch (e) { console.error('deleteCommissionGood error:', e); throw e; }
+  }
+
+  async recordCommissionSale(goodId, qty) {
+    try {
+      const all = await localforage.getItem('commission_goods') || [];
+      const idx = all.findIndex(g => g.id === goodId);
+      if (idx === -1) return;
+      const g = all[idx];
+      const commission = (parseFloat(g.sellingPrice)||0) * (parseFloat(g.commissionRate)||0) / 100 * (parseFloat(qty)||1);
+      all[idx].commissionEarned = (parseFloat(g.commissionEarned)||0) + commission;
+      all[idx].updatedAt = new Date().toISOString();
+      await localforage.setItem('commission_goods', all);
+      if (this.isOnline && auth.currentUser) {
+        await setDoc(doc(db, 'commission_goods', goodId), { commissionEarned: all[idx].commissionEarned, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+      }
+    } catch (e) { console.error('recordCommissionSale error:', e); }
   }
 
   async getWithdrawals() {

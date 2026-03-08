@@ -960,3 +960,10 @@
   background: #eef2ff;
   border-color: #667eea;
 }
+
+/* ── Commission tab active style ── */
+.inv-tab-btn-active-commission {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #fff !important;
+  border-color: #059669 !important;
+}

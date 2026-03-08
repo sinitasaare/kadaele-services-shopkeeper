@@ -41,8 +41,15 @@ function filterAssets(assets, term) {
 function Inventory() {
   const { fmt } = useCurrency();
 
-  // View tab: 'goods' | 'assets'
+  // View tab: 'goods' | 'assets' | 'commission'
   const [activeTab, setActiveTab] = useState('goods');
+
+  // Commission products state
+  const [commissionGoods, setCommissionGoods] = useState([]);
+  const [commissionLoading, setCommissionLoading] = useState(false);
+  const [showCommissionModal, setShowCommissionModal] = useState(false);
+  const [editCommission, setEditCommission] = useState(null);
+  const [commissionForm, setCommissionForm] = useState({ name: '', sellingPrice: '', commissionRate: '', ownerName: '', notes: '' });
 
   // Goods state
   const [goods, setGoods] = useState([]);
@@ -95,6 +102,17 @@ function Inventory() {
   useEffect(() => {
     if (activeTab === 'assets') {
       loadAssets();
+    }
+  }, [activeTab]);
+
+  // Load commission goods when tab is active
+  useEffect(() => {
+    if (activeTab === 'commission') {
+      setCommissionLoading(true);
+      dataService.getCommissionGoods().then(d => {
+        setCommissionGoods(d || []);
+        setCommissionLoading(false);
+      }).catch(() => setCommissionLoading(false));
     }
   }, [activeTab]);
 
@@ -162,6 +180,12 @@ function Inventory() {
           >
             🔧 Operational Assets
           </button>
+          <button
+            className={`inv-tab-btn${activeTab === 'commission' ? ' inv-tab-btn-active inv-tab-btn-active-commission' : ''}`}
+            onClick={() => handleTabChange('commission')}
+          >
+            🤝 Commission
+          </button>
         </div>
 
         <div className="inv-toolbar">
@@ -170,7 +194,7 @@ function Inventory() {
             <input
               type="text"
               className="inv-search-input"
-              placeholder={activeTab === 'goods' ? 'Search Product' : 'Search Asset'}
+              placeholder={activeTab === 'goods' ? 'Search Product' : activeTab === 'assets' ? 'Search Asset' : 'Search Commission Product'}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -343,6 +367,122 @@ function Inventory() {
           )
         )}
       </div>
+
+      {/* ── Commission Tab ── */}
+      {activeTab === 'commission' && (
+        <div className="inv-section">
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:'15px' }}>Commission Products</div>
+              <div style={{ fontSize:'12px', color:'var(--text-secondary,#6b7280)', marginTop:'2px' }}>Products sold on behalf of others. Shop earns a commission per sale.</div>
+            </div>
+            <button
+              onClick={() => { setEditCommission(null); setCommissionForm({ name:'', sellingPrice:'', commissionRate:'', ownerName:'', notes:'' }); setShowCommissionModal(true); }}
+              style={{ background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', border:'none', borderRadius:'10px', padding:'10px 16px', fontWeight:700, fontSize:'13px', cursor:'pointer' }}
+            >+ Add Product</button>
+          </div>
+          {commissionLoading ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'var(--text-secondary,#9ca3af)' }}>Loading...</div>
+          ) : commissionGoods.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'var(--text-secondary,#9ca3af)' }}>
+              <div style={{ fontSize:'32px', marginBottom:'8px' }}>🤝</div>
+              <div style={{ fontWeight:600 }}>No commission products yet</div>
+              <div style={{ fontSize:'13px', marginTop:'4px' }}>Add products you sell on behalf of others</div>
+            </div>
+          ) : (
+            <div className="inv-table-wrapper">
+              <table className="inv-table">
+                <thead>
+                  <tr>
+                    <th>Product Name</th>
+                    <th className="inv-col-center">Selling Price</th>
+                    <th className="inv-col-center">Commission %</th>
+                    <th className="inv-col-center">Commission Earned</th>
+                    <th>Owner</th>
+                    <th className="inv-col-center">Edit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {commissionGoods.map(g => (
+                    <tr key={g.id}>
+                      <td style={{ fontWeight:600 }}>{g.name}</td>
+                      <td className="inv-col-center">{fmt(parseFloat(g.sellingPrice||0))}</td>
+                      <td className="inv-col-center">{g.commissionRate||0}%</td>
+                      <td className="inv-col-center" style={{ color:'#16a34a', fontWeight:700 }}>{fmt(parseFloat(g.commissionEarned||0))}</td>
+                      <td>{g.ownerName||'—'}</td>
+                      <td className="inv-col-center">
+                        <button
+                          onClick={() => { setEditCommission(g); setCommissionForm({ name:g.name, sellingPrice:g.sellingPrice, commissionRate:g.commissionRate, ownerName:g.ownerName||'', notes:g.notes||'' }); setShowCommissionModal(true); }}
+                          style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px' }}
+                        >✏️</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Commission Modal ── */}
+      {showCommissionModal && (
+        <Portal>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}
+            onClick={() => setShowCommissionModal(false)}>
+            <div style={{ background:'var(--surface,white)', borderRadius:'16px', width:'100%', maxWidth:'380px', maxHeight:'85vh', overflowY:'auto', padding:'24px' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>{editCommission ? 'Edit Commission Product' : 'Add Commission Product'}</h3>
+                <button onClick={() => setShowCommissionModal(false)} style={{ background:'none', border:'none', cursor:'pointer' }}><X size={20}/></button>
+              </div>
+              {[
+                ['Product Name *', 'name', 'text', 'e.g. Coca Cola 330ml'],
+                ['Selling Price', 'sellingPrice', 'number', '0.00'],
+                ['Commission Rate (%)', 'commissionRate', 'number', 'e.g. 10'],
+                ['Owner / Supplier Name', 'ownerName', 'text', 'Who owns this product'],
+                ['Notes', 'notes', 'text', 'Optional notes'],
+              ].map(([label, key, type, ph]) => (
+                <div key={key} style={{ marginBottom:'14px' }}>
+                  <label style={{ fontSize:'13px', fontWeight:600, display:'block', marginBottom:'4px', color:'var(--text-primary,#111)' }}>{label}</label>
+                  <input
+                    type={type}
+                    placeholder={ph}
+                    value={commissionForm[key]}
+                    onChange={e => setCommissionForm(f => ({...f, [key]: e.target.value}))}
+                    style={{ width:'100%', padding:'10px 12px', borderRadius:'8px', border:'1.5px solid var(--border,#e5e7eb)', fontSize:'14px', background:'var(--surface,white)', color:'var(--text-primary,#111)', boxSizing:'border-box' }}
+                  />
+                </div>
+              ))}
+              <div style={{ display:'flex', gap:'10px', marginTop:'8px' }}>
+                {editCommission && (
+                  <button
+                    onClick={async () => {
+                      await dataService.deleteCommissionGood(editCommission.id);
+                      setCommissionGoods(await dataService.getCommissionGoods());
+                      setShowCommissionModal(false);
+                    }}
+                    style={{ flex:1, padding:'12px', borderRadius:'10px', border:'none', background:'#fee2e2', color:'#dc2626', fontWeight:700, cursor:'pointer' }}
+                  >Delete</button>
+                )}
+                <button
+                  onClick={async () => {
+                    if (!commissionForm.name.trim()) { alert('Product name is required'); return; }
+                    if (editCommission) {
+                      await dataService.updateCommissionGood(editCommission.id, commissionForm);
+                    } else {
+                      await dataService.addCommissionGood(commissionForm);
+                    }
+                    setCommissionGoods(await dataService.getCommissionGoods());
+                    setShowCommissionModal(false);
+                  }}
+                  style={{ flex:2, padding:'12px', borderRadius:'10px', border:'none', background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', fontWeight:700, cursor:'pointer' }}
+                >Save</button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
 
       {/* ── Asset Detail Modal ── */}
       {assetDetailItem && (
