@@ -165,23 +165,7 @@ export default function Withdrawals() {
   return (
     <div className="wd-container">
 
-      {/* ── Summary cards ── */}
-      <div className="wd-summary-row">
-        <div className="wd-summary-card wd-card-balance">
-          <div className="wd-card-label">Balance Outside Shop</div>
-          <div className="wd-card-value">{fmt(overallBalance)}</div>
-        </div>
-        <div className="wd-summary-card wd-card-out">
-          <div className="wd-card-label">Returned to Shop</div>
-          <div className="wd-card-value">{fmt(totalOut)}</div>
-        </div>
-        <div className="wd-summary-card wd-card-in">
-          <div className="wd-card-label">{ownerUser ? `Handed to ${(ownerUser.gender||'').toLowerCase()==='female'?'Ms':'Mr'} ${ownerUser.fullName||ownerUser.name||'Owner'}` : 'Handed to Owner'}</div>
-          <div className="wd-card-value">{fmt(totalIn)}</div>
-        </div>
-      </div>
-
-      {/* ── Filter bar ── */}
+      {/* ── Filter bar — above cards ── */}
       <div className="wd-filter-row">
         <button
           className={`wd-filter-btn${showFilters ? ' active' : ''}`}
@@ -238,9 +222,25 @@ export default function Withdrawals() {
         </div>
       )}
 
+      {/* ── Summary cards ── */}
+      <div className="wd-summary-row">
+        <div className="wd-summary-card wd-card-balance">
+          <div className="wd-card-label">Balance Outside Shop</div>
+          <div className="wd-card-value">{fmt(overallBalance)}</div>
+        </div>
+        <div className="wd-summary-card wd-card-out">
+          <div className="wd-card-label">Returned to Shop</div>
+          <div className="wd-card-value">{fmt(totalOut)}</div>
+        </div>
+        <div className="wd-summary-card wd-card-in">
+          <div className="wd-card-label">{ownerUser ? `Handed to ${(ownerUser.gender||'').toLowerCase()==='female'?'Ms':'Mr'} ${ownerUser.fullName||ownerUser.name||'Owner'}` : 'Handed to Owner'}</div>
+          <div className="wd-card-value">{fmt(totalIn)}</div>
+        </div>
+      </div>
+
       {/* ── Table ── */}
       <div className="wd-table-header">
-        <span className="wd-table-title">{getTitle()}</span>
+        <span className="wd-table-title wd-table-title-styled">{getTitle()}</span>
         <span className="wd-table-count">{filtered.length} record{filtered.length!==1?'s':''}</span>
       </div>
 
