@@ -475,7 +475,8 @@ function AddPurchaseModal({ onSave, onClose }) {
             </div>
           )}
 
-          {/* Payment Method — fund source for this purchase */}
+          {/* Payment Method — fund source for this purchase (hidden for credit purchases) */}
+          {paymentType !== 'credit' && (
           <div className="pr-field" style={{opacity: step_payMeth ? 1 : 0.4, pointerEvents: step_payMeth ? 'auto' : 'none'}}>
             <label>Payment Method <span style={{color:'#dc2626'}}>*</span></label>
             <select
@@ -502,6 +503,7 @@ function AddPurchaseModal({ onSave, onClose }) {
               </div>
             )}
           </div>
+          )}
 
           {/* Ref — inline */}
           <div className="pr-ref-inline" style={{opacity: step_ref ? 1 : 0.4, pointerEvents: step_ref ? 'auto' : 'none'}}>
