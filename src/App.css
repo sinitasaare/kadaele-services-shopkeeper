@@ -39,9 +39,11 @@ body {
 }
 
 .header-logo {
-  width: 40px;
-  height: 40px;
+  width: 67px;
+  height: 67px;
   border-radius: 5px;
+  margin: -13px 0; /* overflow logo beyond topbar padding without changing topbar height */
+  object-fit: contain;
 }
 
 .header-title {
