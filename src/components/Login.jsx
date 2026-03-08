@@ -1,3 +1,4 @@
+import { APP_NAME } from '../utils/appConfig';
 import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import dataService from '../services/dataService';
@@ -61,7 +62,7 @@ function Login({ onLoginSuccess }) {
       <div className="login-card">
         <div className="logo-section">
           <img src="/kadaele-logo.png" alt="Kadaele Logo" className="login-logo" />
-          <h1 className="app-title">Kadaele Services</h1>
+          <h1 className="app-title">{APP_NAME}</h1>
           <h2 className="app-subtitle">Shopkeeper</h2>
         </div>
 

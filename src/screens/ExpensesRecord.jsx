@@ -1,3 +1,4 @@
+import { APP_NAME } from '../utils/appConfig';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
@@ -6,10 +7,11 @@ import { useCurrency } from '../hooks/useCurrency';
 import './ExpensesRecord.css';
 
 // ── Category definitions ───────────────────────────────────────────────────────
+const SYSTEM_FEE_CAT = `${APP_NAME} System's weekly fee`;
 const CATEGORY_GROUPS = [
   {
     group: 'Operating',
-    items: ['Utilities', 'Rent', 'Fuel', 'Internet', 'Maintenance', 'Supplies', 'Wages'],
+    items: ['Utilities', 'Rent', 'Fuel', 'Internet', 'Maintenance', 'Supplies', 'Wages', SYSTEM_FEE_CAT],
   },
   {
     group: 'Owner',
@@ -30,6 +32,7 @@ const CATEGORY_PAYEE_MODE = {
   'Donations':          'donation',
   'Community Support':  'community',
 };
+CATEGORY_PAYEE_MODE[SYSTEM_FEE_CAT] = 'system_fee';
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.items); // eslint-disable-line no-unused-vars
 const QUICK_CATS = ['Utilities', 'Wages', 'Owner Drawings'];
 
@@ -521,6 +524,8 @@ function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, 
     suggestions = [{ label: 'Group or Organisation', value: '__group__', icon: '🤝', isAction: true }];
   } else if (payeeMode === 'community') {
     suggestions = [{ label: 'Community', value: '__community__', icon: '🏘️', isAction: true }];
+  } else if (payeeMode === 'system_fee') {
+    suggestions = [{ label: 'Sinita POS Systems (SPOSH)', value: 'Sinita POS Systems (SPOSH)', icon: '💻' }];
   } else {
     suggestions = [{ label: 'Supplier', value: '__supplier__', icon: '🛒', isAction: true }];
   }
