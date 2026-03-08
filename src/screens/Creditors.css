@@ -1,5 +1,5 @@
 /* ============================================================
-   Creditors.css  —  all classes namespaced with .d- prefix
+   Creditors.css  —  Kadaele Shopkeeper App 
    ============================================================ */
 
 .d-screen {
@@ -29,6 +29,9 @@
 }
 .d-search::placeholder { color: #9ca3af; }
 .d-search:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.12); }
+
+/* Narrower search when + Supplier button is also in the header */
+.d-search-narrow { max-width: 140px; }
 
 .d-add-btn {
   flex-shrink: 0;        /* never shrinks — stays on same line */
