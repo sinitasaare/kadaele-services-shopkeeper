@@ -1299,7 +1299,6 @@ function ExpensesRecord() {
       </div>
 
       <div className="er-table-section">
-        <div className="er-table-section-inner">
         {filtered.length===0 ? (
           <div className="er-empty">No expenses found for this filter.</div>
         ) : (
