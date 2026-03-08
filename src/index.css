@@ -512,3 +512,9 @@ tr:hover {
 }
 [data-theme="dark"] .filter-modal-sheet { background: #1e2a3a; }
 [data-theme="dark"] .filter-modal-handle { background: #374151; }
+
+/* ── Global italic placeholders (all inputs, textareas, selects) ─────────── */
+input::placeholder,
+textarea::placeholder {
+  font-style: italic;
+}
