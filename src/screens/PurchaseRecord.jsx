@@ -31,6 +31,7 @@ function AddPurchaseModal({ onSave, onClose }) {
   const supplierName = selectedSupplier ? (selectedSupplier.name || selectedSupplier.customerName || '') : '';
 
   const [paymentType, setPaymentType] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState('cash_shop'); // cash_shop | owner_custody | owner_personal
   const [creditors, setCreditors]     = useState([]);
   const [creditorId, setCreditorId]   = useState(null);
   const [dueDate, setDueDate]           = useState('');
@@ -54,6 +55,17 @@ function AddPurchaseModal({ onSave, onClose }) {
   const [fieldError, setFieldError]   = useState(null); // {rowId, field, message}
   const [cashBalance, setCashBalance]   = useState(null); // current cash balance
   const nextId = useRef(2);
+
+  // ── Sequential field unlock logic ─────────────────────────────────────────
+  // Each field only becomes editable once all fields above it are filled.
+  const step_supplier = !!supplierId;                                       // Step 1: supplier selected
+  const step_payType  = step_supplier;                                      // Step 2: payment type (always ready after supplier)
+  const step_date     = step_payType;                                       // Step 3: date
+  const step_items    = step_date;                                          // Step 4: items table
+  const anyItemFilled = rows.some(r => r.description?.trim() && parseFloat(r.qty) > 0 && parseFloat(r.costPrice) > 0);
+  const step_payMeth  = step_items && anyItemFilled;                        // Step 5: payment method (new field)
+  const step_ref      = step_payMeth;                                       // Step 6: ref
+  const step_notes    = step_ref;                                           // Step 7: notes/photo
 
   useEffect(() => {
     dataService.getSuppliers().then(d => setSuppliers(d || []));
@@ -177,10 +189,10 @@ function AddPurchaseModal({ onSave, onClose }) {
       }));
       const total = items.reduce((s, i) => s + i.subtotal, 0);
 
-      // ── Cash balance cap: total cost must not exceed current cash balance ──
-      if (paymentType === 'cash' && cashBalance !== null && total > cashBalance) {
+      // ── Cash balance cap: only applies when paying directly from shop cash ──
+      if (paymentType === 'cash' && paymentMethod === 'cash_shop' && cashBalance !== null && total > cashBalance) {
         const sym = dataService.getCurrencySymbol?.() || '$';
-        alert(`Total Cost (${sym}${total.toFixed(2)}) exceeds current Cash Balance (${sym}${cashBalance.toFixed(2)}). Please reduce the purchase total or use Buy on Credit.`);
+        alert(`Total Cost (${sym}${total.toFixed(2)}) exceeds Cash Balance (${sym}${cashBalance.toFixed(2)}). Choose a different Payment Method or reduce the total.`);
         setSaving(false);
         return;
       }
@@ -189,6 +201,7 @@ function AddPurchaseModal({ onSave, onClose }) {
         supplierName, supplierId: supplierId || null,
         paymentType, creditorId: paymentType === 'credit' ? supplierId : null,
         dueDate: paymentType === 'credit' ? dueDate : null,
+        paymentMethod,  // cash_shop | owner_custody | owner_personal
         date: new Date(purchaseDate + 'T12:00:00').toISOString(),
         items, total,
         notes: notes.trim(), invoiceRef: invoiceRef.trim(),
@@ -254,8 +267,9 @@ function AddPurchaseModal({ onSave, onClose }) {
             <div className="pr-pay-type-row">
               {[['cash','💵 Cash Paid'],['credit','📋 Buy on Credit']].map(([pt, lbl]) => (
                 <button key={pt} type="button"
-                  className={`pr-pay-type-btn${paymentType===pt?(pt==='cash'?' pr-pay-cash-active':' pr-pay-credit-active'):''}`}
-                  onClick={() => setPaymentType(pt)}
+                  className={`pr-pay-type-btn${paymentType===pt?(pt==='cash'?' pr-pay-cash-active':' pr-pay-credit-active'):''}${!step_payType?' pr-field-locked':''}`}
+                  disabled={!step_payType}
+                  onClick={() => step_payType && setPaymentType(pt)}
                 >{lbl}</button>
               ))}
             </div>
@@ -283,8 +297,9 @@ function AddPurchaseModal({ onSave, onClose }) {
             <label className="pr-date-inline-label">Purchase Date *</label>
             <input type="date" className="pr-date-inline-input"
               value={purchaseDate} max={getTodayStr()} data-field="pr_date"
-              style={errorBorder('pr_date', fieldErrors)}
-              onChange={e => { setPurchaseDate(e.target.value); clearFieldError('pr_date'); }} />
+              disabled={!step_date}
+              style={{...errorBorder('pr_date', fieldErrors), ...(!step_date?{opacity:0.45,cursor:'not-allowed'}:{})}}
+              onChange={e => { if(step_date){ setPurchaseDate(e.target.value); clearFieldError('pr_date'); } }} />
             <ValidationNote field="pr_date" errors={fieldErrors} />
           </div>
 
@@ -460,22 +475,52 @@ function AddPurchaseModal({ onSave, onClose }) {
             </div>
           )}
 
+          {/* Payment Method — fund source for this purchase */}
+          <div className="pr-field" style={{opacity: step_payMeth ? 1 : 0.4, pointerEvents: step_payMeth ? 'auto' : 'none'}}>
+            <label>Payment Method <span style={{color:'#dc2626'}}>*</span></label>
+            <select
+              className="pr-input"
+              value={paymentMethod}
+              disabled={!step_payMeth}
+              onChange={e => setPaymentMethod(e.target.value)}
+              style={{fontStyle:'normal', fontWeight:600, fontSize:'14px', cursor: step_payMeth ? 'pointer' : 'not-allowed'}}
+            >
+              <option value="cash_shop">💵 CASH From Shop</option>
+              <option value="owner_custody">🏠 Owner Custody (Withdrawn Money)</option>
+              <option value="owner_personal">👤 Owner Personal Funds</option>
+            </select>
+            <p style={{fontSize:'11px', marginTop:'4px', color:
+              paymentMethod==='cash_shop' ? '#16a34a' :
+              paymentMethod==='owner_custody' ? '#f59e0b' : '#7c3aed'}}>
+              {paymentMethod==='cash_shop' && '💵 Shop cash will be deducted and a Cash OUT entry created.'}
+              {paymentMethod==='owner_custody' && '🏠 Paid from already-withdrawn money. No cash deducted from shop.'}
+              {paymentMethod==='owner_personal' && '👤 Owner funded personally. Shop debt to owner will be recorded.'}
+            </p>
+            {paymentMethod==='cash_shop' && cashBalance !== null && itemTotal > cashBalance && itemTotal > 0 && (
+              <div style={{background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'6px', padding:'6px 10px', fontSize:'12px', color:'#b91c1c', marginTop:'4px'}}>
+                ⚠️ Total exceeds Cash Balance ({fmt(cashBalance)}). Choose a different Payment Method.
+              </div>
+            )}
+          </div>
+
           {/* Ref — inline */}
-          <div className="pr-ref-inline">
+          <div className="pr-ref-inline" style={{opacity: step_ref ? 1 : 0.4, pointerEvents: step_ref ? 'auto' : 'none'}}>
             <label className="pr-ref-label">Ref *</label>
             <input type="text" className="pr-ref-input"
               placeholder="Invoice / receipt number…"
               required data-field="pr_invoiceRef"
+              disabled={!step_ref}
               style={errorBorder('pr_invoiceRef', fieldErrors)}
-              value={invoiceRef} onChange={e => { setInvoiceRef(e.target.value); clearFieldError('pr_invoiceRef'); }} />
+              value={invoiceRef} onChange={e => { if(step_ref){ setInvoiceRef(e.target.value); clearFieldError('pr_invoiceRef'); } }} />
             <ValidationNote field="pr_invoiceRef" errors={fieldErrors} />
           </div>
 
           {/* Notes */}
-          <div className="pr-field">
+          <div className="pr-field" style={{opacity: step_notes ? 1 : 0.4, pointerEvents: step_notes ? 'auto' : 'none'}}>
             <label>Notes (optional)</label>
             <input type="text" className="pr-input" placeholder="Extra notes…"
-              value={notes} onChange={e => setNotes(e.target.value)} />
+              disabled={!step_notes}
+              value={notes} onChange={e => { if(step_notes) setNotes(e.target.value); }} />
           </div>
 
           {/* Receipt Photo */}
@@ -720,6 +765,14 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
   );
 }
 
+// ── Payment source display label ────────────────────────────────────────────
+function paymentSourceLabel(pm) {
+  if (pm === 'cash_shop')      return 'Cash From Shop';
+  if (pm === 'owner_custody')  return 'Owner Custody';
+  if (pm === 'owner_personal') return 'Owner Personal';
+  return 'Cash From Shop'; // default for old records without this field
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main PurchaseRecord screen
 // ─────────────────────────────────────────────────────────────
@@ -958,7 +1011,7 @@ function PurchaseRecord({ storeIsOpen }) {
             columns={[
               {header:'Date',key:'date'},{header:'Time',key:'time'},{header:'Supplier',key:'supplier'},
               {header:'Items',key:'items'},{header:'Cost',key:'cost'},{header:'Pay',key:'pay'},
-              {header:'Total',key:'total'},{header:'Ref',key:'ref'}
+              {header:'Source',key:'source'},{header:'Total',key:'total'},{header:'Ref',key:'ref'}
             ]}
             rows={filtered.map(p => {
               const rawTs = p.date||p.timestamp||p.createdAt;
@@ -970,6 +1023,7 @@ function PurchaseRecord({ storeIsOpen }) {
                 items: (p.items||[]).map(i=>i.description||i.name||'').join(', ')||'—',
                 cost: (p.items||[]).map(i=>fmt(i.costPrice||0)).join(', ')||'—',
                 pay: p.paymentType||'cash',
+                source: paymentSourceLabel(p.paymentMethod),
                 total: fmt(p.total||0),
                 ref: p.invoiceRef||p.notes||'—',
               };
@@ -990,6 +1044,7 @@ function PurchaseRecord({ storeIsOpen }) {
                 <th>PACKSIZE</th>
                 <th>Products</th>
                 <th>Cost</th>
+                <th>Payment Source</th>
                 <th className="pr-col-right">Debit</th>
                 <th className="pr-col-right">Credit</th>
                 <th className="pr-col-right">Balance</th>
@@ -1021,6 +1076,7 @@ function PurchaseRecord({ storeIsOpen }) {
                         <td className="pr-notes-cell">{p.invoiceRef||p.notes||'—'}</td>
                         <td className="pr-supplier-cell">{p.supplierName||'—'}</td>
                         <td>—</td><td>—</td><td>—</td><td>—</td>
+                        <td style={{fontSize:'11px',color:'#6b7280',whiteSpace:'nowrap'}}>{paymentSourceLabel(p.paymentMethod)}</td>
                         <td className="pr-col-right pr-total-cell">{payType==='credit' ? fmt(p.total||0) : '—'}</td>
                         <td className="pr-col-right pr-credit-cell">{payType==='cash' ? fmt(p.total||0) : '—'}</td>
                         <td className="pr-col-right pr-running-cell">{fmt(runningSnap)}</td>
@@ -1045,6 +1101,7 @@ function PurchaseRecord({ storeIsOpen }) {
                       <td className="pr-subrow-cell">{item.packDisplay||(item.packUnit?`${item.packUnit}×${item.packSize||'?'}`:item.packSize||'—')}</td>
                       <td className="pr-subrow-cell pr-items-cell">{item.description||'—'}</td>
                       <td className="pr-subrow-cell pr-col-right">{item.costPrice?fmt(item.costPrice):'—'}</td>
+                      {idx===0 && <td rowSpan={items.length} className="pr-merged-cell" style={{fontSize:'11px',color:'#6b7280',whiteSpace:'nowrap'}}>{paymentSourceLabel(p.paymentMethod)}</td>}
                       {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-total-cell pr-col-right">{payType==='credit' ? fmt(p.total||0) : '—'}</td>}
                       {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-credit-cell pr-col-right">{payType==='cash' ? fmt(p.total||0) : '—'}</td>}
                       {idx===0 && <td rowSpan={items.length} className="pr-merged-cell pr-running-cell pr-col-right">{fmt(runningSnap)}</td>}
