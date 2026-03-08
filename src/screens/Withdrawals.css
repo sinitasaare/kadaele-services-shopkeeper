@@ -1,4 +1,4 @@
-/* ── Withdrawals Screen ───────────────────────────────────────────────────── */
+/* ── Withdrawals.css - Kadaele Shopkeeper App ───────────────────────────────────────────────────── */
 .wd-container {
   padding: 12px;
   max-width: 100%;
@@ -48,9 +48,9 @@
 .wd-filter-btn {
   padding: 7px 18px;
   border-radius: 8px;
-  border: 1.5px solid var(--border, #e5e7eb);
-  background: var(--surface, #fff);
-  color: var(--text-primary, #111);
+  border: 1.5px solid #667eea;
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  color: #4338ca;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -196,8 +196,8 @@
 .wd-table tbody tr:last-child td { border-bottom: none; }
 .wd-table tbody tr:hover { background: rgba(102,126,234,0.04); }
 
-.wd-col-date { min-width: 90px; white-space: nowrap; }
-.wd-col-desc { min-width: 180px; color: var(--text-secondary, #6b7280); font-size: 12px; white-space: normal; word-break: break-word; }
+.wd-col-date { min-width: 80px; }
+.wd-col-desc { min-width: 140px; color: var(--text-secondary, #6b7280); font-size: 12px; }
 .wd-col-right { text-align: right !important; }
 .wd-time { font-size: 11px; color: var(--text-secondary, #9ca3af); margin-top: 2px; }
 
