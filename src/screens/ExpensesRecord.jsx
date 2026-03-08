@@ -959,7 +959,10 @@ function ExpensesRecord() {
         </div>
 
         {showFilters && (
-          <div className="er-filters-section">
+          <div className="filter-modal-overlay" onClick={() => setShowFilters(false)}>
+            <div className="filter-modal-sheet" onClick={e => e.stopPropagation()}>
+              <div className="filter-modal-handle"/>
+              <div className="filter-modal-title">Filter Expenses</div>
             <div className="er-filter-group">
               <label>CATEGORY FILTER</label>
               <div className="er-filter-buttons">
@@ -995,7 +998,11 @@ function ExpensesRecord() {
                 ))}
               </div>
             </div>
-            <button className="er-filter-action-btn er-add-btn" style={{ alignSelf:'flex-end' }} onClick={handleApplyFilters}>Apply Filters</button>
+              <div className="filter-modal-actions">
+                <button className="filter-modal-cancel" onClick={() => setShowFilters(false)}>Cancel</button>
+                <button className="filter-modal-apply" onClick={handleApplyFilters}>Apply Filter</button>
+              </div>
+            </div>
           </div>
         )}
 

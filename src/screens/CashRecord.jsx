@@ -1980,7 +1980,10 @@ function CashRecord() {
       {/* ── Sticky header ── */}
       <div className="cj-sticky-bar">
         {showFilters && (
-          <div className="cj-filters-section">
+          <div className="filter-modal-overlay" onClick={handleCloseFilter}>
+            <div className="filter-modal-sheet" onClick={e => e.stopPropagation()}>
+              <div className="filter-modal-handle"/>
+              <div className="filter-modal-title">Filter Entries</div>
             <div className="cj-filter-group">
               <label>Entry Type</label>
               <div className="cj-filter-buttons">
@@ -2028,6 +2031,11 @@ function CashRecord() {
                 {!startDate && <span className="cj-date-range-hint">Select a "From" date first</span>}
               </div>
             )}
+              <div className="filter-modal-actions">
+                <button className="filter-modal-cancel" onClick={handleCloseFilter}>Cancel</button>
+                <button className="filter-modal-apply" onClick={handleApply}>Apply Filter</button>
+              </div>
+            </div>
           </div>
         )}
 

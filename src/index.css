@@ -450,3 +450,65 @@ tr:hover {
 [data-theme="dark"] ::-webkit-scrollbar { width: 6px; height: 6px; }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: #0f1117; }
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 3px; }
+
+/* ── Filter Bottom Sheet Modal (shared across all screens) ── */
+.filter-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.filter-modal-sheet {
+  background: var(--surface, #fff);
+  width: 100%;
+  max-width: 480px;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px 32px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.filter-modal-handle {
+  width: 40px;
+  height: 4px;
+  background: #d1d5db;
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.filter-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #111);
+  margin-bottom: 16px;
+}
+.filter-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+.filter-modal-cancel {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border, #e5e7eb);
+  background: transparent;
+  color: var(--text-primary, #374151);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.filter-modal-apply {
+  flex: 2;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+[data-theme="dark"] .filter-modal-sheet { background: #1e2a3a; }
+[data-theme="dark"] .filter-modal-handle { background: #374151; }

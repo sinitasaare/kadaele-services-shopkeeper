@@ -654,14 +654,14 @@ function SalesRecord() {
             </div>
           </div>
           {dateFilter === 'single' && (
-            <div className="filter-group">
+              <div className="filter-group">
               <label>Select Date</label>
               <input type="date" value={selectedDate} max={getTodayStr()}
                 onChange={e => setSelectedDate(e.target.value)} className="date-input" />
             </div>
           )}
           {dateFilter === 'range' && (
-            <div className="filter-group">
+              <div className="filter-group">
               <label>Date Range</label>
               <div className="date-range-inputs">
                 <div className="date-range-field">
@@ -687,36 +687,39 @@ function SalesRecord() {
       <div className="sj-sticky-bar">
         {/* Filter panel — inside sticky bar so it scrolls with the bar */}
         {showFilters && (
-          <div className="filters-section">
-            <div className="filter-group">
-              <label>Payment Type</label>
-              <div className="filter-buttons">
+          <div className="filter-modal-overlay" onClick={handleClose}>
+            <div className="filter-modal-sheet" onClick={e => e.stopPropagation()}>
+              <div className="filter-modal-handle"/>
+              <div className="filter-modal-title">Filter Sales</div>
+              <div className="filter-group">
+                <label>Payment Type</label>
+                <div className="filter-buttons">
                 {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only'], ['mixed', 'Mixed']].map(([val, lbl]) => (
-                  <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
+                    <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
                     onClick={() => setPaymentFilter(val)}>{lbl}</button>
                 ))}
               </div>
             </div>
-            <div className="filter-group">
-              <label>Date Filter</label>
-              <div className="filter-buttons">
+              <div className="filter-group">
+                <label>Date Filter</label>
+                <div className="filter-buttons">
                 {[['today', 'Today'], ['single', 'Single Date'], ['range', 'Date Range']].map(([val, lbl]) => (
-                  <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
+                    <button key={val} className={`filter-btn${dateFilter === val ? ' active' : ''}`}
                     onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
                     {lbl}
                   </button>
                 ))}
               </div>
             </div>
-            {dateFilter === 'single' && (
-              <div className="filter-group">
+              {dateFilter === 'single' && (
+                <div className="filter-group">
                 <label>Select Date</label>
                 <input type="date" value={selectedDate} max={getTodayStr()}
                   onChange={e => setSelectedDate(e.target.value)} className="date-input" />
               </div>
             )}
-            {dateFilter === 'range' && (
-              <div className="filter-group">
+              {dateFilter === 'range' && (
+                <div className="filter-group">
                 <label>Date Range</label>
                 <div className="date-range-inputs">
                   <div className="date-range-field">
@@ -735,6 +738,11 @@ function SalesRecord() {
                 {!startDate && <span className="date-range-hint">Select a "From" date first</span>}
               </div>
             )}
+              <div className="filter-modal-actions">
+                <button className="filter-modal-cancel" onClick={handleClose}>Cancel</button>
+                <button className="filter-modal-apply" onClick={handleApply}>Apply Filter</button>
+              </div>
+            </div>
           </div>
         )}
         <div className="filter-btn-wrapper">

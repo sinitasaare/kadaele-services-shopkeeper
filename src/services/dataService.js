@@ -2610,8 +2610,7 @@ class DataService {
 
   async getDailyCashRecords() {
     try {
-      if (this.isOnline && auth.currentUser && !this._dailyCashFetched) {
-        this._dailyCashFetched = true;
+      if (this.isOnline && auth.currentUser) {
         const snap = await getDocs(collection(db, 'daily_cash'));
         const fbDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const local  = await localforage.getItem(DATA_KEYS.DAILY_CASH) || [];

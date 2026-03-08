@@ -854,54 +854,62 @@ function PurchaseRecord({ storeIsOpen }) {
     <div className="pr-record">
       <div className="pr-sticky-bar">
         {showFilters && (
-          <div className="pr-filters-section">
-            <div className="pr-filter-group">
-              <label>Payment Type</label>
-              <div className="pr-filter-buttons">
-                {[['all','All Purchases'],['cash','Cash Only'],['credit','Credit Only']].map(([val,lbl]) => (
-                  <button key={val} className={`pr-filter-btn${paymentFilter===val?' active':''}`}
-                    onClick={() => setPaymentFilter(val)}>{lbl}</button>
-                ))}
-              </div>
-            </div>
-            <div className="pr-filter-group">
-              <label>Date Filter</label>
-              <div className="pr-filter-buttons">
-                {[['today','Today'],['single','Single Date'],['range','Date Range']].map(([val,lbl]) => (
-                  <button key={val} className={`pr-filter-btn${dateFilter===val?' active':''}`}
-                    onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
-                    {lbl}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {dateFilter==='single' && (
+          <div className="filter-modal-overlay" onClick={handleClose}>
+            <div className="filter-modal-sheet" onClick={e => e.stopPropagation()}>
+              <div className="filter-modal-handle"/>
+              <div className="filter-modal-title">Filter Purchases</div>
               <div className="pr-filter-group">
-                <label>Select Date</label>
-                <input type="date" value={selectedDate} max={getTodayStr()}
-                  onChange={e => setSelectedDate(e.target.value)} className="pr-date-input" />
-              </div>
-            )}
-            {dateFilter==='range' && (
-              <div className="pr-filter-group">
-                <label>Date Range</label>
-                <div className="pr-date-range-inputs">
-                  <div className="pr-date-range-field">
-                    <label className="pr-date-range-label">From:</label>
-                    <input type="date" value={startDate} max={getTodayStr()}
-                      onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
-                      className="pr-date-input" />
-                  </div>
-                  <div className="pr-date-range-field">
-                    <label className="pr-date-range-label">To:</label>
-                    <input type="date" value={endDate} min={startDate||undefined} max={getTodayStr()}
-                      disabled={!startDate} onChange={e => setEndDate(e.target.value)}
-                      className={`pr-date-input${!startDate?' pr-date-input-disabled':''}`} />
-                  </div>
+                <label>Payment Type</label>
+                <div className="pr-filter-buttons">
+                  {[['all','All Purchases'],['cash','Cash Only'],['credit','Credit Only']].map(([val,lbl]) => (
+                    <button key={val} className={`pr-filter-btn${paymentFilter===val?' active':''}`}
+                      onClick={() => setPaymentFilter(val)}>{lbl}</button>
+                  ))}
                 </div>
-                {!startDate && <span className="pr-date-range-hint">Select a "From" date first</span>}
               </div>
-            )}
+              <div className="pr-filter-group">
+                <label>Date Filter</label>
+                <div className="pr-filter-buttons">
+                  {[['today','Today'],['single','Single Date'],['range','Date Range']].map(([val,lbl]) => (
+                    <button key={val} className={`pr-filter-btn${dateFilter===val?' active':''}`}
+                      onClick={() => { setDateFilter(val); setSelectedDate(''); setStartDate(''); setEndDate(''); }}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {dateFilter==='single' && (
+                <div className="pr-filter-group">
+                  <label>Select Date</label>
+                  <input type="date" value={selectedDate} max={getTodayStr()}
+                    onChange={e => setSelectedDate(e.target.value)} className="pr-date-input" />
+                </div>
+              )}
+              {dateFilter==='range' && (
+                <div className="pr-filter-group">
+                  <label>Date Range</label>
+                  <div className="pr-date-range-inputs">
+                    <div className="pr-date-range-field">
+                      <label className="pr-date-range-label">From:</label>
+                      <input type="date" value={startDate} max={getTodayStr()}
+                        onChange={e => { setStartDate(e.target.value); if (endDate && endDate < e.target.value) setEndDate(''); }}
+                        className="pr-date-input" />
+                    </div>
+                    <div className="pr-date-range-field">
+                      <label className="pr-date-range-label">To:</label>
+                      <input type="date" value={endDate} min={startDate||undefined} max={getTodayStr()}
+                        disabled={!startDate} onChange={e => setEndDate(e.target.value)}
+                        className={`pr-date-input${!startDate?' pr-date-input-disabled':''}`} />
+                    </div>
+                  </div>
+                  {!startDate && <span className="pr-date-range-hint">Select a "From" date first</span>}
+                </div>
+              )}
+              <div className="filter-modal-actions">
+                <button className="filter-modal-cancel" onClick={handleClose}>Cancel</button>
+                <button className="filter-modal-apply" onClick={handleApply}>Apply Filter</button>
+              </div>
+            </div>
           </div>
         )}
 

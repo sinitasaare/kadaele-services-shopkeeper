@@ -188,7 +188,10 @@ export default function Withdrawals() {
       </div>
 
       {showFilters && (
-        <div className="wd-filter-panel">
+        <div className="filter-modal-overlay" onClick={handleClose}>
+          <div className="filter-modal-sheet" onClick={e => e.stopPropagation()}>
+            <div className="filter-modal-handle"/>
+            <div className="filter-modal-title">Filter Withdrawals</div>
           {/* Type */}
           <div className="wd-filter-section">
             <div className="wd-filter-section-label">Type</div>
@@ -221,6 +224,11 @@ export default function Withdrawals() {
                   onChange={e=>setEndDate(e.target.value)} placeholder="To" />
               </div>
             )}
+          </div>
+            <div className="filter-modal-actions">
+              <button className="filter-modal-cancel" onClick={handleClose}>Cancel</button>
+              <button className="filter-modal-apply" onClick={handleApply}>Apply Filter</button>
+            </div>
           </div>
         </div>
       )}
