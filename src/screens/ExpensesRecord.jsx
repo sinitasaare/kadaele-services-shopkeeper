@@ -24,7 +24,6 @@ const CATEGORY_GROUPS = [
 ];
 
 // Categories where the Paid To field shows specific pre-filled suggestions
-// (all other categories show the Supplier button)
 const CATEGORY_PAYEE_MODE = {
   'Owner Drawings':     'owner',
   'Wages':              'wages',
@@ -35,6 +34,10 @@ const CATEGORY_PAYEE_MODE = {
 CATEGORY_PAYEE_MODE[SYSTEM_FEE_CAT] = 'system_fee';
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.items); // eslint-disable-line no-unused-vars
 const QUICK_CATS = ['Utilities', 'Wages', 'Owner Drawings'];
+
+// Which category opens which supplier modal when 🛒 Supplier is tapped
+const SERVICE_CATS    = ['Utilities', 'Maintenance', 'Internet'];
+const CONSUMABLE_CATS = ['Fuel', 'Supplies', 'Food'];
 
 const PAYMENT_METHODS = [
   { value: 'cash',          label: 'Cash' },
@@ -59,6 +62,19 @@ function methodLabel(m) {
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ── Build description string from expense fields ──────────────────────────────
+function buildExpenseDescription(category, payee, note, gender) {
+  if (category === 'Wages') {
+    const pronoun = (gender || '').toLowerCase() === 'female' ? 'her' : 'his';
+    return `Paid ${payee || '—'} ${pronoun} wages`;
+  }
+  if (category === SYSTEM_FEE_CAT) return 'Paid Sinita POS System for weekly fee';
+  if (category === 'Owner Drawings') return `${payee || '—'} withdraws cash`;
+  if (category === 'Donations') return `Donated CASH to ${payee || '—'}`;
+  if (category === 'Community Support') return `Contribution to support ${payee || '—'}`;
+  return `Paid ${payee || note || '—'} for ${category || 'expense'}`;
 }
 
 // ── Category picker modal ──────────────────────────────────────────────────────
@@ -91,15 +107,217 @@ function CategoryModal({ selected, onSelect, onClose }) {
   );
 }
 
-// ── New Supplier Modal (migrated from CashRecord) ──────────────────────────────
+// ── Shared modal shell styles ─────────────────────────────────────────────────
+const modalShell  = { position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' };
+const modalBox    = { background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'480px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 12px 48px rgba(0,0,0,0.3)', overflow:'hidden' };
+const modalHeader = { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border, #e5e7eb)', flexShrink:0 };
+const modalBody   = { overflowY:'auto', padding:'20px', flex:1, display:'flex', flexDirection:'column', gap:'16px' };
+const modalFooter = { display:'flex', gap:'10px', padding:'16px 20px', borderTop:'1px solid var(--border, #e5e7eb)', flexShrink:0 };
+const ls = { display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' };
+const fs = { width:'100%', padding:'10px 12px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' };
+const btnCancel = { flex:1, padding:'12px', borderRadius:'8px', border:'1.5px solid var(--border, #e5e7eb)', background:'var(--surface, white)', color:'var(--text-primary, #111)', cursor:'pointer', fontWeight:600, fontSize:'14px' };
+
+// ── Receipt Reminder logic — fires 2 hours after an expense is saved ──────────
+function scheduleReceiptReminder(expenseId, category, payee) {
+  const TWO_HOURS = 2 * 60 * 60 * 1000;
+  const key = `receipt_reminder_${expenseId}`;
+  if (localStorage.getItem(key)) return; // already scheduled
+  localStorage.setItem(key, 'pending');
+  setTimeout(() => {
+    const stillPending = localStorage.getItem(key) === 'pending';
+    if (!stillPending) return;
+    const desc = buildExpenseDescription(category, payee, '', '');
+    alert(`📎 Reminder: Please attach a receipt or invoice ref for:\n"${desc}"\n\nOpen Expenses Record to add it.`);
+    localStorage.setItem(key, 'done');
+  }, TWO_HOURS);
+}
+
+// ── Purchase Consumable Supplies Modal (#2) — Fuel, Supplies, Food ─────────────
+function PurchaseConsumablesModal({ category, onSave, onClose }) {
+  const { fmt } = useCurrency();
+  const { fieldErrors, showError, clearFieldError } = useValidation();
+  const [date, setDate]             = useState(todayStr());
+  const [supplierName, setSupplierName] = useState('');
+  const [invoiceRef, setInvoiceRef] = useState('');
+  const [note, setNote]             = useState('');
+  const [saving, setSaving]         = useState(false);
+  const nextId = useRef(2);
+  const [items, setItems] = useState([{ id: 1, name: '', qty: '', unitCost: '' }]);
+
+  const updateItem = (id, field, val) => setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: val } : it));
+  const addItem    = () => setItems(prev => [...prev, { id: nextId.current++, name: '', qty: '', unitCost: '' }]);
+  const removeItem = id => setItems(prev => prev.filter(it => it.id !== id));
+  const grandTotal = items.reduce((s, it) => s + (parseFloat(it.qty)||0) * (parseFloat(it.unitCost)||0), 0);
+  const lastOk = () => { const l = items[items.length-1]; return l && l.name.trim() && parseFloat(l.qty) > 0; };
+
+  const handleSave = async () => {
+    if (!supplierName.trim()) return showError('cs_supplier', 'Enter supplier / shop name');
+    if (!date) return showError('cs_date', 'Date is required');
+    const valid = items.filter(it => it.name.trim() && parseFloat(it.qty) > 0);
+    if (valid.length === 0) return showError('cs_items', 'Add at least one item');
+    setSaving(true);
+    try {
+      const dateISO = new Date(date + 'T12:00:00').toISOString();
+      const itemsSummary = valid.map(i => i.name).join(', ');
+      const total = valid.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitCost)||0), 0);
+      if (total > 0) {
+        await dataService.addCashEntry({ type: 'out', amount: total, note: `Paid ${supplierName.trim()} for ${category}: ${itemsSummary}`, date: dateISO, source: 'expense', business_date: date, invoiceRef: invoiceRef.trim() });
+      }
+      const result = { supplierName: supplierName.trim(), payee: supplierName.trim(), total, amount: total, invoiceRef: invoiceRef.trim(), note: note.trim(), itemsSummary, items: valid };
+      scheduleReceiptReminder(`cs_${Date.now()}`, category, supplierName.trim());
+      onSave(result);
+    } catch (e) { console.error(e); showError('cs_items', 'Failed to save. Try again.'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={modalShell}>
+      <div style={modalBox}>
+        <div style={modalHeader}>
+          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>🛍️ Purchase Consumable Supplies</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary,#6b7280)', padding:'4px' }}><X size={20}/></button>
+        </div>
+        <div style={modalBody}>
+          <div style={{ padding:'8px 12px', background:'#fef9c3', border:'1px solid #fde047', borderRadius:'8px', fontSize:'12px', color:'#713f12' }}>
+            📦 Category: <strong>{category}</strong> · Cash only · Items consumed in operations
+          </div>
+          <div><label style={ls}>Supplier / Shop Name *</label>
+            <input data-field="cs_supplier" style={{ ...fs, ...errorBorder('cs_supplier', fieldErrors) }} value={supplierName} placeholder="e.g. Island Petroleum, City Store…" onChange={e => { setSupplierName(e.target.value); clearFieldError('cs_supplier'); }} />
+            <ValidationNote field="cs_supplier" errors={fieldErrors} />
+          </div>
+          <div><label style={ls}>Invoice / Receipt Ref <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <input style={fs} value={invoiceRef} placeholder="Receipt or ref number…" onChange={e => setInvoiceRef(e.target.value)} />
+          </div>
+          <div><label style={ls}>Date *</label>
+            <input type="date" data-field="cs_date" style={{ ...fs, ...errorBorder('cs_date', fieldErrors) }} value={date} max={todayStr()} onChange={e => { setDate(e.target.value); clearFieldError('cs_date'); }} />
+            <ValidationNote field="cs_date" errors={fieldErrors} />
+          </div>
+          <div>
+            <label style={{ ...ls, marginBottom:'8px' }}>Items Purchased *</label>
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }} data-field="cs_items">
+              {items.map((it, idx) => {
+                const sub = (parseFloat(it.qty)||0) * (parseFloat(it.unitCost)||0);
+                return (
+                  <div key={it.id} style={{ border:'1.5px solid var(--border,#e5e7eb)', borderRadius:'10px', padding:'12px', background:'var(--background,#f9fafb)', display:'flex', flexDirection:'column', gap:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <span style={{ fontSize:'12px', fontWeight:700, color:'#f59e0b' }}>Item {idx+1}</span>
+                      {items.length > 1 && <button onClick={() => removeItem(it.id)} style={{ background:'#fee2e2', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#dc2626', fontSize:'12px', display:'flex', alignItems:'center', gap:'4px' }}><Trash2 size={12}/> Remove</button>}
+                    </div>
+                    <div><label style={{ fontSize:'12px', fontWeight:600, color:'var(--text-secondary,#6b7280)', display:'block', marginBottom:'3px' }}>Item Name *</label>
+                      <input style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border,#e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface,white)', color:'var(--text-primary,#111)', boxSizing:'border-box' }} value={it.name} placeholder={category === 'Fuel' ? 'e.g. Petrol, Diesel…' : 'e.g. Stationery, Food items…'} onChange={e => updateItem(it.id, 'name', e.target.value)} /></div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                      <div><label style={{ fontSize:'12px', fontWeight:600, color:'var(--text-secondary,#6b7280)', display:'block', marginBottom:'3px' }}>Qty / Units *</label>
+                        <input type="number" min="0" step="0.01" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border,#e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface,white)', color:'var(--text-primary,#111)', boxSizing:'border-box' }} value={it.qty} placeholder="0" onChange={e => updateItem(it.id, 'qty', e.target.value)} /></div>
+                      <div><label style={{ fontSize:'12px', fontWeight:600, color:'var(--text-secondary,#6b7280)', display:'block', marginBottom:'3px' }}>Unit Cost</label>
+                        <input type="number" min="0" step="0.01" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border,#e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface,white)', color:'var(--text-primary,#111)', boxSizing:'border-box' }} value={it.unitCost} placeholder="0.00" onChange={e => updateItem(it.id, 'unitCost', e.target.value)} /></div>
+                    </div>
+                    {sub > 0 && <div style={{ padding:'5px 10px', background:'#fef9c3', border:'1px solid #fde047', borderRadius:'6px', fontSize:'12px', color:'#713f12', fontWeight:600 }}>Subtotal: {sub.toFixed(2)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            <ValidationNote field="cs_items" errors={fieldErrors} />
+            <button onClick={addItem} disabled={!lastOk()} style={{ marginTop:'10px', width:'100%', padding:'10px', border:'1.5px dashed var(--border,#d1d5db)', borderRadius:'8px', background:lastOk()?'var(--surface,white)':'var(--background,#f9fafb)', color:lastOk()?'#f59e0b':'#9ca3af', cursor:lastOk()?'pointer':'not-allowed', fontSize:'13px', fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}><Plus size={14}/> Add Another Item</button>
+          </div>
+          {grandTotal > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#fef9c3', border:'1.5px solid #fde047', borderRadius:'10px' }}>
+              <span style={{ fontWeight:700, fontSize:'14px', color:'#713f12' }}>Total Amount</span>
+              <span style={{ fontWeight:800, fontSize:'15px', color:'#713f12' }}>{fmt(grandTotal)}</span>
+            </div>
+          )}
+          <div><label style={ls}>Note <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <textarea style={{ ...fs, minHeight:'60px', resize:'vertical' }} value={note} placeholder="Any additional details…" onChange={e => setNote(e.target.value)} />
+          </div>
+          <p style={{ fontSize:'11px', color:'#667eea', margin:0, fontStyle:'italic' }}>💵 Cash only — a Cash OUT entry will be recorded automatically.</p>
+        </div>
+        <div style={modalFooter}>
+          <button style={btnCancel} onClick={onClose}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:saving?'#9ca3af':'#f59e0b', color:'white', cursor:saving?'not-allowed':'pointer', fontWeight:700, fontSize:'14px' }}>{saving ? 'Saving…' : 'Save Purchase'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Purchase Operational Services Modal (#3) — Utilities, Maintenance, Internet ─
+function PurchaseServicesModal({ category, onSave, onClose }) {
+  const { fmt } = useCurrency();
+  const { fieldErrors, showError, clearFieldError } = useValidation();
+  const [date, setDate]               = useState(todayStr());
+  const [providerName, setProviderName] = useState('');
+  const [invoiceRef, setInvoiceRef]   = useState('');
+  const [amount, setAmount]           = useState('');
+  const [billingPeriod, setBillingPeriod] = useState('');
+  const [note, setNote]               = useState('');
+  const [saving, setSaving]           = useState(false);
+
+  const handleSave = async () => {
+    if (!providerName.trim()) return showError('svc_provider', 'Provider name is required');
+    if (!date) return showError('svc_date', 'Date is required');
+    if (!amount || parseFloat(amount) <= 0) return showError('svc_amount', 'Enter the amount paid');
+    setSaving(true);
+    try {
+      const dateISO = new Date(date + 'T12:00:00').toISOString();
+      const total = parseFloat(amount);
+      const noteStr = [billingPeriod ? `Period: ${billingPeriod}` : '', note].filter(Boolean).join(' · ');
+      await dataService.addCashEntry({ type: 'out', amount: total, note: `Paid ${providerName.trim()} for ${category}${billingPeriod ? ` (${billingPeriod})` : ''}`, date: dateISO, source: 'expense', business_date: date, invoiceRef: invoiceRef.trim() });
+      const result = { supplierName: providerName.trim(), payee: providerName.trim(), total, amount: total, invoiceRef: invoiceRef.trim(), note: noteStr };
+      scheduleReceiptReminder(`svc_${Date.now()}`, category, providerName.trim());
+      onSave(result);
+    } catch (e) { console.error(e); showError('svc_amount', 'Failed to save. Try again.'); }
+    finally { setSaving(false); }
+  };
+
+  const serviceIcon = category === 'Utilities' ? '💡' : category === 'Internet' ? '📶' : '🔧';
+
+  return (
+    <div style={modalShell}>
+      <div style={modalBox}>
+        <div style={modalHeader}>
+          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>{serviceIcon} Purchase Operational Services</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary,#6b7280)', padding:'4px' }}><X size={20}/></button>
+        </div>
+        <div style={modalBody}>
+          <div style={{ padding:'8px 12px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'8px', fontSize:'12px', color:'#1e40af' }}>
+            {serviceIcon} Category: <strong>{category}</strong> · Service payments (bills, maintenance, internet, etc.)
+          </div>
+          <div><label style={ls}>Provider / Company Name *</label>
+            <input data-field="svc_provider" style={{ ...fs, ...errorBorder('svc_provider', fieldErrors) }} value={providerName} placeholder={category === 'Utilities' ? 'e.g. SIEA, SIWA…' : category === 'Internet' ? 'e.g. Our Telekom, BeMobile…' : 'e.g. Repair Service, Contractor…'} onChange={e => { setProviderName(e.target.value); clearFieldError('svc_provider'); }} />
+            <ValidationNote field="svc_provider" errors={fieldErrors} />
+          </div>
+          <div><label style={ls}>Amount Paid *</label>
+            <input type="number" data-field="svc_amount" style={{ ...fs, ...errorBorder('svc_amount', fieldErrors) }} value={amount} placeholder="0.00" min="0" step="0.01" onChange={e => { setAmount(e.target.value); clearFieldError('svc_amount'); }} />
+            <ValidationNote field="svc_amount" errors={fieldErrors} />
+          </div>
+          <div><label style={ls}>Invoice / Receipt Ref <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <input style={fs} value={invoiceRef} placeholder="Bill number or receipt ref…" onChange={e => setInvoiceRef(e.target.value)} />
+          </div>
+          <div><label style={ls}>Billing Period <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <input style={fs} value={billingPeriod} placeholder="e.g. March 2026, Week 10…" onChange={e => setBillingPeriod(e.target.value)} />
+          </div>
+          <div><label style={ls}>Date Paid *</label>
+            <input type="date" data-field="svc_date" style={{ ...fs, ...errorBorder('svc_date', fieldErrors) }} value={date} max={todayStr()} onChange={e => { setDate(e.target.value); clearFieldError('svc_date'); }} />
+            <ValidationNote field="svc_date" errors={fieldErrors} />
+          </div>
+          <div><label style={ls}>Note <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <textarea style={{ ...fs, minHeight:'60px', resize:'vertical' }} value={note} placeholder="Any additional details…" onChange={e => setNote(e.target.value)} />
+          </div>
+          <p style={{ fontSize:'11px', color:'#667eea', margin:0, fontStyle:'italic' }}>💵 Cash only — a Cash OUT entry will be recorded automatically.</p>
+        </div>
+        <div style={modalFooter}>
+          <button style={btnCancel} onClick={onClose}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:saving?'#9ca3af':'#3b82f6', color:'white', cursor:saving?'not-allowed':'pointer', fontWeight:700, fontSize:'14px' }}>{saving ? 'Saving…' : 'Save Payment'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── New Supplier Modal (Purchase Durable Assets — #1) ─────────────────────────
 function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   const { fmt } = useCurrency();
   const { fieldErrors, showError, clearFieldError } = useValidation();
   const [activeTab, setActiveTab] = useState('details');
-  const [supplierMode, setSupplierMode] = useState('search');
-  const [supplierSearchText, setSupplierSearchText] = useState('');
-  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
-  const [selectedExistingSupplier, setSelectedExistingSupplier] = useState(null);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -116,9 +334,6 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   const [items, setItems] = useState([{ id: 1, name: '', qty: '', costPrice: '' }]);
   const [saving, setSaving] = useState(false);
 
-  const filteredSuppliers = suppliersList.filter(s =>
-    (s.name || s.customerName || '').toLowerCase().includes(supplierSearchText.toLowerCase())
-  );
   const updateItem = (id, field, val) => setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: val } : it));
   const addItem = () => setItems(prev => [...prev, { id: nextId.current++, name: '', qty: '', costPrice: '' }]);
   const removeItem = id => setItems(prev => prev.filter(it => it.id !== id));
@@ -157,21 +372,18 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
     try {
       const dateISO = new Date(date + 'T12:00:00').toISOString();
       const supplierName = fullName.trim();
-      let supplierId = selectedExistingSupplier?.id || null;
-      if (!supplierId) {
-        const supplierData = {
-          id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-          customerName: supplierName, name: supplierName,
-          phone: phone.trim(), customerPhone: phone.trim(), gender: '',
-          whatsapp: whatsapp.trim(), email: email.trim(), address: address.trim(),
-          totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null,
-        };
-        const current = await dataService.getSuppliers() || [];
-        current.push(supplierData);
-        await dataService.setSuppliers(current);
-        supplierId = supplierData.id;
-      }
+      const supplierData = {
+        id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        customerName: supplierName, name: supplierName,
+        phone: phone.trim(), customerPhone: phone.trim(), gender: '',
+        whatsapp: whatsapp.trim(), email: email.trim(), address: address.trim(),
+        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null,
+      };
+      const current = await dataService.getSuppliers() || [];
+      current.push(supplierData);
+      await dataService.setSuppliers(current);
+      const supplierId = supplierData.id;
       const savedItems = [];
       for (const it of validItems) {
         const qty = parseFloat(it.qty)||0, costPrice = parseFloat(it.costPrice)||0, subtotal = qty*costPrice;
@@ -182,13 +394,11 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
       if (paymentType === 'cash' && total > 0) {
         await dataService.addCashEntry({ type: 'out', amount: total, note: `Paid ${supplierName} for ref: ${invoiceRef.trim()}`, date: dateISO, source: 'purchase', business_date: date, invoiceRef: invoiceRef.trim() });
       }
+      scheduleReceiptReminder(`ns_${Date.now()}`, 'Supplier Purchase', supplierName);
       onSave({ supplierName, supplierId, paymentType, total, invoiceRef: invoiceRef.trim(), itemsSummary: savedItems.map(i => i.name).join(', '), items: savedItems });
     } catch (e) { console.error(e); showError('ns_items', 'Failed to save. Please try again.'); }
     finally { setSaving(false); }
   };
-
-  const ls = { display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' };
-  const fs = { width:'100%', padding:'10px 12px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' };
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -212,42 +422,13 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
           {activeTab==='details' && (<>
             <div>
               <label style={ls}>Supplier Name *</label>
-              <div style={{ display:'flex', gap:'8px', position:'relative' }}>
-                <div style={{ flex:1, position:'relative' }}>
-                  {supplierMode==='search' ? (
-                    <>
-                      <input style={{ ...fs, paddingRight: selectedExistingSupplier?'32px':'12px', ...errorBorder('ns_fullName', fieldErrors) }} data-field="ns_fullName"
-                        value={supplierSearchText} placeholder="Search existing suppliers…"
-                        onChange={e => { setSupplierSearchText(e.target.value); setShowSupplierDrop(true); setSelectedExistingSupplier(null); clearFieldError('ns_fullName'); }}
-                        onFocus={() => setShowSupplierDrop(true)} onBlur={() => setTimeout(() => setShowSupplierDrop(false), 180)} />
-                      {selectedExistingSupplier && (
-                        <button onClick={() => { setSelectedExistingSupplier(null); setSupplierSearchText(''); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); }}
-                          style={{ position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9ca3af', fontSize:'16px', padding:'2px 4px' }}>✕</button>
-                      )}
-                      {showSupplierDrop && filteredSuppliers.length>0 && (
-                        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:600, background:'var(--surface, white)', border:'1px solid var(--border, #e5e7eb)', borderRadius:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.12)', maxHeight:'160px', overflowY:'auto' }}>
-                          {filteredSuppliers.map(s => { const n=s.name||s.customerName||''; return (
-                            <button key={s.id} onMouseDown={() => { setSelectedExistingSupplier(s); setSupplierSearchText(n); setFullName(n); setPhone(s.phone||s.customerPhone||''); setWhatsapp(s.whatsapp||''); setEmail(s.email||''); setAddress(s.address||''); setShowSupplierDrop(false); clearFieldError('ns_fullName'); }}
-                              style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'var(--text-primary, #111)' }}>{n}</button>
-                          ); })}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <input ref={nsFieldRefs.fullName} data-field="ns_fullName" style={{ ...fs, ...errorBorder('ns_fullName', fieldErrors) }} value={fullName} placeholder="Enter new supplier name" onChange={e => { setFullName(e.target.value); clearFieldError('ns_fullName'); }} />
-                  )}
-                </div>
-                <button onClick={() => { if (supplierMode==='search') { setSupplierMode('new'); setSelectedExistingSupplier(null); setSupplierSearchText(''); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); } else { setSupplierMode('search'); setFullName(''); setPhone(''); setWhatsapp(''); setEmail(''); setAddress(''); setSupplierSearchText(''); } }}
-                  style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border:supplierMode==='new'?'2px solid #16a34a':'2px solid #667eea', background:supplierMode==='new'?'#f0fdf4':'#eef2ff', color:supplierMode==='new'?'#16a34a':'#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
-                  {supplierMode==='new'?'🔍 Search':'+ New'}
-                </button>
-              </div>
+              <input ref={nsFieldRefs.fullName} data-field="ns_fullName" style={{ ...fs, ...errorBorder('ns_fullName', fieldErrors) }} value={fullName} placeholder="Enter supplier name" onChange={e => { setFullName(e.target.value); clearFieldError('ns_fullName'); }} />
               <ValidationNote field="ns_fullName" errors={fieldErrors} />
             </div>
-            <div ref={nsFieldRefs.phone}><label style={ls}>Phone *</label><input data-field="ns_phone" style={{ ...fs, ...errorBorder('ns_phone', fieldErrors) }} value={phone} placeholder="Phone number" readOnly={supplierMode==='search' && !!selectedExistingSupplier} onChange={e => { setPhone(e.target.value); clearFieldError('ns_phone'); }} /><ValidationNote field="ns_phone" errors={fieldErrors} /></div>
-            <div ref={nsFieldRefs.whatsapp}><label style={ls}>WhatsApp</label><input style={fs} value={whatsapp} placeholder="WhatsApp number" readOnly={supplierMode==='search' && !!selectedExistingSupplier} onChange={e => setWhatsapp(e.target.value)} /></div>
-            <div><label style={ls}>Email</label><input style={fs} value={email} placeholder="email@example.com" readOnly={supplierMode==='search' && !!selectedExistingSupplier} onChange={e => setEmail(e.target.value)} /></div>
-            <div ref={nsFieldRefs.address}><label style={ls}>Address *</label><input data-field="ns_address" style={{ ...fs, ...errorBorder('ns_address', fieldErrors) }} value={address} placeholder="Supplier address" readOnly={supplierMode==='search' && !!selectedExistingSupplier} onChange={e => { setAddress(e.target.value); clearFieldError('ns_address'); }} /><ValidationNote field="ns_address" errors={fieldErrors} /></div>
+            <div ref={nsFieldRefs.phone}><label style={ls}>Phone *</label><input data-field="ns_phone" style={{ ...fs, ...errorBorder('ns_phone', fieldErrors) }} value={phone} placeholder="Phone number" onChange={e => { setPhone(e.target.value); clearFieldError('ns_phone'); }} /><ValidationNote field="ns_phone" errors={fieldErrors} /></div>
+            <div ref={nsFieldRefs.whatsapp}><label style={ls}>WhatsApp</label><input style={fs} value={whatsapp} placeholder="WhatsApp number" onChange={e => setWhatsapp(e.target.value)} /></div>
+            <div><label style={ls}>Email</label><input style={fs} value={email} placeholder="email@example.com" onChange={e => setEmail(e.target.value)} /></div>
+            <div ref={nsFieldRefs.address}><label style={ls}>Address *</label><input data-field="ns_address" style={{ ...fs, ...errorBorder('ns_address', fieldErrors) }} value={address} placeholder="Supplier address" onChange={e => { setAddress(e.target.value); clearFieldError('ns_address'); }} /><ValidationNote field="ns_address" errors={fieldErrors} /></div>
           </>)}
           {activeTab==='purchase' && (<>
             <div><label style={ls}>Payment Type</label>
@@ -287,7 +468,7 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
           </>)}
         </div>
         <div style={{ display:'flex', gap:'10px', padding:'16px 20px', borderTop:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
-          <button onClick={onClose} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'1.5px solid var(--border, #e5e7eb)', background:'var(--surface, white)', color:'var(--text-primary, #111)', cursor:'pointer', fontWeight:600, fontSize:'14px' }}>Cancel</button>
+          <button onClick={onClose} style={btnCancel}>Cancel</button>
           {activeTab==='details'
             ? <button onClick={handleNextToPurchase} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:'#667eea', color:'white', cursor:'pointer', fontWeight:700, fontSize:'14px' }}>Next: Purchase →</button>
             : <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:saving?'#9ca3af':'#f59e0b', color:'white', cursor:saving?'not-allowed':'pointer', fontWeight:700, fontSize:'14px' }}>{saving?'Saving…':'Save Purchase'}</button>
@@ -298,7 +479,7 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   );
 }
 
-// ── Add Operational Assets Modal (migrated from CashRecord) ────────────────────
+// ── Add Operational Assets Modal ──────────────────────────────────────────────
 function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList, onSave, onClose, onNewSupplier }) {
   const { fmt } = useCurrency();
   const { fieldErrors, showError, clearFieldError } = useValidation();
@@ -337,11 +518,8 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
     if (!date) return showError('oa_date','Enter the Date');
     const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty)>0);
     if (validItems.length===0) return showError('oa_items','Add at least one item');
-    const badItems = items.filter(it => it.name.trim() && !(parseFloat(it.qty)>0));
-    if (badItems.length>0) { badItems.forEach(it => showError('oa_qty_'+it.id,'Enter a quantity')); return; }
     if (paymentType==='cash' && cashBalance!==null && grandTotal>cashBalance)
       return showError('oa_items',`Total exceeds Cash Balance. Reduce amount or switch to Credit.`);
-
     setSaving(true);
     try {
       const dateISO = new Date(date+'T12:00:00').toISOString();
@@ -354,6 +532,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
       if (paymentType==='cash' && grandTotal>0) {
         await dataService.addCashEntry({ type:'out', amount:grandTotal, note:`Paid ${supplierName} for ref: ${invoiceRef.trim()}`, date:dateISO, source:'purchase', business_date:date, invoiceRef:invoiceRef.trim() });
       }
+      scheduleReceiptReminder(`oa_${Date.now()}`, 'Supplier Purchase', supplierName);
       onSave({ supplierName, supplierId:resolvedSupplierId||null, paymentType, total:grandTotal, invoiceRef:invoiceRef.trim(), itemsSummary:savedItems.map(i=>i.name).join(', '), items:savedItems });
     } catch (e) { console.error(e); showError('oa_items','Failed to save. Please try again.'); }
     finally { setSaving(false); }
@@ -363,12 +542,12 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:4500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'480px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 12px 48px rgba(0,0,0,0.3)', overflow:'hidden' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>🛒 Buy Operational Assets / Expenses{resolvedSupplierId && supplierSearch.trim()?` from ${supplierSearch.trim()}`:''}</h2>
+          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>🛒 Purchase Durable Assets</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary, #6b7280)', padding:'4px' }}><X size={20}/></button>
         </div>
         <div style={{ overflowY:'auto', padding:'20px', flex:1, display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={{ position:'relative' }}>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Supplier Name *</label>
+            <label style={ls}>Supplier Name *</label>
             <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
               <div style={{ flex:1, position:'relative' }}>
                 <input data-field="oa_supplier" style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box', ...errorBorder('oa_supplier',fieldErrors) }}
@@ -391,7 +570,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
             <ValidationNote field="oa_supplier" errors={fieldErrors} />
           </div>
           <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Payment Type</label>
+            <label style={ls}>Payment Type</label>
             <div style={{ display:'flex', gap:'8px' }}>
               {[['cash','💵 Cash'],['credit','📋 Credit']].map(([pt,lbl]) => (
                 <button key={pt} onClick={() => setPaymentType(pt)} style={{ flex:1, padding:'9px', borderRadius:'8px', border:'2px solid', borderColor:paymentType===pt?(pt==='cash'?'#16a34a':'#4f46e5'):'var(--border, #d1d5db)', background:paymentType===pt?(pt==='cash'?'#f0fdf4':'#eef2ff'):'var(--surface, white)', fontWeight:paymentType===pt?700:400, cursor:'pointer', fontSize:'13px', color:'var(--text-primary, #111)' }}>{lbl}</button>
@@ -402,19 +581,19 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
             </p>
           </div>
           <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Invoice / Ref *</label>
+            <label style={ls}>Invoice / Ref *</label>
             <input style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={invoiceRef} placeholder="Receipt or invoice number…" onChange={e => setInvoiceRef(e.target.value)} />
           </div>
           <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Comments <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
+            <label style={ls}>Comments <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
             <textarea style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box', minHeight:'70px', resize:'vertical' }} value={comments} placeholder="Any additional notes or comments…" onChange={e => setComments(e.target.value)} />
           </div>
           <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Date *</label>
+            <label style={ls}>Date *</label>
             <input type="date" style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={date} max={todayStr()} onChange={e => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'8px', color:'var(--text-primary, #374151)' }}>Items *</label>
+            <label style={ls}>Items *</label>
             <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
               {items.map((it,idx) => { const sub=(parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0); return (
                 <div key={it.id} style={{ border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'10px', padding:'12px', background:'var(--background, #f9fafb)', display:'flex', flexDirection:'column', gap:'10px' }}>
@@ -451,7 +630,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
           )}
         </div>
         <div style={{ display:'flex', gap:'10px', padding:'16px 20px', borderTop:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
-          <button onClick={onClose} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'1.5px solid var(--border, #e5e7eb)', background:'var(--surface, white)', color:'var(--text-primary, #111)', cursor:'pointer', fontWeight:600, fontSize:'14px' }}>Cancel</button>
+          <button onClick={onClose} style={btnCancel}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:saving?'#9ca3af':'#f59e0b', color:'white', cursor:saving?'not-allowed':'pointer', fontWeight:700, fontSize:'14px' }}>{saving?'Saving…':'Save Assets'}</button>
         </div>
       </div>
@@ -494,21 +673,6 @@ function GroupOrgModal({ mode, onConfirm, onClose }) {
 }
 
 // ── Paid To smart dropdown ────────────────────────────────────────────────────
-
-// ── Build description string from expense fields ──────────────────────────────
-function buildExpenseDescription(category, payee, note, gender) {
-  const sysFee = SYSTEM_FEE_CAT;
-  if (category === 'Wages') {
-    const pronoun = gender === 'Female' ? 'her' : 'his';
-    return `Paid ${payee || '—'} ${pronoun} wages`;
-  }
-  if (category === sysFee) return 'Paid Sinita POS System for weekly fee';
-  if (category === 'Owner Drawings') return `${payee || '—'} withdraws cash`;
-  if (category === 'Donations') return `Donated CASH to ${payee || '—'}`;
-  if (category === 'Community Support') return `Contribution to support ${payee || '—'}`;
-  return `Paid ${payee || note || '—'} for ${category || 'expense'}`;
-}
-
 function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, clearFieldError, users }) {
   const [open, setOpen] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -517,14 +681,11 @@ function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, 
 
   const payeeMode = CATEGORY_PAYEE_MODE[category] || 'supplier';
 
-  // Role matching mirrors exactly what the Admin app (UserSettings.jsx) stores:
-  // 'Shop Owner'|'owner', 'Shop Manager'|'manager', 'Shopkeeper'|'staff', 'Landlord'
   const owner    = users.find(u => ['shop owner','owner'].includes((u.role||'').toLowerCase()));
   const manager  = users.find(u => ['shop manager','manager'].includes((u.role||'').toLowerCase()));
   const staff    = users.filter(u => ['shopkeeper','staff'].includes((u.role||'').toLowerCase()));
   const landlord = users.find(u => u.id === '__landlord__' || (u.role||'').toLowerCase() === 'landlord');
 
-  // Firebase stores the person's name in the 'fullName' field (set by Admin → UserSettings)
   const displayName = u => u?.fullName || u?.name || u?.displayName || u?.email?.split('@')[0] || '—';
 
   let suggestions = [];
@@ -542,7 +703,10 @@ function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, 
   } else if (payeeMode === 'system_fee') {
     suggestions = [{ label: 'Sinita POS Systems (SPOSH)', value: 'Sinita POS Systems (SPOSH)', icon: '💻' }];
   } else {
-    suggestions = [{ label: 'Supplier', value: '__supplier__', icon: '🛒', isAction: true }];
+    // Determine which supplier modal label to show
+    const modalLabel = SERVICE_CATS.includes(category) ? '🔧 Service Provider' :
+                       CONSUMABLE_CATS.includes(category) ? '🛍️ Supplier' : '🛒 Supplier';
+    suggestions = [{ label: modalLabel, value: '__supplier__', icon: '🛒', isAction: true }];
   }
 
   useEffect(() => {
@@ -613,19 +777,21 @@ function AddExpenseModal({ onSave, onClose }) {
   const { fmt } = useCurrency();
   const { fieldErrors, showError, clearFieldError } = useValidation();
 
-  const [date, setDate]                       = useState(todayStr());
-  const [category, setCategory]               = useState('');
-  const [amount, setAmount]                   = useState('');
-  const paymentMethod = 'cash'; // always cash
-  const [payee, setPayee]                     = useState('');
-  const [note, setNote]                       = useState('');
-  const [saving, setSaving]                   = useState(false);
-  const [showCatModal, setShowCatModal]       = useState(false);
-  const [showAssetsModal, setShowAssetsModal] = useState(false);
+  const [date, setDate]                         = useState(todayStr());
+  const [category, setCategory]                 = useState('');
+  const [amount, setAmount]                     = useState('');
+  const paymentMethod                           = 'cash'; // always cash
+  const [payee, setPayee]                       = useState('');
+  const [note, setNote]                         = useState('');
+  const [saving, setSaving]                     = useState(false);
+  const [showCatModal, setShowCatModal]         = useState(false);
+  const [showAssetsModal, setShowAssetsModal]   = useState(false);
   const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
-  const [suppliersList, setSuppliersList]     = useState([]);
-  const [assetsResult, setAssetsResult]       = useState(null);
-  const [users, setUsers]                     = useState([]);
+  const [showConsumablesModal, setShowConsumablesModal] = useState(false);
+  const [showServicesModal, setShowServicesModal] = useState(false);
+  const [suppliersList, setSuppliersList]       = useState([]);
+  const [assetsResult, setAssetsResult]         = useState(null);
+  const [users, setUsers]                       = useState([]);
 
   useEffect(() => {
     dataService.getSuppliers().then(s => setSuppliersList(s || []));
@@ -635,7 +801,7 @@ function AddExpenseModal({ onSave, onClose }) {
     });
   }, []);
 
-  useEffect(() => { setPayee(''); }, [category]);
+  useEffect(() => { setPayee(''); setAssetsResult(null); }, [category]);
 
   const isSupplierPurchase = category === 'Supplier Purchase';
 
@@ -650,7 +816,7 @@ function AddExpenseModal({ onSave, onClose }) {
         await dataService.addExpense({
           date, amount: assetsResult.total,
           category: 'Supplier Purchase',
-          paymentMethod: assetsResult.paymentType,
+          paymentMethod: assetsResult.paymentType || 'cash',
           payee: assetsResult.supplierName,
           note: `Ref: ${assetsResult.invoiceRef} — ${assetsResult.itemsSummary || ''}`,
           createdAt: now, updatedAt: now,
@@ -667,7 +833,6 @@ function AddExpenseModal({ onSave, onClose }) {
     setSaving(true);
     try {
       const now = new Date().toISOString();
-      // Resolve gender of payee from users list
       const payeeUser = users.find(u => (u.fullName||u.name||'').toLowerCase() === payee.trim().toLowerCase());
       const payeeGender = payeeUser?.gender || '';
       await dataService.addExpense({ date, amount: parseFloat(amount), category, paymentMethod, payee: payee.trim(), note: note.trim(), gender: payeeGender, createdAt: now, updatedAt: now });
@@ -679,10 +844,35 @@ function AddExpenseModal({ onSave, onClose }) {
   const handleAssetsResult = (result) => {
     setAssetsResult(result);
     setShowAssetsModal(false);
-    setPayee(result.supplierName);
-    setAmount(String(result.total));
-    setNote(`Ref: ${result.invoiceRef}`);
-    setPaymentMethod(result.paymentType === 'cash' ? 'cash' : 'other');
+    setPayee(result.supplierName || result.payee || '');
+    setAmount(String(result.total || result.amount || ''));
+    setNote(result.note || `Ref: ${result.invoiceRef || ''}`);
+  };
+
+  const handleSupplierModalResult = (result) => {
+    setShowConsumablesModal(false);
+    setShowServicesModal(false);
+    setAssetsResult(result);
+    setPayee(result.supplierName || result.payee || '');
+    setAmount(String(result.total || result.amount || ''));
+    setNote(result.note || '');
+    // Save directly — these modals handle their own cash entries
+    const saveIt = async () => {
+      try {
+        const now = new Date().toISOString();
+        await dataService.addExpense({
+          date, amount: parseFloat(result.total || result.amount || 0),
+          category,
+          paymentMethod: 'cash',
+          payee: result.supplierName || result.payee || '',
+          note: result.note || '',
+          createdAt: now, updatedAt: now,
+          _skipCashEntry: true,
+        });
+        onSave();
+      } catch (e) { console.error(e); }
+    };
+    saveIt();
   };
 
   return (
@@ -713,8 +903,8 @@ function AddExpenseModal({ onSave, onClose }) {
           </div>
 
           {isSupplierPurchase && assetsResult && (
-            <div style={{ padding: '10px 14px', background: assetsResult.paymentType === 'cash' ? '#f0fdf4' : '#eff6ff', border: `1.5px solid ${assetsResult.paymentType === 'cash' ? '#16a34a' : '#3b82f6'}`, borderRadius: '8px', fontSize: '13px', color: assetsResult.paymentType === 'cash' ? '#166534' : '#1e40af' }}>
-              <div style={{ fontWeight: 700, marginBottom: '2px' }}>{assetsResult.paymentType === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {assetsResult.invoiceRef}</div>
+            <div style={{ padding: '10px 14px', background: (assetsResult.paymentType||'cash') === 'cash' ? '#f0fdf4' : '#eff6ff', border: `1.5px solid ${(assetsResult.paymentType||'cash') === 'cash' ? '#16a34a' : '#3b82f6'}`, borderRadius: '8px', fontSize: '13px', color: (assetsResult.paymentType||'cash') === 'cash' ? '#166534' : '#1e40af' }}>
+              <div style={{ fontWeight: 700, marginBottom: '2px' }}>{(assetsResult.paymentType||'cash') === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {assetsResult.invoiceRef}</div>
               <div style={{ fontSize: '12px', opacity: 0.85 }}>{assetsResult.supplierName} · {fmt(assetsResult.total)}</div>
               <button onClick={() => setShowAssetsModal(true)} style={{ marginTop: '6px', fontSize: '11px', color: '#667eea', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Edit / Change</button>
             </div>
@@ -733,18 +923,27 @@ function AddExpenseModal({ onSave, onClose }) {
                 value={amount} onChange={e => { setAmount(e.target.value); clearFieldError('ex_amount'); }} />
               <ValidationNote field="ex_amount" errors={fieldErrors} />
             </div>
+
             <div className="er-field">
-              <label className="er-label">Payment Method</label>
-              <select className="er-input er-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
+              <span style={{ fontSize:'12px', color:'var(--text-secondary,#6b7280)', fontStyle:'italic' }}>💵 Cash payment</span>
             </div>
 
             <PaidToField
               category={category}
               value={payee}
               onChange={setPayee}
-              onSupplierClick={() => { setCategory('Supplier Purchase'); setAssetsResult(null); clearFieldError('ex_cat'); setShowAssetsModal(true); }}
+              onSupplierClick={() => {
+                setAssetsResult(null);
+                clearFieldError('ex_cat');
+                if (SERVICE_CATS.includes(category)) {
+                  setShowServicesModal(true);
+                } else if (CONSUMABLE_CATS.includes(category)) {
+                  setShowConsumablesModal(true);
+                } else {
+                  setCategory('Supplier Purchase');
+                  setShowAssetsModal(true);
+                }
+              }}
               fieldErrors={fieldErrors}
               clearFieldError={clearFieldError}
               users={users}
@@ -757,11 +956,9 @@ function AddExpenseModal({ onSave, onClose }) {
                 value={note} onChange={e => { setNote(e.target.value); clearFieldError('ex_note'); }} />
               <ValidationNote field="ex_note" errors={fieldErrors} />
             </div>
-            {paymentMethod === 'cash' && (
-              <p style={{ fontSize: '12px', color: '#667eea', margin: '4px 0 0', fontStyle: 'italic' }}>
-                💰 A Cash OUT entry will be created automatically in Cash at Shop.
-              </p>
-            )}
+            <p style={{ fontSize: '12px', color: '#667eea', margin: '4px 0 0', fontStyle: 'italic' }}>
+              💰 A Cash OUT entry will be created automatically in Cash at Shop.
+            </p>
             {category === 'Owner Drawings' && (
               <p style={{ fontSize: '12px', color: '#8b5cf6', margin: '4px 0 0', fontStyle: 'italic' }}>
                 📤 This will also be recorded in Withdrawals.
@@ -791,6 +988,20 @@ function AddExpenseModal({ onSave, onClose }) {
         <NewSupplierModal suppliersList={suppliersList}
           onSave={result => { setShowNewSupplierModal(false); handleAssetsResult(result); dataService.getSuppliers().then(s => setSuppliersList(s || [])); }}
           onClose={() => { setShowNewSupplierModal(false); setShowAssetsModal(true); }}
+        />
+      )}
+      {showConsumablesModal && (
+        <PurchaseConsumablesModal
+          category={category}
+          onSave={handleSupplierModalResult}
+          onClose={() => setShowConsumablesModal(false)}
+        />
+      )}
+      {showServicesModal && (
+        <PurchaseServicesModal
+          category={category}
+          onSave={handleSupplierModalResult}
+          onClose={() => setShowServicesModal(false)}
         />
       )}
     </div>
@@ -849,6 +1060,7 @@ function ExpenseDetailModal({ expense, onClose, onSaved, onDeleted }) {
           {!editable ? (<>
             <div className="er-detail-row"><span>Date</span><span>{dateStr}</span></div>
             <div className="er-detail-row"><span>Category</span><span>{expense.category}</span></div>
+            <div className="er-detail-row"><span>Description</span><span>{buildExpenseDescription(expense.category, expense.payee, expense.note, expense.gender)}</span></div>
             <div className="er-detail-row"><span>Amount</span><span className="er-detail-amount">{fmt(expense.amount||0)}</span></div>
             <div className="er-detail-row"><span>Method</span><span><span className={methodBadgeClass(expense.paymentMethod)}>{methodLabel(expense.paymentMethod)}</span></span></div>
             {expense.payee && <div className="er-detail-row"><span>Paid To</span><span>{expense.payee}</span></div>}

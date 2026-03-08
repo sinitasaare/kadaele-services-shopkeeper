@@ -168,11 +168,11 @@ export default function Withdrawals() {
         </div>
         <div className="wd-summary-card wd-card-out">
           <div className="wd-card-label">Taken Out</div>
-          <div className="wd-card-value">{fmt(totalOut)}</div>
+          <div className="wd-card-value">{fmt(totalIn)}</div>
         </div>
         <div className="wd-summary-card wd-card-in">
           <div className="wd-card-label">Returned</div>
-          <div className="wd-card-value">{fmt(totalIn)}</div>
+          <div className="wd-card-value">{fmt(totalOut)}</div>
         </div>
       </div>
 
@@ -269,12 +269,12 @@ export default function Withdrawals() {
                   </td>
                   <td className="wd-col-desc">{entry.description || '—'}</td>
                   <td>
-                    <span className={`wd-type-badge ${entry.type === 'out' ? 'wd-badge-out' : 'wd-badge-in'}`}>
-                      {entry.type === 'out' ? 'OUT' : 'IN'}
+                    <span className={`wd-type-badge ${entry.type === 'out' ? 'wd-badge-in' : 'wd-badge-out'}`}>
+                      {entry.type === 'out' ? 'IN' : 'OUT'}
                     </span>
                   </td>
-                  <td className={`wd-col-right wd-amount ${entry.type === 'out' ? 'wd-amount-out' : 'wd-amount-in'}`}>
-                    {entry.type === 'out' ? '-' : '+'}{fmt(entry.amount)}
+                  <td className={`wd-col-right wd-amount ${entry.type === 'out' ? 'wd-amount-in' : 'wd-amount-out'}`}>
+                    {entry.type === 'out' ? '+' : '-'}{fmt(entry.amount)}
                   </td>
                   <td className="wd-col-right wd-balance">{fmt(entry.balance)}</td>
                 </tr>

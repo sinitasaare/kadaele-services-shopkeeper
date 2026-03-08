@@ -196,8 +196,8 @@
 .wd-table tbody tr:last-child td { border-bottom: none; }
 .wd-table tbody tr:hover { background: rgba(102,126,234,0.04); }
 
-.wd-col-date { min-width: 80px; }
-.wd-col-desc { min-width: 140px; color: var(--text-secondary, #6b7280); font-size: 12px; }
+.wd-col-date { min-width: 90px; white-space: nowrap; }
+.wd-col-desc { min-width: 180px; color: var(--text-secondary, #6b7280); font-size: 12px; white-space: normal; word-break: break-word; }
 .wd-col-right { text-align: right !important; }
 .wd-time { font-size: 11px; color: var(--text-secondary, #9ca3af); margin-top: 2px; }
 
