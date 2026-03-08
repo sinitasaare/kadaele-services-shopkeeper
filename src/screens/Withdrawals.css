@@ -140,6 +140,15 @@
   font-weight: 700;
   color: var(--text-primary, #111);
 }
+/* Styled title above table — centered, blue, matches Sales Record title size */
+.wd-table-title-styled {
+  display: block;
+  text-align: center;
+  color: #667eea;
+  font-size: 14px;
+  font-weight: 700;
+  flex: 1;
+}
 .wd-table-count {
   font-size: 12px;
   color: var(--text-secondary, #6b7280);
