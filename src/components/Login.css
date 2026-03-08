@@ -10,7 +10,7 @@
 .login-card {
   background: white;
   border-radius: 20px;
-  padding: 40px;
+  padding: 50px 40px 40px 40px; /* top increased by 10px */
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   width: 100%;
   max-width: 400px;
@@ -24,7 +24,7 @@
 .login-logo {
   width: 220px;
   height: 220px;
-  margin: -40px auto -40px; /* pull top and bottom elements inward */
+  margin: -40px auto -25px; /* -40px top (was -40px), -25px bottom (was -40px, +15px spacing to title) */
   display: block;
 }
 
