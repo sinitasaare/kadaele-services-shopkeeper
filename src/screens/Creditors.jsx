@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
-import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
+import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText, Plus } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
@@ -118,6 +118,7 @@ function Creditors() {
   const { fmt } = useCurrency();
   const { fieldErrors: editErrors, showError: showEditError, clearFieldError: clearEditError } = useValidation();
   const { fieldErrors: payErrors, showError: showPayError, clearFieldError: clearPayError } = useValidation();
+  const { fieldErrors: addErrors, showError: showAddError, clearFieldError: clearAddError } = useValidation();
   const [creditors, setCreditors]           = useState([]);
   const [searchTerm, setSearchTerm]     = useState('');
   const [selectedCreditor, setSelectedCreditor] = useState(null);
@@ -134,6 +135,8 @@ function Creditors() {
   const [showNotifyModal, setShowNotifyModal] = useState(false);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [supplierList, setSupplierList]     = useState([]);
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const [newSupplier, setNewSupplier] = useState({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
   const [isEditMode, setIsEditMode]     = useState(false);
   const [editedCreditor, setEditedCreditor] = useState(null);
   const [activeTab, setActiveTab]       = useState('details');
@@ -145,6 +148,38 @@ function Creditors() {
   const [pdfSharing, setPdfSharing] = useState(false);
 
   useEffect(() => { loadCreditors(); }, []);
+
+  const openAddSupplierModal = () => {
+    setShowAddSupplierModal(true);
+    setNewSupplier({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  };
+  const closeAddSupplierModal = () => {
+    setShowAddSupplierModal(false);
+    setNewSupplier({ fullName:'', gender:'', phone:'', whatsapp:'', email:'', address:'' });
+  };
+  const handleAddSupplier = async (e) => {
+    e.preventDefault();
+    if (!newSupplier.fullName) return showAddError('add_fullName', 'Full Name is required');
+    if (!newSupplier.phone) return showAddError('add_phone', 'Phone is required');
+    if (!newSupplier.whatsapp && !newSupplier.email) return showAddError('add_whatsapp', 'Provide at least WhatsApp or Email');
+    if (newSupplier.email && !newSupplier.email.includes('@')) return showAddError('add_email', 'Email must contain @');
+    if (!newSupplier.address) return showAddError('add_address', 'Address is required');
+    try {
+      const supplierData = {
+        id: dataService.generateId(), customerName: newSupplier.fullName, name: newSupplier.fullName,
+        phone: newSupplier.phone, customerPhone: newSupplier.phone, gender: '',
+        whatsapp: newSupplier.whatsapp, email: newSupplier.email, address: newSupplier.address,
+        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null
+      };
+      const current = await dataService.getSuppliers();
+      current.push(supplierData);
+      await dataService.setSuppliers(current);
+      alert('Supplier added successfully!');
+      closeAddSupplierModal();
+      await loadCreditors();
+    } catch (e) { console.error(e); alert('Failed to add supplier.'); }
+  };
 
   // Close sort menu when clicking outside
   useEffect(() => {
@@ -735,7 +770,7 @@ Kadaele Services`;
 
       {/* ── Header ── */}
       <div className="d-header">
-        <input type="text" className="d-search" placeholder="Search creditor name…"
+        <input type="text" className="d-search d-search-narrow" placeholder="Search name…"
           value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         <div className="d-sort-wrapper" ref={sortMenuRef}>
           <button className={`d-sort-btn${sortOrder ? ' d-sort-active' : ''}`} onClick={() => setShowSortMenu(v => !v)} title="Sort">
@@ -758,7 +793,9 @@ Kadaele Services`;
             </div>
           )}
         </div>
-
+        <button className="d-add-btn" onClick={openAddSupplierModal}>
+          <Plus size={14} style={{display:'inline',verticalAlign:'middle',marginRight:'3px'}}/>Supplier
+        </button>
       </div>
 
       {/* ── Creditor cards ── */}
@@ -1074,6 +1111,42 @@ Kadaele Services`;
           </div>
         </div>
       )}
+      {/* ── Add Supplier Modal ── */}
+      {showAddSupplierModal && (
+        <div className="d-overlay" onClick={closeAddSupplierModal}>
+          <div className="d-modal d-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="d-modal-header">
+              <h2 className="d-modal-title">Add New Supplier</h2>
+              <button className="d-close-btn" onClick={closeAddSupplierModal}><X size={22} /></button>
+            </div>
+            <form className="d-add-form" onSubmit={handleAddSupplier}>
+              {[['Full Name *','text','fullName','add_fullName','Enter full name'],['Phone *','tel','phone','add_phone','Phone number'],
+                ['WhatsApp','tel','whatsapp','add_whatsapp','WhatsApp number (optional)'],['Email','email','email','add_email','Email (optional)']].map(([lbl,type,field,errKey,ph]) => (
+                <div className="d-form-group" key={field}>
+                  <label>{lbl}</label>
+                  <input type={type} value={newSupplier[field]} placeholder={ph} data-field={errKey}
+                    style={errorBorder(errKey, addErrors)}
+                    onChange={e => { setNewSupplier({...newSupplier,[field]:e.target.value}); clearAddError(errKey); }} />
+                  <ValidationNote field={errKey} errors={addErrors} />
+                </div>
+              ))}
+              <div className="d-form-group">
+                <label>Address *</label>
+                <textarea rows="2" value={newSupplier.address} placeholder="Enter address" data-field="add_address"
+                  style={errorBorder('add_address', addErrors)}
+                  onChange={e => { setNewSupplier({...newSupplier,address:e.target.value}); clearAddError('add_address'); }} />
+                <ValidationNote field="add_address" errors={addErrors} />
+              </div>
+              <p className="d-form-note">* Required · At least WhatsApp or Email required</p>
+              <div className="d-form-actions">
+                <button type="button" className="d-btn-cancel" onClick={closeAddSupplierModal}>Cancel</button>
+                <button type="submit" className="d-btn-save" onClick={handleAddSupplier}>Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {editSale && (
         <SaleEditModal
           sale={editSale}
