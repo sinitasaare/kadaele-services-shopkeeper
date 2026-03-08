@@ -959,3 +959,8 @@
 
 /* ── Dark Mode ─────────────────────────────────────────────────────────── */
 [data-theme="dark"] .sr-btn-cancel { color: #374151; }
+
+/* ── Dark mode fixes ── */
+[data-theme="dark"] .sr-total-cell { color: #e5e7eb; }
+[data-theme="dark"] .sr-search-input { color: #f9fafb; background: #1e2a3a; border-color: #374151; }
+[data-theme="dark"] .sr-search-input::placeholder { color: #9ca3af; }

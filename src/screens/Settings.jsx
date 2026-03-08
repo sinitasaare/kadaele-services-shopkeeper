@@ -12,7 +12,6 @@ import {
   cancelDebtReminders,
 } from '../services/notificationService';
 import { useCurrency } from '../hooks/useCurrency';
-import UnrecordedSalesPage from './UnrecordedSalesPage';
 import './Settings.css';
 
 // ─────────────────────────────────────────────────────────────
@@ -34,12 +33,6 @@ const T = {
     notifDailySalesDesc: 'Notify when daily sales reaches an increment of $500',
     notifCreditorOwed: 'Creditor payment reminder',
     notifCreditorOwedDesc: 'Ring alarm at 8:30 AM, 12:00 PM and 4:30 PM reminding you of outstanding amounts owed to creditors',
-    forgottenEntries: 'Enter Forgotten Records',
-    forgottenEntriesNote: 'Records before the business uses this system, if need be, can be entered here.',
-    forgottenSale: 'Unrecorded Sales',
-    forgottenSaleDesc: 'Record past sales (cash or credit) with a manual date',
-    forgottenCash: 'Unrecorded Cash Entry',
-    forgottenCashDesc: 'Record a past cash in/out with a manual date',
     cancel: 'Cancel',
     saleDate: 'Sale Date',
     cashDate: 'Entry Date',
@@ -737,10 +730,7 @@ function Settings({ onSettingsChange }) {
   const [notifLowStock, setNotifLowStock]         = useState(false);
   const [notifDailySales, setNotifDailySales]     = useState(false);
   const [notifCreditorOwed, setNotifCreditorOwed] = useState(false);
-  const [businessDayCutoff, setBusinessDayCutoff] = useState(0);
   const [loaded, setLoaded]     = useState(false);
-  const [showForgotSale, setShowForgotSale] = useState(false);
-  const [showForgotCash, setShowForgotCash] = useState(false);
   const [savedToast, setSavedToast]         = useState('');
   const [kiNotice, setKiNotice] = useState(false);
 
@@ -754,7 +744,6 @@ function Settings({ onSettingsChange }) {
       setNotifLowStock(!!s.notifLowStock);
       setNotifDailySales(!!s.notifDailySales);
       setNotifCreditorOwed(!!s.notifCreditorOwed);
-      setBusinessDayCutoff(typeof s.businessDayCutoff === 'number' ? s.businessDayCutoff : 0);
       setLoaded(true);
     });
   }, []);
@@ -782,12 +771,6 @@ function Settings({ onSettingsChange }) {
 
   const handleDarkMode = (val) => { setDarkMode(val); autoSave({ darkMode: val }); };
 
-  const handleCutoffChange = (hour) => {
-    const h = parseInt(hour, 10);
-    setBusinessDayCutoff(h);
-    autoSave({ businessDayCutoff: h });
-    flashSaved(h === 0 ? 'Cutoff set to midnight (default)' : `Cutoff set to ${String(h).padStart(2,'0')}:00`);
-  };
   const handleToggle = (key, setter, current) => {
     const next = !current;
     setter(next);
@@ -859,73 +842,7 @@ function Settings({ onSettingsChange }) {
         ))}
       </Section>
 
-      <Section icon={<Clock size={18}/>} title="Cash Reconciliation">
-        <div className="st-setting-row">
-          <div className="st-notif-info">
-            <span className="st-notif-label">Business Day Cutoff</span>
-            <span className="st-notif-desc">
-              The time at which a new business day begins. Sessions opened before this hour are assigned to the previous day's record.
-              Set to 00:00 (default) for a standard midnight cutoff. Set to e.g. 06:00 if your shop trades past midnight.
-            </span>
-            {businessDayCutoff > 0 && (
-              <span className="st-cutoff-example">
-                e.g. opening at 02:00 tonight belongs to today's record, not tomorrow's.
-              </span>
-            )}
-          </div>
-          <select
-            className="st-cutoff-select"
-            value={businessDayCutoff}
-            onChange={e => handleCutoffChange(e.target.value)}
-          >
-            <option value={0}>00:00 — Midnight (default)</option>
-            {[1,2,3,4,5,6,7,8].map(h => (
-              <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>
-            ))}
-          </select>
-        </div>
-      </Section>
 
-      <Section icon={<ClipboardList size={18}/>} title={t.forgottenEntries}>
-        <p className="st-forgotten-note">{t.forgottenEntriesNote}</p>
-
-        <div className="st-forgotten-row">
-          <div className="st-forgotten-info">
-            <span className="st-notif-label">{t.forgottenSale}</span>
-            <span className="st-notif-desc">{t.forgottenSaleDesc}</span>
-          </div>
-          <button className="st-forgotten-btn st-forgotten-sale"
-            onClick={() => setShowForgotSale(true)}>
-            <ClipboardList size={16}/> {t.forgottenSale}
-          </button>
-        </div>
-
-        <div className="st-forgotten-row" style={{ marginTop: 12 }}>
-          <div className="st-forgotten-info">
-            <span className="st-notif-label">{t.forgottenCash}</span>
-            <span className="st-notif-desc">{t.forgottenCashDesc}</span>
-          </div>
-          <button className="st-forgotten-btn st-forgotten-cash"
-            onClick={() => setShowForgotCash(true)}>
-            <Wallet size={16}/> {t.forgottenCash}
-          </button>
-        </div>
-      </Section>
-
-      {showForgotSale && (
-        <div style={{position:'fixed',inset:0,zIndex:2000,background:'#f0fdfa',display:'flex',flexDirection:'column'}}>
-          <UnrecordedSalesPage
-            onClose={() => setShowForgotSale(false)}
-            onSaved={() => { setShowForgotSale(false); flashSaved('Entry saved!'); }}
-          />
-        </div>
-      )}
-      {showForgotCash && (
-        <ForgottenCashModal t={t}
-          onClose={() => setShowForgotCash(false)}
-          onSaved={() => { setShowForgotCash(false); flashSaved('Entry saved!'); }}
-        />
-      )}
     </div>
   );
 }

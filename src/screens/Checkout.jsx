@@ -820,7 +820,7 @@ function Checkout() {
                             onMouseEnter={e => e.currentTarget.style.background = isOverdue ? '#ffe8e8' : '#f5f5f5'}
                             onMouseLeave={e => e.currentTarget.style.background = isOverdue ? '#fff5f5' : 'var(--surface)'}
                           >
-                            <div style={{ fontWeight:600, color: isOverdue ? '#dc2626' : '#1f2937' }}>
+                            <div style={{ fontWeight:600, color: isOverdue ? '#dc2626' : 'var(--text-primary)' }}>
                               {debtor.name || debtor.customerName}
                               {isOverdue && <span style={{ fontSize:'11px', marginLeft:'6px', fontWeight:400 }}>⚠️ overdue</span>}
                             </div>
