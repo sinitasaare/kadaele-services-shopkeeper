@@ -2181,24 +2181,69 @@ class DataService {
         receiptPhoto: purchase.receiptPhoto || null,
         paymentType,
         payment_type: paymentType,
+        paymentMethod: purchase.paymentMethod || 'cash_shop', // cash_shop | owner_custody | owner_personal
         createdAt: new Date().toISOString(),
       };
       purchases.push(newPurchase);
       await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
 
-      // ── Cash OUT only for cash purchases ──────────────────────────────
-      // Credit purchases create a creditor liability, not an immediate cash outflow.
+      // ── Cash / credit branching with paymentMethod (fund source) awareness ─────
+      // paymentType: 'cash' | 'credit'  (supplier payment terms)
+      // paymentMethod: 'cash_shop' | 'owner_custody' | 'owner_personal' (where money came from)
+      const pm = newPurchase.paymentMethod || 'cash_shop';
       if (paymentType === 'cash') {
-        await this.addCashEntry({
-          type: 'out',
-          amount: newPurchase.total,
-          note: `Paid to ${newPurchase.supplierName || 'Supplier'} to purchase cargo`,
-          date: newPurchase.date,
-          source: 'purchase',
-          purchaseId: newPurchase.id,
-          invoiceRef: newPurchase.invoiceRef || '',
-          isUnrecorded: true,  // time is not relevant for a purchase date entry
-        });
+        if (pm === 'cash_shop') {
+          // Case 1: Deduct from shop cash register
+          await this.addCashEntry({
+            type: 'out',
+            amount: newPurchase.total,
+            note: `Purchase - ${newPurchase.supplierName || 'Supplier'}`,
+            date: newPurchase.date,
+            source: 'purchase',
+            purchaseId: newPurchase.id,
+            invoiceRef: newPurchase.invoiceRef || '',
+            isUnrecorded: true,
+          });
+        } else if (pm === 'owner_custody') {
+          // Case 2: Owner used already-withdrawn money — record withdrawal adjustment
+          await this.addWithdrawal({
+            type: 'used_for_purchase',
+            amount: newPurchase.total,
+            description: `Purchase using withdrawn funds - ${newPurchase.supplierName || 'Supplier'}`,
+            source: 'purchase',
+            relatedId: newPurchase.id,
+            purchaseId: newPurchase.id,
+            date: newPurchase.date,
+          });
+        } else if (pm === 'owner_personal') {
+          // Case 3: Owner paid personally — shop owes owner; add to creditors
+          const OWNER_ID = 'owner_personal_funds';
+          const creditors = await localforage.getItem(DATA_KEYS.CREDITORS) || [];
+          let ownerCreditor = creditors.find(c => c.id === OWNER_ID);
+          if (!ownerCreditor) {
+            const users = await localforage.getItem(DATA_KEYS.USERS) || [];
+            const ownerUser = users.find(u => ['shop owner','owner'].includes((u.role||'').toLowerCase().trim()));
+            const ownerName = ownerUser?.fullName || ownerUser?.name || 'Owner';
+            ownerCreditor = {
+              id: OWNER_ID,
+              name: ownerName, customerName: ownerName,
+              phone: ownerUser?.phone || '', customerPhone: ownerUser?.phone || '',
+              whatsapp: '', email: '', address: '', gender: ownerUser?.gender || '',
+              totalDue: 0, totalPaid: 0, balance: 0,
+              deposits: [], purchaseIds: [],
+              source: 'owner_purchase',
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            };
+            creditors.push(ownerCreditor);
+            await localforage.setItem(DATA_KEYS.CREDITORS, creditors);
+            if (this.isOnline && auth.currentUser) {
+              await setDoc(doc(db, 'creditors', OWNER_ID), {
+                ...ownerCreditor, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+              }, { merge: true }).catch(e => console.error('Owner creditor sync error:', e));
+            }
+          }
+          await this.addCreditorDebt(OWNER_ID, newPurchase.total, newPurchase.id, null);
+        }
       } else {
         // Credit purchase — create or update Creditor card, then record the debt
         if (newPurchase.creditorId) {
