@@ -900,10 +900,14 @@
   display: flex;
   gap: 8px;
   padding: 0 0 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.inv-tab-row::-webkit-scrollbar { display: none; }
 
 .inv-tab-btn {
-  flex: 1;
+  flex: 0 0 auto;
   padding: 9px 12px;
   border: 2px solid var(--border, #e0e0e0);
   border-radius: 10px;

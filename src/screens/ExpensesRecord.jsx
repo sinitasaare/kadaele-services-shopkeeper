@@ -494,6 +494,21 @@ function GroupOrgModal({ mode, onConfirm, onClose }) {
 }
 
 // ── Paid To smart dropdown ────────────────────────────────────────────────────
+
+// ── Build description string from expense fields ──────────────────────────────
+function buildExpenseDescription(category, payee, note, gender) {
+  const sysFee = SYSTEM_FEE_CAT;
+  if (category === 'Wages') {
+    const pronoun = gender === 'Female' ? 'her' : 'his';
+    return `Paid ${payee || '—'} ${pronoun} wages`;
+  }
+  if (category === sysFee) return 'Paid Sinita POS System for weekly fee';
+  if (category === 'Owner Drawings') return `${payee || '—'} withdraws cash`;
+  if (category === 'Donations') return `Donated CASH to ${payee || '—'}`;
+  if (category === 'Community Support') return `Contribution to support ${payee || '—'}`;
+  return `Paid ${payee || note || '—'} for ${category || 'expense'}`;
+}
+
 function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, clearFieldError, users }) {
   const [open, setOpen] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -601,7 +616,7 @@ function AddExpenseModal({ onSave, onClose }) {
   const [date, setDate]                       = useState(todayStr());
   const [category, setCategory]               = useState('');
   const [amount, setAmount]                   = useState('');
-  const [paymentMethod, setPaymentMethod]     = useState('cash');
+  const paymentMethod = 'cash'; // always cash
   const [payee, setPayee]                     = useState('');
   const [note, setNote]                       = useState('');
   const [saving, setSaving]                   = useState(false);
@@ -652,7 +667,10 @@ function AddExpenseModal({ onSave, onClose }) {
     setSaving(true);
     try {
       const now = new Date().toISOString();
-      await dataService.addExpense({ date, amount: parseFloat(amount), category, paymentMethod, payee: payee.trim(), note: note.trim(), createdAt: now, updatedAt: now });
+      // Resolve gender of payee from users list
+      const payeeUser = users.find(u => (u.fullName||u.name||'').toLowerCase() === payee.trim().toLowerCase());
+      const payeeGender = payeeUser?.gender || '';
+      await dataService.addExpense({ date, amount: parseFloat(amount), category, paymentMethod, payee: payee.trim(), note: note.trim(), gender: payeeGender, createdAt: now, updatedAt: now });
       onSave();
     } catch (e) { console.error(e); showError('ex_date', 'Failed to save. Please try again.'); }
     finally { setSaving(false); }
@@ -1026,15 +1044,14 @@ function ExpensesRecord() {
           <div className="er-table-wrap">
             <table className="er-table">
               <thead>
-                <tr><th>Date</th><th>Category</th><th className="right">Amount</th><th>Note / Paid To</th></tr>
+                <tr><th>Date</th><th>DESCRIPTION</th><th className="right">Amount</th></tr>
               </thead>
               <tbody>
                 {filtered.map(e => (
                   <tr key={e.id} onClick={() => setViewExpense(e)}>
                     <td style={{ whiteSpace:'nowrap', fontSize:'12px' }}>{formatDate(e)}</td>
-                    <td className="er-td-cat"><div>{e.category}</div><span className={methodBadgeClass(e.paymentMethod)}>{methodLabel(e.paymentMethod)}</span></td>
+                    <td className="er-td-cat">{buildExpenseDescription(e.category, e.payee, e.note, e.gender)}</td>
                     <td className="er-td-amount">{fmt(e.amount||0)}</td>
-                    <td className="er-td-note">{e.note || e.payee || '—'}</td>
                   </tr>
                 ))}
               </tbody>
