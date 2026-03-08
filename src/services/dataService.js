@@ -3405,6 +3405,7 @@ class DataService {
         id, name: good.name.trim(),
         sellingPrice: parseFloat(good.sellingPrice) || 0,
         commissionRate: parseFloat(good.commissionRate) || 0,
+        stock: parseFloat(good.stock) || 0,
         ownerName: good.ownerName?.trim() || '',
         notes: good.notes?.trim() || '',
         commissionEarned: 0,
@@ -3426,7 +3427,7 @@ class DataService {
       const all = await localforage.getItem('commission_goods') || [];
       const idx = all.findIndex(g => g.id === id);
       if (idx === -1) return;
-      all[idx] = { ...all[idx], ...updates, sellingPrice: parseFloat(updates.sellingPrice)||0, commissionRate: parseFloat(updates.commissionRate)||0, updatedAt: new Date().toISOString() };
+      all[idx] = { ...all[idx], ...updates, sellingPrice: parseFloat(updates.sellingPrice)||0, commissionRate: parseFloat(updates.commissionRate)||0, stock: parseFloat(updates.stock)||0, updatedAt: new Date().toISOString() };
       await localforage.setItem('commission_goods', all);
       if (this.isOnline && auth.currentUser) {
         await setDoc(doc(db, 'commission_goods', id), { ...all[idx], updatedAt: serverTimestamp() }, { merge: true }).catch(e => console.error('commission update sync error:', e));

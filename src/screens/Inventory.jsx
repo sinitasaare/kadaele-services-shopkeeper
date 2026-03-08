@@ -49,7 +49,7 @@ function Inventory() {
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [showCommissionModal, setShowCommissionModal] = useState(false);
   const [editCommission, setEditCommission] = useState(null);
-  const [commissionForm, setCommissionForm] = useState({ name: '', sellingPrice: '', commissionRate: '', ownerName: '', notes: '' });
+  const [commissionForm, setCommissionForm] = useState({ name: '', sellingPrice: '', commissionRate: '', ownerName: '', stock: '', notes: '' });
 
   // Goods state
   const [goods, setGoods] = useState([]);
@@ -188,6 +188,12 @@ function Inventory() {
           </button>
         </div>
 
+        {activeTab === 'commission' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>Commission Products</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Products sold on behalf of others. Shop earns a commission per sale.</div>
+          </div>
+        )}
         <div className="inv-toolbar">
           <div className="inv-search-box">
             <Search size={16} className="inv-search-icon" />
@@ -206,10 +212,18 @@ function Inventory() {
               >×</button>
             )}
           </div>
+          {activeTab === 'commission' && (
+            <button
+              onClick={() => { setEditCommission(null); setCommissionForm({ name:'', sellingPrice:'', commissionRate:'', ownerName:'', notes:'' }); setShowCommissionModal(true); }}
+              style={{ flexShrink:0, background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', border:'none', borderRadius:'10px', padding:'8px 14px', fontWeight:700, fontSize:'12px', cursor:'pointer', whiteSpace:'nowrap' }}
+            >+ Add</button>
+          )}
         </div>
 
         <div className="inv-meta-row">
-          {activeTab === 'goods' ? (
+          {activeTab === 'commission' ? (
+            <span className="inv-count">{commissionGoods.length} item{commissionGoods.length !== 1 ? 's' : ''}</span>
+          ) : activeTab === 'goods' ? (
             <>
               <span className="inv-count">{filteredGoods.length} item{filteredGoods.length !== 1 ? 's' : ''}</span>
               {goodsLastSynced && (
@@ -366,21 +380,11 @@ function Inventory() {
             </div>
           )
         )}
-      </div>
 
-      {/* ── Commission Tab ── */}
+        {/* ── Commission Tab ── */}
       {activeTab === 'commission' && (
-        <div className="inv-section">
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
-            <div>
-              <div style={{ fontWeight:700, fontSize:'15px' }}>Commission Products</div>
-              <div style={{ fontSize:'12px', color:'var(--text-secondary,#6b7280)', marginTop:'2px' }}>Products sold on behalf of others. Shop earns a commission per sale.</div>
-            </div>
-            <button
-              onClick={() => { setEditCommission(null); setCommissionForm({ name:'', sellingPrice:'', commissionRate:'', ownerName:'', notes:'' }); setShowCommissionModal(true); }}
-              style={{ background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', border:'none', borderRadius:'10px', padding:'10px 16px', fontWeight:700, fontSize:'13px', cursor:'pointer' }}
-            >+ Add Product</button>
-          </div>
+        <>
+
           {commissionLoading ? (
             <div style={{ textAlign:'center', padding:'40px', color:'var(--text-secondary,#9ca3af)' }}>Loading...</div>
           ) : commissionGoods.length === 0 ? (
@@ -390,30 +394,32 @@ function Inventory() {
               <div style={{ fontSize:'13px', marginTop:'4px' }}>Add products you sell on behalf of others</div>
             </div>
           ) : (
-            <div className="inv-table-wrapper">
-              <table className="inv-table">
+            <div style={{ padding:'0 12px 24px', overflowX:'auto' }}>
+              <table style={{ width:'100%', minWidth:'500px', borderCollapse:'collapse', fontSize:'13px' }}>
                 <thead>
-                  <tr>
-                    <th>Product Name</th>
-                    <th className="inv-col-center">Selling Price</th>
-                    <th className="inv-col-center">Commission %</th>
-                    <th className="inv-col-center">Commission Earned</th>
-                    <th>Owner</th>
-                    <th className="inv-col-center">Edit</th>
+                  <tr style={{ borderBottom:'2px solid var(--border,#e5e7eb)' }}>
+                    <th style={{ textAlign:'left', padding:'8px 6px', color:'var(--text-secondary,#6b7280)', fontWeight:600, fontSize:'11px', textTransform:'uppercase', minWidth:'120px' }}>Product</th>
+                    <th style={{ textAlign:'right', padding:'8px 6px', color:'var(--text-secondary,#6b7280)', fontWeight:600, fontSize:'11px', textTransform:'uppercase', minWidth:'70px' }}>Price</th>
+                    <th style={{ textAlign:'center', padding:'8px 6px', color:'var(--text-secondary,#6b7280)', fontWeight:600, fontSize:'11px', textTransform:'uppercase', minWidth:'50px' }}>Stock</th>
+                    <th style={{ textAlign:'center', padding:'8px 6px', color:'var(--text-secondary,#6b7280)', fontWeight:600, fontSize:'11px', textTransform:'uppercase', minWidth:'55px' }}>Comm%</th>
+                    <th style={{ textAlign:'right', padding:'8px 6px', color:'var(--text-secondary,#6b7280)', fontWeight:600, fontSize:'11px', textTransform:'uppercase', minWidth:'70px' }}>Earned</th>
+                    <th style={{ textAlign:'left', padding:'8px 6px', color:'var(--text-secondary,#6b7280)', fontWeight:600, fontSize:'11px', textTransform:'uppercase', minWidth:'90px' }}>Owner</th>
+                    <th style={{ width:'32px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {commissionGoods.map(g => (
-                    <tr key={g.id}>
-                      <td style={{ fontWeight:600 }}>{g.name}</td>
-                      <td className="inv-col-center">{fmt(parseFloat(g.sellingPrice||0))}</td>
-                      <td className="inv-col-center">{g.commissionRate||0}%</td>
-                      <td className="inv-col-center" style={{ color:'#16a34a', fontWeight:700 }}>{fmt(parseFloat(g.commissionEarned||0))}</td>
-                      <td>{g.ownerName||'—'}</td>
-                      <td className="inv-col-center">
+                  {commissionGoods.map((g, i) => (
+                    <tr key={g.id} style={{ borderBottom:'1px solid var(--border,#f3f4f6)', background: i%2===0 ? 'transparent' : 'var(--surface-alt,rgba(0,0,0,0.02))' }}>
+                      <td style={{ padding:'10px 6px', fontWeight:600, color:'var(--text-primary,#111)' }}>{g.name}</td>
+                      <td style={{ padding:'10px 6px', textAlign:'right', color:'var(--text-primary,#374151)' }}>{fmt(parseFloat(g.sellingPrice||0))}</td>
+                      <td style={{ padding:'10px 6px', textAlign:'center', color:'var(--text-primary,#374151)' }}>{g.stock||0}</td>
+                      <td style={{ padding:'10px 6px', textAlign:'center', color:'#4f46e5', fontWeight:600 }}>{g.commissionRate||0}%</td>
+                      <td style={{ padding:'10px 6px', textAlign:'right', color:'#16a34a', fontWeight:700 }}>{fmt(parseFloat(g.commissionEarned||0))}</td>
+                      <td style={{ padding:'10px 6px', color:'var(--text-secondary,#6b7280)', fontSize:'12px' }}>{g.ownerName||'—'}</td>
+                      <td style={{ padding:'10px 6px', textAlign:'center' }}>
                         <button
-                          onClick={() => { setEditCommission(g); setCommissionForm({ name:g.name, sellingPrice:g.sellingPrice, commissionRate:g.commissionRate, ownerName:g.ownerName||'', notes:g.notes||'' }); setShowCommissionModal(true); }}
-                          style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px' }}
+                          onClick={() => { setEditCommission(g); setCommissionForm({ name:g.name, sellingPrice:g.sellingPrice, commissionRate:g.commissionRate, ownerName:g.ownerName||'', stock:g.stock||'', notes:g.notes||'' }); setShowCommissionModal(true); }}
+                          style={{ background:'none', border:'none', cursor:'pointer', fontSize:'15px', padding:'2px' }}
                         >✏️</button>
                       </td>
                     </tr>
@@ -422,8 +428,9 @@ function Inventory() {
               </table>
             </div>
           )}
-        </div>
+        </>
       )}
+      </div>
 
       {/* ── Commission Modal ── */}
       {showCommissionModal && (
@@ -440,6 +447,7 @@ function Inventory() {
                 ['Product Name *', 'name', 'text', 'e.g. Coca Cola 330ml'],
                 ['Selling Price', 'sellingPrice', 'number', '0.00'],
                 ['Commission Rate (%)', 'commissionRate', 'number', 'e.g. 10'],
+                ['Stock Available (qty)', 'stock', 'number', '0'],
                 ['Owner / Supplier Name', 'ownerName', 'text', 'Who owns this product'],
                 ['Notes', 'notes', 'text', 'Optional notes'],
               ].map(([label, key, type, ph]) => (
