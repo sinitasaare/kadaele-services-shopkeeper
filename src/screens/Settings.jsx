@@ -33,6 +33,8 @@ const T = {
     notifDailySalesDesc: 'Notify when daily sales reaches an increment of $500',
     notifCreditorOwed: 'Creditor payment reminder',
     notifCreditorOwedDesc: 'Ring alarm at 8:30 AM, 12:00 PM and 4:30 PM reminding you of outstanding amounts owed to creditors',
+    notifReceiptReminder: 'Receipt / Ref number reminder',
+    notifReceiptReminderDesc: 'Alert 2 hours after an expense is saved if a receipt or invoice reference number was not added',
     cancel: 'Cancel',
     saleDate: 'Sale Date',
     cashDate: 'Entry Date',
@@ -730,6 +732,7 @@ function Settings({ onSettingsChange }) {
   const [notifLowStock, setNotifLowStock]         = useState(false);
   const [notifDailySales, setNotifDailySales]     = useState(false);
   const [notifCreditorOwed, setNotifCreditorOwed] = useState(false);
+  const [notifReceiptReminder, setNotifReceiptReminder] = useState(true);
   const [loaded, setLoaded]     = useState(false);
   const [savedToast, setSavedToast]         = useState('');
   const [kiNotice, setKiNotice] = useState(false);
@@ -744,6 +747,7 @@ function Settings({ onSettingsChange }) {
       setNotifLowStock(!!s.notifLowStock);
       setNotifDailySales(!!s.notifDailySales);
       setNotifCreditorOwed(!!s.notifCreditorOwed);
+      setNotifReceiptReminder(s.notifReceiptReminder !== false); // default ON
       setLoaded(true);
     });
   }, []);
@@ -782,6 +786,9 @@ function Settings({ onSettingsChange }) {
     if (key === 'notifDebtReminder') {
       if (next) scheduleDebtReminders();
       else cancelDebtReminders();
+    }
+    if (key === 'notifReceiptReminder') {
+      localStorage.setItem('ks_receipt_reminders', next ? 'true' : 'false');
     }
   };
 
@@ -832,6 +839,7 @@ function Settings({ onSettingsChange }) {
           { key: 'notifLowStock',     val: notifLowStock,     set: setNotifLowStock,     label: t.notifLowStock,     desc: t.notifLowStockDesc    },
           { key: 'notifDailySales',   val: notifDailySales,   set: setNotifDailySales,   label: t.notifDailySales,   desc: t.notifDailySalesDesc  },
           { key: 'notifCreditorOwed', val: notifCreditorOwed, set: setNotifCreditorOwed, label: t.notifCreditorOwed, desc: t.notifCreditorOwedDesc },
+          { key: 'notifReceiptReminder', val: notifReceiptReminder, set: setNotifReceiptReminder, label: t.notifReceiptReminder, desc: t.notifReceiptReminderDesc },
         ].map(({ key, val, set, label, desc }) => (
           <SettingRow key={key} label={label} desc={desc}>
             <div className={`st-switch${val ? ' st-switch-on' : ''}`}
