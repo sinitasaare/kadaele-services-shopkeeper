@@ -10,7 +10,6 @@ import Withdrawals from './screens/Withdrawals';
 import Debtors from './screens/Debtors';
 import AdvanceOrders from './screens/AdvanceOrders';
 import Creditors from './screens/Creditors';
-import Suppliers from './screens/Suppliers';
 import Inventory from './screens/Inventory';
 import Settings from './screens/Settings';
 import CashReconciliation from './screens/CashReconciliation';
@@ -235,45 +234,20 @@ const PAGES = [
     `
   },
   { 
-    name: 'CREDITORS',          
+    name: 'SUPPLIERS & CREDITORS',          
     component: Creditors,
     helpContent: `
-      <h3>Creditors</h3>
-      <p>Creditors are suppliers or people your business owes money to because you bought on credit.</p>
+      <h3>Suppliers &amp; Creditors</h3>
+      <p>Suppliers are the businesses or people you buy your shop stock from. Creditors are suppliers or people your business owes money to because you bought on credit.</p>
 
-      <h4>How It Works</h4>
+      <h4>Adding Suppliers</h4>
+      <p>Tap <strong>+ Supplier</strong> to register a new supplier with their name and contact details. Once added, they appear in the Purchase Record dropdown.</p>
+
+      <h4>How Creditors Work</h4>
       <p>When you make a credit purchase in Purchase Record, the supplier becomes a creditor here automatically. Each creditor card shows total owed, total paid, and remaining balance.</p>
-
-      <h4>Examples</h4>
-      <p>&#x1f3ea; <em>You owe Kamwatie $500 for stock bought on credit. Today you pay $300:</em> Open Kamwatie's profile &rarr; Debt History tab &rarr; tap Deposit &rarr; enter $300 &rarr; Save. Balance drops from $500 to $200.</p>
-      <p>&#x1f3ea; <em>You want to see which creditor payment is due soonest:</em> Tap sort (&uarr;&darr;) &rarr; choose "Due Date". The creditor whose payment is due first appears at the top.</p>
-
-      <h4>Creditor Profile Tabs</h4>
-      <p><strong>Details</strong> &mdash; name, phone, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Debt History</strong> &mdash; every credit purchase and every deposit (payment you made), with dates and running balance.</p>
 
       <h4>Payment Reminders</h4>
       <p>Turn on Creditor Payment Reminders in Settings to receive alarm notifications at 8:30 AM, 12:00 PM, and 4:30 PM when you have outstanding creditor balances.</p>
-    `
-  },
-  { 
-    name: 'SUPPLIERS',          
-    component: Suppliers,
-    helpContent: `
-      <h3>Suppliers</h3>
-      <p>Suppliers are the businesses or people you buy your shop stock from.</p>
-
-      <h4>How It Works</h4>
-      <p>Tap <strong>+ Add Supplier</strong> to register a new supplier with their name and contact details. Once added, they appear in the Purchase Record dropdown and in the Cash Record "Paid To" list.</p>
-
-      <h4>Examples</h4>
-      <p>&#x1f4e6; <em>You start buying from a new wholesaler called "Pacific Traders":</em> Tap + Add Supplier &rarr; name: "Pacific Traders" &rarr; phone, email, address &rarr; Save. Now you can select them when recording purchases.</p>
-      <p>&#x1f4e6; <em>You want to see all purchases from Kamwatie:</em> Open Kamwatie's profile &rarr; Purchase History tab. Every purchase made from Kamwatie is listed with date, items, and total.</p>
-
-      <h4>Supplier Profile Tabs</h4>
-      <p><strong>Details</strong> &mdash; name, phone, WhatsApp, email, address. Tap &#x270f;&#xfe0f; to edit. <strong>Purchase History</strong> &mdash; all purchases from this supplier.</p>
-
-      <h4>Quick Contact</h4>
-      <p>From the Details tab, tap the WhatsApp or email icons to contact the supplier directly to place reorders or follow up on deliveries.</p>
     `
   },
   { 
