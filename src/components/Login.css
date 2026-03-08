@@ -24,7 +24,7 @@
 .login-logo {
   width: 220px;
   height: 220px;
-  margin: 0 auto 16px;
+  margin: -40px auto -40px; /* pull top and bottom elements inward */
   display: block;
 }
 
