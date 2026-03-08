@@ -119,13 +119,17 @@ const btnCancel = { flex:1, padding:'12px', borderRadius:'8px', border:'1.5px so
 
 // ── Receipt Reminder logic — fires 2 hours after an expense is saved ──────────
 function scheduleReceiptReminder(expenseId, category, payee) {
+  // Respect the setting — default ON if not set
+  const enabled = localStorage.getItem('ks_receipt_reminders') !== 'false';
+  if (!enabled) return;
   const TWO_HOURS = 2 * 60 * 60 * 1000;
   const key = `receipt_reminder_${expenseId}`;
   if (localStorage.getItem(key)) return; // already scheduled
   localStorage.setItem(key, 'pending');
   setTimeout(() => {
+    const stillEnabled = localStorage.getItem('ks_receipt_reminders') !== 'false';
     const stillPending = localStorage.getItem(key) === 'pending';
-    if (!stillPending) return;
+    if (!stillPending || !stillEnabled) return;
     const desc = buildExpenseDescription(category, payee, '', '');
     alert(`📎 Reminder: Please attach a receipt or invoice ref for:\n"${desc}"\n\nOpen Expenses Record to add it.`);
     localStorage.setItem(key, 'done');
@@ -772,6 +776,52 @@ function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, 
   );
 }
 
+
+// ── Edit Receipt Ref Modal — editable for 1 hour after save ──────────────────
+function EditRefModal({ expense, onSaved, onClose }) {
+  const [invoiceRef, setInvoiceRef] = useState(expense.invoiceRef || expense.note || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await dataService.updateExpense(expense.id, { invoiceRef: invoiceRef.trim(), note: invoiceRef.trim() });
+      // Mark reminder as done
+      localStorage.setItem(`receipt_reminder_${expense.id}`, 'done');
+      onSaved();
+    } catch (e) { alert('Failed to save.'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="er-modal-overlay" style={{ zIndex: 4000 }}>
+      <div className="er-modal-content" style={{ maxHeight: '60vh' }}>
+        <div className="er-modal-header">
+          <h2>📎 Add Receipt / Ref</h2>
+          <button className="er-modal-close" onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className="er-modal-body">
+          <p style={{ fontSize:'13px', color:'var(--text-secondary,#6b7280)', margin:0 }}>
+            {buildExpenseDescription(expense.category, expense.payee, expense.note, expense.gender)}
+          </p>
+          <div className="er-field">
+            <label className="er-label">Invoice / Receipt Ref *</label>
+            <input className="er-input" placeholder="Receipt or invoice number…"
+              value={invoiceRef} autoFocus
+              onChange={e => setInvoiceRef(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && invoiceRef.trim()) handleSave(); }}
+            />
+          </div>
+        </div>
+        <div className="er-modal-footer">
+          <button className="er-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="er-btn-save" onClick={handleSave} disabled={saving || !invoiceRef.trim()}>{saving ? 'Saving…' : 'Save Ref'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Add Expense Modal ──────────────────────────────────────────────────────────
 function AddExpenseModal({ onSave, onClose }) {
   const { fmt } = useCurrency();
@@ -1107,6 +1157,7 @@ function ExpensesRecord() {
   const [showAddModal, setShowAddModal]   = useState(false);
   const [viewExpense, setViewExpense]     = useState(null);
   const [showMoreCats, setShowMoreCats]   = useState(false);
+  const [editRefExpense, setEditRefExpense] = useState(null);
 
   const [catFilter, setCatFilter]         = useState('all');
   const [dateFilter, setDateFilter]       = useState('today');
@@ -1181,7 +1232,7 @@ function ExpensesRecord() {
 
   const totalRecords = filtered.length;
   const cashSpent    = filtered.filter(e=>(e.paymentMethod||'cash')==='cash').reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-  const nonCash      = filtered.filter(e=>(e.paymentMethod||'cash')!=='cash').reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const onCredit     = filtered.filter(e=>(e.paymentMethod||'cash')==='credit').reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
 
   return (
     <div className="er-record">
@@ -1202,12 +1253,10 @@ function ExpensesRecord() {
               <label>CATEGORY FILTER</label>
               <div className="er-filter-buttons">
                 <button className={`er-filter-btn${catFilter==='all'?' active':''}`} onClick={() => setCatFilter('all')}>All Expenses</button>
-                {QUICK_CATS.map(cat => (
-                  <button key={cat} className={`er-filter-btn${catFilter===cat?' active':''}`} onClick={() => setCatFilter(cat)}>{cat}</button>
-                ))}
-                <button className={`er-filter-btn${!['all',...QUICK_CATS].includes(catFilter)?' more-active':''}`} onClick={() => setShowMoreCats(true)}>
-                  {!['all',...QUICK_CATS].includes(catFilter) ? catFilter : 'More…'}
-                </button>
+                {catFilter !== 'all' && (
+                  <button className="er-filter-btn er-filter-btn-cat-active" onClick={() => setShowMoreCats(true)}>{catFilter}</button>
+                )}
+                <button className={`er-filter-btn er-filter-btn-more${catFilter!=='all'?' has-selection':''}`} onClick={() => setShowMoreCats(true)}>More…</button>
               </div>
             </div>
             <div className="er-filter-group">
@@ -1241,22 +1290,23 @@ function ExpensesRecord() {
           </div>
         )}
 
+        <h3 className="er-section-title">{getTableTitle()}</h3>
         <div className="er-summary-cards">
           <div className="er-summary-card"><div className="er-summary-label">Total Records</div><div className="er-summary-value">{totalRecords}</div></div>
           <div className="er-summary-card"><div className="er-summary-label">Cash Spent</div><div className="er-summary-value cash">{fmt(cashSpent)}</div></div>
-          <div className="er-summary-card"><div className="er-summary-label">Non-Cash</div><div className="er-summary-value noncash">{fmt(nonCash)}</div></div>
+          <div className="er-summary-card"><div className="er-summary-label">On Credit</div><div className="er-summary-value credit">{fmt(onCredit)}</div></div>
         </div>
       </div>
 
       <div className="er-table-section">
-        <div className="er-table-title">{getTableTitle()}</div>
+        <div className="er-table-section-inner">
         {filtered.length===0 ? (
           <div className="er-empty">No expenses found for this filter.</div>
         ) : (
           <div className="er-table-wrap">
             <table className="er-table">
               <thead>
-                <tr><th>Date</th><th>DESCRIPTION</th><th className="right">Amount</th></tr>
+                <tr><th>Date</th><th>DESCRIPTION</th><th className="right">Amount</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map(e => (
@@ -1264,6 +1314,21 @@ function ExpensesRecord() {
                     <td style={{ whiteSpace:'nowrap', fontSize:'12px' }}>{formatDate(e)}</td>
                     <td className="er-td-cat">{buildExpenseDescription(e.category, e.payee, e.note, e.gender)}</td>
                     <td className="er-td-amount">{fmt(e.amount||0)}</td>
+                    <td style={{ textAlign:'center', padding:'6px 4px' }}>
+                      {(() => {
+                        const ONE_HOUR = 60 * 60 * 1000;
+                        const saved = new Date(e.createdAt || e.date || 0);
+                        const withinHour = (new Date() - saved) <= ONE_HOUR;
+                        const hasRef = !!(e.invoiceRef && e.invoiceRef.trim());
+                        const isSupplierType = ['Utilities','Maintenance','Internet','Fuel','Supplies','Food','Supplier Purchase'].includes(e.category);
+                        if (withinHour && !hasRef && isSupplierType) {
+                          return <button onClick={ev => { ev.stopPropagation(); setEditRefExpense(e); }}
+                            style={{ background:'#fef3c7', border:'1px solid #f59e0b', borderRadius:'6px', padding:'3px 7px', fontSize:'11px', cursor:'pointer', color:'#92400e', fontWeight:700 }}>📎 Ref</button>;
+                        }
+                        if (hasRef) return <span style={{ fontSize:'10px', color:'#16a34a' }}>✓</span>;
+                        return null;
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1275,6 +1340,7 @@ function ExpensesRecord() {
       {showAddModal && <AddExpenseModal onSave={() => { setShowAddModal(false); loadExpenses(); }} onClose={() => setShowAddModal(false)} />}
       {viewExpense && <ExpenseDetailModal expense={viewExpense} onClose={() => setViewExpense(null)} onSaved={() => { setViewExpense(null); loadExpenses(); }} onDeleted={() => { setViewExpense(null); loadExpenses(); }} />}
       {showMoreCats && <CategoryModal selected={catFilter} onSelect={cat => setCatFilter(cat||'all')} onClose={() => setShowMoreCats(false)} />}
+      {editRefExpense && <EditRefModal expense={editRefExpense} onSaved={() => { setEditRefExpense(null); loadExpenses(); }} onClose={() => setEditRefExpense(null)} />}
     </div>
   );
 }
